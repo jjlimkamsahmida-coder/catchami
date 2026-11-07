@@ -1,0 +1,144 @@
+import type { ClientMsg, ServerMsg } from "@catchami/shared";
+import { entities, store, toast } from "./store.ts";
+
+const TOKEN_KEY = "catchami.token";
+
+export class ApiError extends Error {
+  code: string;
+  constructor(code: string, message: string) { super(message); this.code = code; }
+}
+
+export async function api<T = any>(path: string, body?: unknown, opts: { admin?: string } = {}): Promise<T> {
+  const headers: Record<string, string> = {};
+  const token = store.get().token;
+  if (token) headers.authorization = `Bearer ${token}`;
+  if (body !== undefined) headers["content-type"] = "application/json";
+  if (opts.admin) headers["x-admin-token"] = opts.admin;
+  let r: Response;
+  try {
+    r = await fetch(path, { method: body === undefined ? "GET" : "POST", headers, body: body === undefined ? undefined : JSON.stringify(body) });
+  } catch {
+    throw new ApiError("network", "Can't reach Catchami. Check your connection — nothing was charged.");
+  }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new ApiError(j.error ?? "error", j.message ?? `Request failed (${r.status})`);
+  return j as T;
+}
+
+export const rid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+
+export async function boot() {
+  let token: string | null = null;
+  try { token = localStorage.getItem(TOKEN_KEY); } catch {}
+  if (token) {
+    store.set({ token });
+    try {
+      const me = await api("/api/me");
+      store.set({ userId: me.user.id, displayName: me.user.displayName, wallet: me.wallet, network: me.wallet.network });
+      connect();
+      return;
+    } catch { token = null; }
+  }
+  store.set({ token: null });
+}
+
+export async function startAsGuest() {
+  const g = await api("/api/auth/guest", {});
+  try { localStorage.setItem(TOKEN_KEY, g.token); } catch {}
+  store.set({ token: g.token, userId: g.userId, displayName: g.displayName });
+  await refreshWallet();
+  connect();
+}
+
+export async function refreshWallet() {
+  const me = await api("/api/me");
+  store.set({ wallet: me.wallet, network: me.wallet.network, displayName: me.user.displayName });
+}
+
+let ws: WebSocket | null = null;
+let retry = 0;
+let clockOffset = 0;
+
+export const serverNow = () => Date.now() + clockOffset;
+
+export function connect() {
+  const { token } = store.get();
+  if (!token) return;
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`);
+  ws.onopen = () => { retry = 0; store.set({ connected: true }); send({ t: "ping", at: Date.now() }); };
+  ws.onclose = () => {
+    store.set({ connected: false });
+    const delay = Math.min(10_000, 500 * 2 ** retry++);
+    setTimeout(connect, delay);
+  };
+  ws.onmessage = (ev) => onMessage(JSON.parse(ev.data as string) as ServerMsg);
+}
+
+setInterval(() => {
+  if (ws?.readyState === WebSocket.OPEN) send({ t: "ping", at: Date.now() });
+  if (store.get().token && document.visibilityState === "visible") void refreshWallet().catch(() => {});
+}, 12_000);
+
+export function send(msg: ClientMsg) {
+  if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+}
+
+function onMessage(m: ServerMsg) {
+  const now = serverNow();
+  switch (m.t) {
+    case "welcome":
+      store.set({ map: m.map, nodesDef: m.nodes, pois: m.pois, hq: m.hq, controlled: m.controlled, displayName: m.displayName });
+      break;
+    case "snap": {
+      const seen = new Set<string>();
+      for (const [id, x, y, anim, facing] of m.p) {
+        seen.add(id);
+        let e = entities.get(id);
+        if (!e) { e = { id, meta: null, samples: [], anim, facing, lastSeen: now }; entities.set(id, e); }
+        e.samples.push([now, x, y]);
+        if (e.samples.length > 8) e.samples.shift();
+        e.anim = anim; e.facing = facing; e.lastSeen = now;
+      }
+      for (const [id, e] of entities) if (!seen.has(id) && now - e.lastSeen > 2000) entities.delete(id);
+      store.set({ merchants: m.m });
+      break;
+    }
+    case "meta": {
+      for (const p of m.pets) { const e = entities.get(p.id); if (e) e.meta = p; }
+      store.set((s) => ({ nodes: { ...s.nodes, ...Object.fromEntries(m.nodes.map((n) => [n.id, n.remaining])) } }));
+      break;
+    }
+    case "own": {
+      const prev = store.get().own.length;
+      store.set((s) => ({ own: m.pets, controlled: m.controlled ?? s.controlled }));
+      if (m.pets.length !== prev) void refreshWallet().catch(() => {});
+      break;
+    }
+      break;
+    case "merchant":
+      if (m.detail) store.set((s) => ({ merchantDetail: { ...s.merchantDetail, [m.id]: { detail: m.detail!, at: Date.now() } } }));
+      break;
+    case "market":
+      store.set({ ticker: m.ticker });
+      break;
+    case "battle":
+      window.dispatchEvent(new CustomEvent("catchami:battle", { detail: m.battle }));
+      break;
+    case "toast":
+      toast(m.kind, m.text);
+      if (m.kind === "good") void refreshWallet().catch(() => {});
+      break;
+    case "error":
+      toast("bad", m.message);
+      break;
+    case "pong":
+      clockOffset = m.serverTime - (m.at + Date.now()) / 2;
+      break;
+  }
+}
+
+export function signOut() {
+  try { localStorage.removeItem(TOKEN_KEY); } catch {}
+  location.reload();
+}

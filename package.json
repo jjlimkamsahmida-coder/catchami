@@ -1,0 +1,20 @@
+{
+  "name": "catchami",
+  "private": true,
+  "packageManager": "pnpm@10.30.1",
+  "engines": { "node": ">=22.18" },
+  "type": "module",
+  "scripts": {
+    "dev:server": "pnpm --filter @catchami/server dev",
+    "dev:web": "pnpm --filter @catchami/web dev",
+    "test": "vitest run",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "sim": "node apps/server/src/sim/run.ts",
+    "models": "node apps/server/scripts/fetch-models.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "~5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

@@ -1,0 +1,123 @@
+import { ECONOMY, RESOURCES, inventoryWeight, type Resource } from "@catchami/shared";
+import { controlledPet, entities, store, useStore } from "../net/store.ts";
+import { send } from "../net/api.ts";
+import { fmt, PetArt, RarityTag, ResIcon, Sheet } from "./common.tsx";
+
+const close = () => store.set({ sheet: null });
+
+export function Sheets() {
+  const sheet = useStore((s) => s.sheet);
+  if (!sheet) return null;
+  if (sheet.kind === "merchant") return <MerchantSheet id={sheet.id} />;
+  if (sheet.kind === "pet") return <PetSheet id={sheet.id} />;
+  return <NodeSheet id={sheet.id} />;
+}
+
+function MerchantSheet({ id }: { id: string }) {
+  const m = useStore((s) => s.merchants.find((x) => x.id === id));
+  const det = useStore((s) => s.merchantDetail[id]);
+  const p = useStore(controlledPet);
+  if (!m) return null;
+  const fresh = det && Date.now() - det.at < 2500;
+  const open = m.state !== "at_hq" && m.state !== "unavailable";
+  const sell = (items: Partial<Record<Resource, number>>) => p && send({ t: "sell", petId: p.id, merchantId: id, items });
+  return (
+    <Sheet onClose={close}>
+      <div className="col" style={{ gap: 12 }}>
+        <div className="row"><h2 className="grow">{m.name}</h2><span className="tag">{m.state === "at_hq" ? "restocking at HQ" : m.state === "unavailable" ? "no budget right now" : m.state}</span></div>
+        {!open && <div className="notice">{m.state === "unavailable" ? "HQ couldn't fund this merchant's next trip within today's budget. They'll head out again when funds allow." : "Back at HQ delivering goods and collecting the next budget."}</div>}
+        {open && !fresh && (
+          <div className="notice">
+            Cash and stock are only visible up close. Walk {p ? p.name : "your pet"} next to {m.name.split(" ")[0]} to trade.
+            <div style={{ marginTop: 8 }}><button className="btn sm" onClick={() => { send({ t: "goto", x: m.x, y: m.y }); close(); }}>Walk there</button></div>
+          </div>
+        )}
+        {open && fresh && det && (
+          <>
+            <dl className="kv">
+              <dt>Cash on hand</dt><dd className="num">{fmt(det.detail.cash)}</dd>
+              <dt>Cart space left</dt><dd className="num">{det.detail.capacityLeft}</dd>
+            </dl>
+            <div className="card col" style={{ gap: 6 }}>
+              {RESOURCES.map((r) => (
+                <div className="row" key={r}>
+                  <ResIcon r={r} size={24} />
+                  <span className="grow" style={{ textTransform: "capitalize", fontWeight: 600 }}>{r}</span>
+                  <span className="small muted">stock {det.detail.inventory[r]}</span>
+                  <span className="num" style={{ minWidth: 70, textAlign: "right", fontWeight: 700 }}>{fmt(det.detail.prices[r])}</span>
+                  <button className="btn sm leaf" disabled={!p || !p.carried[r]} onClick={() => sell({ [r]: p!.carried[r] })}>Sell {p?.carried[r] ?? 0}</button>
+                </div>
+              ))}
+            </div>
+            <button className="btn leaf block" disabled={!p || inventoryWeight(p.carried) === 0} onClick={() => sell(p!.carried)}>Sell everything</button>
+            <p className="small muted" style={{ margin: 0 }}>Prices follow live demand and HQ's treasury health. The merchant pays from its own HQ-funded budget and stops buying when cash or cart space runs out.</p>
+          </>
+        )}
+      </div>
+    </Sheet>
+  );
+}
+
+function PetSheet({ id }: { id: string }) {
+  const userId = useStore((s) => s.userId);
+  const controlled = useStore(controlledPet);
+  const e = entities.get(id);
+  const meta = e?.meta;
+  if (!meta) return null;
+  const mine = meta.ownerId === userId;
+  const last = e!.samples.at(-1);
+  const cl = controlled ? entities.get(controlled.id)?.samples.at(-1) : null;
+  const dist = last && cl ? Math.hypot(last[1] - cl[1], last[2] - cl[2]) : Infinity;
+  return (
+    <Sheet onClose={close}>
+      <div className="row" style={{ gap: 14, alignItems: "flex-start" }}>
+        <div style={{ width: 96, height: 96, flex: "none" }}><PetArt sticker={meta.sticker} species={meta.species} look={meta.look} /></div>
+        <div className="col grow" style={{ gap: 6 }}>
+          <div className="row"><h2>{meta.name}</h2><RarityTag r={meta.rarity} /></div>
+          <span className="small muted">{meta.species} · owned by {mine ? "you" : meta.ownerName} · {meta.status.replace("_", " ")}</span>
+          <dl className="kv">
+            <dt>Token balance</dt><dd className="num">{fmt(meta.balance)}</dd>
+            <dt>Carrying</dt><dd>{RESOURCES.filter((r) => meta.carried[r]).map((r) => <span key={r} style={{ marginLeft: 6 }}><ResIcon r={r} size={16} />{meta.carried[r]}</span>)}{!inventoryWeight(meta.carried) && "nothing"}</dd>
+          </dl>
+        </div>
+      </div>
+      <div className="col" style={{ marginTop: 12 }}>
+        {mine ? (
+          <button className="btn block" onClick={() => { send({ t: "select", petId: id }); store.set({ controlled: id, sheet: null }); }}>{controlled?.id === id ? "You're controlling this pet" : "Control this pet"}</button>
+        ) : (
+          <>
+            <button className="btn coral block" disabled={!controlled || dist > ECONOMY.battle.challengeRangePx} onClick={() => { send({ t: "challenge", petId: controlled!.id, targetId: id }); close(); }}>
+              {!controlled ? "Catch a pet first" : dist > ECONOMY.battle.challengeRangePx ? "Get closer to challenge" : `Challenge with ${controlled.name}`}
+            </button>
+            <p className="small muted" style={{ margin: 0 }}>
+              Battles here are <b>non-redeemable</b>: no tokens are at stake. HP damage persists, and the winner can take up to 15% of the loser's carried resources. The other owner's battle settings decide whether they accept.
+            </p>
+          </>
+        )}
+      </div>
+    </Sheet>
+  );
+}
+
+function NodeSheet({ id }: { id: string }) {
+  const n = useStore((s) => s.nodesDef.find((x) => x.id === id));
+  const rem = useStore((s) => s.nodes[id]);
+  const p = useStore(controlledPet);
+  if (!n) return null;
+  const cfg = ECONOMY.resources[n.resource];
+  return (
+    <Sheet onClose={close}>
+      <div className="col" style={{ gap: 10 }}>
+        <div className="row"><ResIcon r={n.resource} size={34} /><h2 style={{ textTransform: "capitalize" }}>{n.resource} spot</h2></div>
+        <dl className="kv">
+          <dt>Available now</dt><dd>{rem === undefined ? "get closer to see" : rem <= 0 ? "picked clean — regrowing" : `${rem} of ${cfg.nodeCapacity}`}</dd>
+          <dt>Weight per unit</dt><dd>{cfg.weight}</dd>
+          <dt>Used for</dt><dd>{{ fish: "food", herbs: "medicine", wood: "crafting", minerals: "crafting" }[n.resource]}</dd>
+        </dl>
+        <button className="btn block" disabled={!p || p.status === "knocked_out"} onClick={() => { send({ t: "gather", petId: p!.id, nodeId: id }); close(); }}>
+          {p ? `Send ${p.name} to gather` : "Catch a pet first"}
+        </button>
+      </div>
+    </Sheet>
+  );
+}
