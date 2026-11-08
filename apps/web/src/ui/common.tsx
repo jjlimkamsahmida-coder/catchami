@@ -15,7 +15,9 @@ export const fmt = (wire: string | bigint | null | undefined) => {
 };
 
 export function ResIcon({ r, size = 18 }: { r: Resource; size?: number }) {
-  return <img src={cached(`icon-${r}`, () => art.resourceIcon(r, 56))} width={size} height={size} alt={r} style={{ verticalAlign: "middle" }} />;
+  const [failed, setFailed] = useState(false);
+  const src = failed ? cached(`icon-${r}`, () => art.resourceIcon(r, 56)) : `/assets/gen/icon-${r}.png`;
+  return <img src={src} onError={() => setFailed(true)} width={size} height={size} alt={r} style={{ verticalAlign: "middle", objectFit: "contain" }} />;
 }
 
 export function PetArt({ sticker, species, look, size }: { sticker: string | null; species: Species; look: PetLook; size?: number }) {

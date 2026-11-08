@@ -7,6 +7,7 @@ import { store, useStore } from "../net/store.ts";
 import { api, refreshWallet, rid, send } from "../net/api.ts";
 import { toast } from "../net/store.ts";
 import { fmt, PetArt, RarityTag, ResIcon, ScreenHead, useAsync } from "./common.tsx";
+import { CollectorCard, cardFromPet } from "./CollectorCard.tsx";
 
 export function PetsScreen() {
   const own = useStore((s) => s.own);
@@ -62,6 +63,9 @@ function StatusTab({ p }: { p: OwnPet }) {
   const label: Record<string, string> = { maxHp: "Max HP", maxEnergy: "Max energy", attack: "Attack", defense: "Defense", gather: "Gathering", speed: "Speed", luck: "Luck", carry: "Carry capacity" };
   return (
     <div className="col" style={{ gap: 12 }}>
+      <div style={{ display: "grid", placeItems: "center", padding: "6px 0 10px" }}>
+        <CollectorCard card={cardFromPet(p)} width={Math.min(290, window.innerWidth - 60)} />
+      </div>
       <div className="card">
         <dl className="kv">
           <dt>HP</dt><dd className="num">{p.hp} / {p.stats.maxHp}</dd>

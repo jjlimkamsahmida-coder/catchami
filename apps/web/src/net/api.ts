@@ -64,6 +64,7 @@ export const serverNow = () => Date.now() + clockOffset;
 export function connect() {
   const { token } = store.get();
   if (!token) return;
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return; // one connection per tab
   const proto = location.protocol === "https:" ? "wss" : "ws";
   ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`);
   ws.onopen = () => { retry = 0; store.set({ connected: true }); send({ t: "ping", at: Date.now() }); };

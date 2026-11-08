@@ -110,8 +110,8 @@ export function recomputeStats(p: Pick<PetRt, "genome" | "equipment">): Stats {
 }
 
 export const MERCHANT_DEFS: Array<Pick<MerchantRt, "id" | "name" | "hue" | "prefs" | "route">> = [
-  { id: "finn", name: "Finn the Fishmonger", hue: 200, prefs: { fish: 1_200, wood: -600 }, route: ["hq", "lakeside", "southwest", "lakeside", "hq"] },
-  { id: "marigold", name: "Sage Marigold", hue: 120, prefs: { herbs: 1_200, minerals: -600 }, route: ["hq", "meadow", "southwest", "hq"] },
-  { id: "tom", name: "Timber Tom", hue: 30, prefs: { wood: 1_200, fish: -600 }, route: ["hq", "lakeside", "forest", "northgate", "hq"] },
-  { id: "ruby", name: "Rocky Ruby", hue: 330, prefs: { minerals: 1_200, herbs: -600 }, route: ["hq", "northgate", "pass", "highland", "pass", "hq"] },
+  { id: "finn", name: "Finn the Fishmonger", hue: 200, prefs: { fish: 1_200, wood: -600 }, route: ["hq", "town_west", "lake", "windmill", "meadow", "town_west", "hq"] },
+  { id: "marigold", name: "Sage Marigold", hue: 120, prefs: { herbs: 1_200, minerals: -600 }, route: ["hq", "town_west", "farm", "forest_gate", "forest", "pond", "forest_gate", "town_west", "hq"] },
+  { id: "tom", name: "Timber Tom", hue: 30, prefs: { wood: 1_200, fish: -600 }, route: ["hq", "town_south", "valley_west", "forest_east", "forest", "ruins", "forest", "forest_east", "valley_west", "town_south", "hq"] },
+  { id: "ruby", name: "Rocky Ruby", hue: 330, prefs: { minerals: 1_200, herbs: -600 }, route: ["hq", "town_south", "mines", "mine", "smithy", "mines", "town_south", "hq"] },
 ];

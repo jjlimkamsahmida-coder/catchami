@@ -8,9 +8,16 @@ import { readFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { createRequire } from "node:module";
 import { SPECIES, type Species } from "@catchami/shared";
+import { existsSync } from "node:fs";
+import type { Rgba } from "./image.ts";
+import { cleanMask, loadSegmenter, renderCutout, VOC, type Segmenter } from "./segment.ts";
 
 export interface Detection { species: Species; score: number; bbox: [number, number, number, number] }
-export interface Detector { ready: boolean; detect(rgba: Uint8Array, w: number, h: number): Promise<{ best: Detection | null; people: number; all: Array<{ cls: string; score: number }> }> }
+export interface Detector {
+  ready: boolean;
+  /** Body cutout sticker (transparent PNG) or null when segmentation fails. */
+  cutout?(img: Rgba, species: Species, bbox: [number, number, number, number]): Promise<Buffer | null>;
+  detect(rgba: Uint8Array, w: number, h: number): Promise<{ best: Detection | null; people: number; all: Array<{ cls: string; score: number }> }> }
 
 type CocoModel = { detect(img: unknown, maxBoxes?: number, minScore?: number): Promise<Array<{ class: string; score: number; bbox: [number, number, number, number] }>> };
 
@@ -38,8 +45,16 @@ export async function loadDetector(modelDir: string): Promise<Detector> {
     },
   };
   const model = (await coco.load({ base: "lite_mobilenet_v2", modelUrl: handler as unknown as string })) as unknown as CocoModel;
+  let seg: Segmenter | null = null;
+  if (existsSync(join(modelDir, "deeplab_pascal", "model.json"))) seg = await loadSegmenter(modelDir).catch((e) => { console.error("segmenter failed to load:", e); return null; });
   return {
     ready: true,
+    async cutout(img, species, bbox) {
+      if (!seg) return null;
+      const raw = await seg.segment(img, VOC[species]);
+      const m = cleanMask(raw, img.width, img.height, bbox.map(Math.round) as [number, number, number, number]);
+      return m ? renderCutout(img, m) : null;
+    },
     async detect(rgba, w, h) {
       const rgb = new Uint8Array(w * h * 3);
       for (let i = 0, j = 0; i < rgba.length; i += 4, j += 3) { rgb[j] = rgba[i]!; rgb[j + 1] = rgba[i + 1]!; rgb[j + 2] = rgba[i + 2]!; }

@@ -333,7 +333,7 @@ export class Game {
       }
       m.legIdx++;
       const poi = this.world.pois.find((q) => q.id === m.route[m.legIdx])!;
-      m.path = findPath(this.world, toTile(m.x), toTile(m.y), poi.tx, poi.ty, 20_000) ?? [];
+      m.path = findPath(this.world, toTile(m.x), toTile(m.y), poi.tx, poi.ty, 120_000) ?? [];
       m.waitUntil = now + 18_000; // set up shop at each stop
       return;
     }
@@ -349,7 +349,7 @@ export class Game {
 
   private sendMerchantHome(m: MerchantRt) {
     const hq = this.world.pois.find((q) => q.id === "hq")!;
-    m.path = findPath(this.world, toTile(m.x), toTile(m.y), hq.tx, hq.ty, 20_000) ?? [];
+    m.path = findPath(this.world, toTile(m.x), toTile(m.y), hq.tx, hq.ty, 120_000) ?? [];
     m.state = "returning";
   }
 

@@ -33,7 +33,7 @@ export interface State {
   ticker: MarketTicker | null;
   toasts: Toast[];
   sheet: null | { kind: "merchant"; id: string } | { kind: "pet"; id: string } | { kind: "node"; id: string };
-  screen: "world" | "catch" | "pets" | "market" | "ranks" | "wallet" | "fairness";
+  screen: "world" | "catch" | "pets" | "market" | "ranks" | "wallet" | "fairness" | "map";
   petScreen: string | null;
 }
 

@@ -169,8 +169,8 @@ describe("world", () => {
     for (const n of w.nodes) {
       const spots = [[0, 1], [1, 0], [-1, 0], [0, -1]].map(([dx, dy]) => [n.tx + dx!, n.ty + dy!] as const).filter(([x, y]) => walkable(w, x, y));
       expect(spots.length, n.id).toBeGreaterThan(0);
-      expect(spots.some(([x, y]) => findPath(w, hx, hy, x, y, 20000) !== null), `node ${n.id} reachable`).toBe(true);
+      expect(spots.some(([x, y]) => findPath(w, hx, hy, x, y, 200000) !== null), `node ${n.id} reachable`).toBe(true);
     }
-    for (const p of w.pois) expect(findPath(w, hx, hy, p.tx, p.ty, 20000), p.id).not.toBeNull();
+    for (const p of w.pois) expect(findPath(w, hx, hy, p.tx, p.ty, 200000), p.id).not.toBeNull();
   });
 });

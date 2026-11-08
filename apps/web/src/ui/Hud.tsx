@@ -3,6 +3,8 @@ import { ECONOMY, inventoryWeight, RESOURCES, type OwnPet } from "@catchami/shar
 import { controlledPet, entities, store, useStore } from "../net/store.ts";
 import { send, rid } from "../net/api.ts";
 import { fmt, Icon, PetArt, ResIcon } from "./common.tsx";
+import { MiniMap } from "./WorldHud.tsx";
+import { genUrl } from "../game/assets.ts";
 
 export function TopBar() {
   const wallet = useStore((s) => s.wallet);
@@ -12,12 +14,14 @@ export function TopBar() {
   return (
     <div className="topbar">
       <button className="chip wallet-chip" onClick={() => store.set({ screen: "wallet" })} aria-label="Wallet">
-        <span className="coin">C</span>
+        <img src={genUrl("ui-coin")} alt="" width={28} height={28} />
         <span className="num">{fmt(wallet?.available)}</span>
         {network === "dev" && <span className="tag dev" title="Dev network: test units with no value">TEST</span>}
         <span className={`conn ${connected ? "on" : ""}`} title={connected ? "Connected" : "Reconnecting…"} />
       </button>
       <div className="grow" />
+      <div className="col" style={{ alignItems: "flex-end", gap: 8 }}>
+      <MiniMap />
       {ticker && (
         <div className="panel market-widget" title="Global market demand from real recorded activity">
           {RESOURCES.map((r) => (
@@ -28,6 +32,7 @@ export function TopBar() {
           ))}
         </div>
       )}
+      </div>
     </div>
   );
 }

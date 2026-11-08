@@ -1,6 +1,27 @@
 # Art, animation and sound
 
-All current visuals are **original development placeholders drawn in code** (`apps/web/src/game/art.ts`). They're consistent in style (ink outlines, sticker borders, warm palette) and every one can be replaced without code changes.
+## Generated art (current)
+
+The game art comes from the owner's ChatGPT (Pro) image generation, following the owner's reference concept images:
+
+| Sheet (raw, in `apps/web/art-src/raw/`, not shipped) | Sliced into |
+|---|---|
+| `camicube-sheet.png` | `cube-happy/excited/fly/open/wobble/dizzy` — the capture cube |
+| `logo.png` | `logo.png` (title screen) |
+| `meadow-sheet.png`, `town-sheet.png`, `mines-sheet.png`, `forest-sheet.png` | `prop-*` world props (farmhouse, windmill, castle, fountain, mine, portal, trees…) |
+| `nodes-sheet.png` | `node-<resource>` and `node-<resource>-empty` |
+| `merchants-sheet.png` | `merchant-finn/marigold/tom/ruby` |
+| `icons-sheet.png` | `icon-<resource>`, `ui-backpack/map/heart/coin/pin/trophy` |
+| `tex-*.png` | seamless ground textures (grass, forest floor, valley dirt, cobblestone) |
+| `title-bg.png` | `title-bg.webp` |
+
+Pipeline: `scripts/slice-sheet.ts` cuts a sheet into sprites by transparency (keys out a white background if needed), `scripts/optimize-art.ts` shrinks them to ~2× on-screen size as palette PNGs (17.8 MB → 2.1 MB). Sprite keys and on-screen sizes live in `apps/web/src/game/assets.ts`; anything missing falls back to the procedural art below. Ground terrain shapes (coastlines, earth banks, cliffs, paths) are still painted in code (`world-art.ts`) and filled with the generated textures.
+
+Licensing note: check OpenAI's current terms for commercial use of generated images before launch, and keep the raw sheets as provenance.
+
+## Procedural fallback
+
+The original code-drawn placeholders (`apps/web/src/game/art.ts`, `world-art.ts`) remain as fallbacks, consistent in style (ink outlines, sticker borders, warm palette).
 
 ## Replacing a texture
 

@@ -10,16 +10,18 @@ import { store, toast, useStore } from "../net/store.ts";
 import { api, ApiError, refreshWallet } from "../net/api.ts";
 import * as art from "../game/art.ts";
 import { fmt, Icon, pct } from "./common.tsx";
+import { CollectorCard } from "./CollectorCard.tsx";
+import { CUBE, genUrl } from "../game/assets.ts";
 
 type Box = [number, number, number, number];
 type Stage =
   | { k: "camera" }
   | { k: "checking" }
   | { k: "rejected"; message: string }
-  | { k: "choose"; attemptId: string; species: string; quotes: CatchQuote[]; still: string; bbox: Box; frame: { w: number; h: number }; expiresAt: number }
-  | { k: "throw"; attemptId: string; tier: CatchTier; quote: CatchQuote; still: string; bbox: Box; frame: { w: number; h: number } }
-  | { k: "rolling"; still: string; at: { x: number; y: number } }
-  | { k: "result"; success: boolean; rarity: Rarity | null; petId: string | null; cost: string; label: string; epoch: number; still: string };
+  | { k: "choose"; attemptId: string; species: string; quotes: CatchQuote[]; still: string; bbox: Box; frame: { w: number; h: number }; expiresAt: number; sticker: string | null }
+  | { k: "throw"; attemptId: string; tier: CatchTier; quote: CatchQuote; still: string; bbox: Box; frame: { w: number; h: number }; sticker: string | null; species: string }
+  | { k: "rolling"; still: string; at: { x: number; y: number }; sticker: string | null }
+  | { k: "result"; success: boolean; rarity: Rarity | null; petId: string | null; cost: string; label: string; epoch: number; still: string; sticker: string | null; species: string };
 
 interface Coco { detect(v: HTMLVideoElement, max?: number, min?: number): Promise<Array<{ class: string; score: number; bbox: Box }>> }
 let modelPromise: Promise<Coco> | null = null;
@@ -33,7 +35,12 @@ async function loadModel(): Promise<Coco> {
   return modelPromise;
 }
 
-const capsuleUrl = (() => { let u = ""; return () => (u ||= art.capsule().toDataURL()); })();
+/** CamiCube pose image (generated art), with the procedural charm as a fallback. */
+const cubeSrc = (pose: keyof typeof CUBE) => genUrl(CUBE[pose]);
+const fallbackCube = (() => { let u = ""; return () => (u ||= art.capsule().toDataURL()); })();
+function Cube({ pose, style, className = "capsule", ...rest }: { pose: keyof typeof CUBE; style?: React.CSSProperties; className?: string } & React.HTMLAttributes<HTMLImageElement>) {
+  return <img className={className} src={cubeSrc(pose)} onError={(e) => { (e.target as HTMLImageElement).src = fallbackCube(); }} alt="CamiCube" draggable={false} style={style} {...rest} />;
+}
 
 export function CatchScreen() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -95,7 +102,7 @@ export function CatchScreen() {
       if (!r.ok) { setStage({ k: "rejected", message: r.message }); return; }
       const f = frames[0]!;
       const box: Box = live ? scaleBox(live.box, videoRef.current!, f.w) : [f.w * 0.3, f.h * 0.3, f.w * 0.4, f.h * 0.4];
-      setStage({ k: "choose", attemptId: r.attemptId, species: r.species, quotes: r.quotes, still: f.url, bbox: box, frame: { w: f.w, h: f.h }, expiresAt: r.expiresAt });
+      setStage({ k: "choose", attemptId: r.attemptId, species: r.species, quotes: r.quotes, still: f.url, bbox: box, frame: { w: f.w, h: f.h }, expiresAt: r.expiresAt, sticker: r.sticker ?? null });
     } catch (e) {
       setStage({ k: "rejected", message: `${(e as Error).message} Nothing was charged.` });
     }
@@ -117,6 +124,7 @@ export function CatchScreen() {
             {camError ?? (modelState === "loading" ? "Warming up animal finder…" : modelState === "failed" ? "Live preview unavailable — you can still try a check" : live ? `${live.cls === "cat" ? "Cat" : "Dog"} spotted!` : "Point at a real cat or dog")}
           </div>
           <div className="bottom col" style={{ alignItems: "center" }}>
+            <Cube pose={live && live.streak >= 2 ? "excited" : "happy"} className="" style={{ width: 92, height: 92, objectFit: "contain", animation: live && live.streak >= 2 ? "cubehop 0.5s ease-in-out infinite" : "cubebob 2.4s ease-in-out infinite", filter: "drop-shadow(0 6px 0 rgba(43,29,58,0.35))" }} />
             <button className="btn coral" style={{ minWidth: 220, fontSize: 18 }} disabled={!!camError || (modelState === "ready" && (!live || live.streak < 2))} onClick={check}>
               {live && live.streak >= 2 ? "Lock on" : "Find an animal"}
             </button>
@@ -133,11 +141,11 @@ export function CatchScreen() {
           <button className="btn" onClick={() => setStage({ k: "camera" })}>Try again</button>
         </div></div>
       )}
-      {stage.k === "choose" && <TierPicker stage={stage} onPick={(tier) => setStage({ k: "throw", attemptId: stage.attemptId, tier, quote: stage.quotes.find((q) => q.tier === tier)!, still: stage.still, bbox: stage.bbox, frame: stage.frame })} onCancel={() => setStage({ k: "camera" })} />}
+      {stage.k === "choose" && <TierPicker stage={stage} onPick={(tier) => setStage({ k: "throw", attemptId: stage.attemptId, tier, quote: stage.quotes.find((q) => q.tier === tier)!, still: stage.still, bbox: stage.bbox, frame: stage.frame, sticker: stage.sticker, species: stage.species })} onCancel={() => setStage({ k: "camera" })} />}
       {stage.k === "throw" && <Throw stage={stage} onResolved={setStage} />}
-      {stage.k === "rolling" && <img className="capsule" src={capsuleUrl()} style={{ left: stage.at.x - 42, top: stage.at.y - 42, animation: "wobble 0.6s ease-in-out infinite" }} alt="" />}
+      {stage.k === "rolling" && <CaptureSequence at={stage.at} sticker={stage.sticker} />}
       {stage.k === "result" && <Result stage={stage} onAgain={() => setStage({ k: "camera" })} />}
-      <style>{`@keyframes wobble { 0%,100% { transform: rotate(0) } 25% { transform: rotate(-18deg) } 75% { transform: rotate(18deg) } }`}</style>
+      <style>{`@keyframes wobble { 0%,100% { transform: rotate(0) } 25% { transform: rotate(-18deg) } 75% { transform: rotate(18deg) } } @keyframes cubebob { 50% { transform: translateY(-6px) } } @keyframes cubehop { 50% { transform: translateY(-14px) scale(1.06) } } @keyframes cubespin { to { transform: rotate(360deg) } } @keyframes cubepop { from { transform: scale(0.6) } to { transform: scale(1) } } @keyframes suckin { to { transform: translateY(150px) scale(0.05) rotate(25deg); opacity: 0.2 } } @keyframes pulse { to { transform: scale(1.15); opacity: 0.7 } }`}</style>
     </div>
   );
 }
@@ -168,11 +176,14 @@ function TierPicker({ stage, onPick, onCancel }: { stage: Extract<Stage, { k: "c
   return (
     <div className="bottom">
       <div className="panel col" style={{ padding: 14, gap: 10, maxHeight: "72vh", overflow: "auto" }}>
-        <div className="row"><h3 className="grow">Real {stage.species} confirmed!</h3><span className="small muted">{left} min to throw</span></div>
+        <div className="row">
+          {stage.sticker && <img src={stage.sticker} alt="" style={{ width: 64, height: 64, objectFit: "contain" }} />}
+          <h3 className="grow">Real {stage.species} confirmed!</h3><span className="small muted">{left} min to throw</span>
+        </div>
         <div className="col" style={{ gap: 8 }}>
           {stage.quotes.map((x) => (
             <button key={x.tier} className={`card tier ${tier === x.tier ? "on" : ""}`} onClick={() => setTier(x.tier)}>
-              <div className="row"><b className="grow" style={{ textTransform: "capitalize" }}>{x.tier} charm</b><b className="num">{fmt(x.cost)}</b></div>
+              <div className="row"><b className="grow" style={{ textTransform: "capitalize" }}>{x.tier} CamiCube</b><b className="num">{fmt(x.cost)}</b></div>
               <div className="small">Catch chance <b>{pct(x.successPpm)}</b></div>
               <div className="odds">{(Object.keys(x.rarityPpm) as Rarity[]).map((r) => <span key={r}>{RARITY_LABEL[r]} <b>{pct(x.rarityPpm[r])}</b></span>)}</div>
             </button>
@@ -185,7 +196,7 @@ function TierPicker({ stage, onPick, onCancel }: { stage: Extract<Stage, { k: "c
         </div>
         <div className="row">
           <button className="btn paper" onClick={onCancel}>Back</button>
-          <button className="btn coral grow" disabled={!afford} onClick={() => onPick(tier)}>{afford ? `Throw ${tier} charm · ${fmt(q.cost)}` : "Not enough tokens"}</button>
+          <button className="btn coral grow" disabled={!afford} onClick={() => onPick(tier)}>{afford ? `Throw ${tier} CamiCube · ${fmt(q.cost)}` : "Not enough tokens"}</button>
         </div>
       </div>
     </div>
@@ -197,7 +208,7 @@ function Throw({ stage, onResolved }: { stage: Extract<Stage, { k: "throw" }>; o
   const start = { x: window.innerWidth / 2, y: window.innerHeight - 140 };
   const [pos, setPos] = useState(start);
   const [flying, setFlying] = useState(false);
-  const [hint, setHint] = useState("Drag the charm and flick it at the animal");
+  const [hint, setHint] = useState("Drag the CamiCube and flick it at the animal");
   const drag = useRef<{ id: number; pts: Array<{ x: number; y: number; t: number }> } | null>(null);
   const nonce = useRef(Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(36).padStart(2, "0")).join("").slice(0, 20));
 
@@ -223,12 +234,12 @@ function Throw({ stage, onResolved }: { stage: Extract<Stage, { k: "throw" }>; o
       setPos(start);
       return;
     }
-    onResolved({ k: "rolling", still: stage.still, at: land });
+    onResolved({ k: "rolling", still: stage.still, at: land, sticker: stage.sticker });
     const t0 = Date.now();
     try {
       const r = await submit(stage.attemptId, stage.tier, nonce.current);
-      await new Promise((res) => setTimeout(res, Math.max(0, 1900 - (Date.now() - t0))));
-      onResolved({ k: "result", success: r.success, rarity: r.rarity, petId: r.petId, cost: r.cost, label: r.fairness?.label ?? `${stage.attemptId}:${nonce.current}`, epoch: r.fairness?.epoch ?? r.epoch_id, still: stage.still });
+      await new Promise((res) => setTimeout(res, Math.max(0, 3300 - (Date.now() - t0))));
+      onResolved({ k: "result", success: r.success, rarity: r.rarity, petId: r.petId, cost: r.cost, label: r.fairness?.label ?? `${stage.attemptId}:${nonce.current}`, epoch: r.fairness?.epoch ?? r.epoch_id, still: stage.still, sticker: stage.sticker, species: stage.species });
       void refreshWallet();
     } catch (e) {
       toast("bad", (e as Error).message);
@@ -240,8 +251,8 @@ function Throw({ stage, onResolved }: { stage: Extract<Stage, { k: "throw" }>; o
     <>
       <div className="reticle" style={{ ...target, borderStyle: "dashed" }} />
       <div className="status panel" style={{ padding: "6px 14px", fontWeight: 600 }}>{hint}</div>
-      <img className="capsule" src={capsuleUrl()} alt="Catchami charm" draggable={false}
-        style={{ left: pos.x - 42, top: pos.y - 42, transition: flying ? "none" : "left 0.15s, top 0.15s" }}
+      <Cube pose={flying ? "fly" : "happy"}
+        style={{ left: pos.x - 48, top: pos.y - 48, width: 96, height: 96, objectFit: "contain", transition: flying ? "none" : "left 0.15s, top 0.15s", animation: flying ? "cubespin 0.35s linear infinite" : undefined }}
         onPointerDown={(e) => { if (flying) return; (e.target as HTMLElement).setPointerCapture(e.pointerId); drag.current = { id: e.pointerId, pts: [{ x: e.clientX, y: e.clientY, t: performance.now() }] }; }}
         onPointerMove={(e) => { const d = drag.current; if (!d || d.id !== e.pointerId) return; d.pts.push({ x: e.clientX, y: e.clientY, t: performance.now() }); if (d.pts.length > 6) d.pts.shift(); setPos({ x: e.clientX, y: e.clientY }); }}
         onPointerUp={(e) => {
@@ -252,7 +263,7 @@ function Throw({ stage, onResolved }: { stage: Extract<Stage, { k: "throw" }>; o
           void release((b.x - a.x) / dt, (b.y - a.y) / dt);
           void e;
         }} />
-      <div className="bottom"><p className="panel small" style={{ margin: 0, padding: "6px 10px", textAlign: "center" }}>{stage.tier} charm · {fmt(stage.quote.cost)} · {pct(stage.quote.successPpm)} catch chance</p></div>
+      <div className="bottom"><p className="panel small" style={{ margin: 0, padding: "6px 10px", textAlign: "center" }}>{stage.tier} CamiCube · {fmt(stage.quote.cost)} · {pct(stage.quote.successPpm)} catch chance</p></div>
     </>
   );
 }
@@ -270,31 +281,53 @@ async function submit(attemptId: string, tier: CatchTier, clientNonce: string) {
   }
 }
 
+/** Unfold → the animal is pulled in → the cube wobbles shut three times. */
+function CaptureSequence({ at, sticker }: { at: { x: number; y: number }; sticker: string | null }) {
+  const [phase, setPhase] = useState<"open" | "wobble">("open");
+  useEffect(() => { const t = setTimeout(() => setPhase("wobble"), 1100); return () => clearTimeout(t); }, []);
+  return (
+    <>
+      {phase === "open" && sticker && <img src={sticker} alt="" style={{ position: "absolute", left: at.x - 70, top: at.y - 190, width: 140, height: 140, objectFit: "contain", zIndex: 4, animation: "suckin 1.05s cubic-bezier(.6,0,.9,.4) forwards" }} />}
+      {phase === "open" && <div style={{ position: "absolute", left: at.x - 90, top: at.y - 110, width: 180, height: 180, borderRadius: "50%", background: "radial-gradient(circle, rgba(255,226,120,0.85), rgba(255,226,120,0) 70%)", zIndex: 3, animation: "pulse 0.5s ease-in-out infinite alternate" }} />}
+      <Cube pose={phase === "open" ? "open" : "wobble"} style={{ left: at.x - 56, top: at.y - 56, width: 112, height: 112, objectFit: "contain", zIndex: 5, animation: phase === "wobble" ? "wobble 0.7s ease-in-out 3" : "cubepop 0.3s ease-out" }} />
+    </>
+  );
+}
+
 function Result({ stage, onAgain }: { stage: Extract<Stage, { k: "result" }>; onAgain: () => void }) {
   const own = useStore((s) => s.own);
   const pet = own.find((p) => p.id === stage.petId);
   return (
-    <div className="bottom">
-      <div className="panel col result-card" style={{ padding: 16, alignItems: "center" }}>
+    <div className="bottom" style={{ top: 0, display: "flex", flexDirection: "column", justifyContent: "flex-end", overflow: "auto", background: "rgba(43,29,58,0.45)" }}>
+      <div className="col" style={{ alignItems: "center", gap: 10, padding: "16px 0" }}>
         {stage.success ? (
           <>
-            {pet?.sticker ? <img src={pet.sticker} alt="" /> : <img src={`/media/stickers/${stage.petId}.png`} alt="" />}
-            <h2>Caught{pet ? ` ${pet.name}` : ""}!</h2>
-            <span className={`tag rarity ${stage.rarity}`} style={{ fontSize: 16 }}>{RARITY_LABEL[stage.rarity!]}</span>
-            <p className="small muted" style={{ margin: 0 }}>80% of the charm cost is now in your pet's balance. NFT mint is queued for the chain.</p>
-            <div className="row" style={{ width: "100%" }}>
-              <button className="btn paper grow" onClick={onAgain}>Catch another</button>
-              <button className="btn leaf grow" onClick={() => store.set({ screen: "pets", petScreen: stage.petId })}>Meet your pet</button>
+            <div className="row" style={{ gap: 6 }}>
+              <Cube pose="excited" className="" style={{ width: 70, height: 70, objectFit: "contain", animation: "cubehop 0.6s ease-in-out 3" }} />
+              <h2 style={{ color: "#fff", WebkitTextStroke: "4px #2b1d3a", paintOrder: "stroke fill", fontSize: 30 }}>Caught{pet ? ` ${pet.name}` : ""}!</h2>
             </div>
+            <CollectorCard flipIn width={Math.min(300, window.innerWidth - 48)} card={{
+              id: stage.petId ?? "pet_new", name: pet?.name ?? "New friend", species: (pet?.species ?? stage.species) as "cat" | "dog", rarity: (stage.rarity ?? "common") as Rarity,
+              sticker: pet?.sticker ?? (stage.petId ? `/media/stickers/${stage.petId}.png` : stage.sticker), look: pet?.look ?? { hue: 30, outline: 0, pattern: 0, bounce: 100 },
+              stats: pet?.baseStats ?? null, traits: pet?.traits,
+            }} />
           </>
         ) : (
           <>
-            <h2>It slipped away…</h2>
-            <p style={{ margin: 0 }}>The charm cost ({fmt(stage.cost)}) went to HQ. No NFT was created.</p>
-            <button className="btn block" onClick={onAgain}>Find another animal</button>
+            <Cube pose="dizzy" className="" style={{ width: 130, height: 130, objectFit: "contain", animation: "wobble 0.5s ease-in-out 2" }} />
+            <h2 style={{ color: "#fff", WebkitTextStroke: "4px #2b1d3a", paintOrder: "stroke fill", fontSize: 28 }}>It slipped away…</h2>
           </>
         )}
-        <p className="small muted" style={{ margin: 0 }}>Verify later in Wallet → Fairness · epoch {stage.epoch} · label {stage.label}</p>
+        <div className="panel col" style={{ padding: 14, width: "min(420px, calc(100vw - 28px))" }}>
+          {stage.success
+            ? <p className="small" style={{ margin: 0 }}>80% of the CamiCube cost is now in your pet's balance. NFT mint is queued for the chain.</p>
+            : <p style={{ margin: 0 }}>The CamiCube cost ({fmt(stage.cost)}) went to HQ. No NFT was created.</p>}
+          <div className="row" style={{ width: "100%" }}>
+            <button className="btn paper grow" onClick={onAgain}>{stage.success ? "Catch another" : "Find another animal"}</button>
+            {stage.success && <button className="btn leaf grow" onClick={() => store.set({ screen: "pets", petScreen: stage.petId })}>Meet your pet</button>}
+          </div>
+          <p className="small muted" style={{ margin: 0 }}>Verify later in Wallet → Fairness · epoch {stage.epoch} · label {stage.label}</p>
+        </div>
       </div>
     </div>
   );

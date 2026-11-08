@@ -9,7 +9,7 @@
 ```bash
 pnpm install
 pnpm models        # COCO-SSD model for animal verification
-pnpm dev:server    # :8787
+pnpm dev:server    # :8797
 pnpm dev:web       # :5173 — open on desktop, or on a phone through an https tunnel
 ```
 

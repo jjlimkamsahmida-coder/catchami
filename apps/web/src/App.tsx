@@ -6,6 +6,7 @@ import { ActionBar, BottomNav, Joystick, PetCard, Toasts, TopBar } from "./ui/Hu
 import { Sheets } from "./ui/Sheets.tsx";
 import { PetsScreen } from "./ui/Pets.tsx";
 import { FairnessScreen, MarketScreen, RanksScreen, WalletScreen } from "./ui/Screens.tsx";
+import { AreaBanner, MapScreen, QuickButtons } from "./ui/WorldHud.tsx";
 
 const CatchScreen = lazy(() => import("./ui/Catch.tsx").then((m) => ({ default: m.CatchScreen })));
 const AdminPage = lazy(() => import("./ui/Admin.tsx").then((m) => ({ default: m.AdminPage })));
@@ -15,7 +16,7 @@ export function App() {
   const [booted, setBooted] = useState(false);
   useEffect(() => { void boot().finally(() => setBooted(true)); }, []);
   if (location.pathname.startsWith("/admin")) return <Suspense fallback={null}><AdminPage /></Suspense>;
-  if (!booted) return <div className="welcome"><div className="logo">Catchami</div></div>;
+  if (!booted) return <div className="title-screen"><img className="title-logo" src="/assets/gen/logo.png" alt="Catchami" /></div>;
   if (!token) return <Welcome />;
   return <Shell />;
 }
@@ -24,11 +25,11 @@ function Welcome() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   return (
-    <div className="welcome">
-      <div className="col" style={{ alignItems: "center" }}>
-        <div className="logo">Catchami</div>
-        <div className="tagline">Catch the Real. Play the World.</div>
-        <div className="panel box col" style={{ gap: 12 }}>
+    <div className="title-screen">
+      <img className="title-logo" src="/assets/gen/logo.png" alt="Catchami" />
+      <div className="col" style={{ alignItems: "center", width: "100%" }}>
+        <div className="panel title-box col" style={{ gap: 12 }}>
+          <p className="title-tag">Catch the Real. Play the World.</p>
           <p style={{ margin: 0, fontSize: 17 }}>Find real cats and dogs with your camera. Each one you catch becomes a sticker pet that gathers, trades and scuffles in a shared world — even while you're away.</p>
           <button className="btn leaf block" style={{ fontSize: 20, minHeight: 56 }} disabled={busy} onClick={async () => { setBusy(true); setErr(null); try { await startAsGuest(); } catch (e) { setErr((e as Error).message); setBusy(false); } }}>
             {busy ? "Setting up…" : "Start playing"}
@@ -62,7 +63,8 @@ function Shell() {
     <div className="shell">
       <div className="canvas-host" ref={host} />
       <div className="hud">
-        {screen === "world" && (<><TopBar /><PetCard /><Joystick /><ActionBar /><Sheets /></>)}
+        {(screen === "world" || screen === "map") && (<><TopBar /><PetCard /><AreaBanner /><QuickButtons /><Joystick /><ActionBar /><Sheets /></>)}
+        {screen === "map" && <MapScreen />}
         {screen === "pets" && <PetsScreen />}
         {screen === "market" && <MarketScreen />}
         {screen === "ranks" && <RanksScreen />}

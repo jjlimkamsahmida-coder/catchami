@@ -125,6 +125,7 @@ describe("gameplay economy loop", () => {
     expect((await db.tx((tx) => balanceOf(tx, acct.merchant(m.id)))).balance).toBe(ECONOMY.merchants.tripMaxBudget - sale.total);
 
     // Food is impossible until fish physically reaches HQ.
+    p2.s.hunger = 700;
     await expect(game.buy(p2, "food")).rejects.toMatchObject({ code: "sold_out" });
     m.state = "at_hq";
     await game.merchantAtHq(m, t);

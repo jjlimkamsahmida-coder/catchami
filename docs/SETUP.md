@@ -13,7 +13,7 @@ Requirements: Node ≥ 22.18, pnpm 10, Docker (contracts only).
 ```bash
 pnpm install
 pnpm models                 # downloads the COCO-SSD model (~18 MB) into apps/server/models
-pnpm dev:server             # http://localhost:8787 — dev network, embedded Postgres in ./data
+pnpm dev:server             # http://localhost:8797 — dev network, embedded Postgres in ./data
 pnpm dev:web                # http://localhost:5173 — proxies /api, /ws, /media, /models
 ```
 

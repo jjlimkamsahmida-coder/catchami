@@ -9,7 +9,7 @@
 import { readFile } from "node:fs/promises";
 import jpeg from "jpeg-js";
 
-const [token, file, tier = "basic", base = "http://127.0.0.1:8787"] = process.argv.slice(2);
+const [token, file, tier = "basic", base = "http://127.0.0.1:8797"] = process.argv.slice(2);
 if (!token || !file) { console.error("usage: dev-catch.ts <token> <photo.jpg> [basic|enhanced|premium] [api]"); process.exit(1); }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

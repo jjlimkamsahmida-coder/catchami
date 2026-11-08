@@ -1,11 +1,14 @@
 import Phaser from "phaser";
-import { decodeTiles, RARITY_LABEL, type BattleEvent, type Resource } from "@catchami/shared";
+import { areaAt, decodeTiles, generateWorld, PROP_SIZE, RARITY_LABEL, T, type BattleEvent, type Prop, type Resource, type WorldDef } from "@catchami/shared";
 import { entities, store, type PetEntity } from "../net/store.ts";
 import { send, serverNow } from "../net/api.ts";
 import * as art from "./art.ts";
+import { DECAL_KINDS, drawProp, paintChunk, windmillBlades } from "./world-art.ts";
+import { ALL_SPRITES, genUrl, loadTextures, MERCHANT_ART, MERCHANT_HEIGHT, NODE_WIDTH, PROP_ART } from "./assets.ts";
 
 const TILE = 32;
 const INTERP_DELAY = 140;
+const CHUNK_W = 24, CHUNK_H = 18;
 const RARITY_COLOR: Record<string, number> = { common: 0xffffff, uncommon: 0x7ee081, rare: 0x5ab8ff, epic: 0xc28bff, legendary: 0xffc24b, mythic: 0xff6fb5 };
 
 interface PetSprite { root: Phaser.GameObjects.Container; body: Phaser.GameObjects.Image; shadow: Phaser.GameObjects.Image; label: Phaser.GameObjects.Text; ring: Phaser.GameObjects.Graphics; tex: string; phase: number; hurtUntil: number; lungeUntil: number; lungeDir: number }
@@ -30,23 +33,20 @@ export class GameScene extends Phaser.Scene {
       for (const [key, file] of Object.entries(data ?? {})) { this.load.image(key, `/assets/${file}`); this.overrides.add(key); }
     });
     this.load.on("loaderror", () => {});
+    for (const key of ALL_SPRITES) this.load.image(key, genUrl(key));
   }
 
   create() {
     const tex = (key: string, c: HTMLCanvasElement) => { if (!this.textures.exists(key)) this.textures.addCanvas(key, c); };
     tex("shadow", art.shadow());
-    tex("tree", art.tree("tree"));
-    tex("pine", art.tree("pine"));
-    tex("bush", art.bush());
-    tex("boulder", art.boulder());
-    tex("hq", art.hqBuilding());
     tex("sparkle", art.sparkle());
+    tex("blades", windmillBlades());
     for (const r of ["fish", "herbs", "wood", "minerals"] as const) {
-      tex(`node-${r}`, art.resourceNode(r, false));
-      tex(`node-${r}-empty`, art.resourceNode(r, true));
+      if (!this.textures.exists(`node-${r}`)) tex(`node-${r}`, art.resourceNode(r, false));
+      if (!this.textures.exists(`node-${r}-empty`)) tex(`node-${r}-empty`, art.resourceNode(r, true));
       tex(`icon-${r}`, art.resourceIcon(r));
     }
-    this.cameras.main.setBackgroundColor(art.PALETTE.water);
+    this.cameras.main.setBackgroundColor("#4cb3e6");
     this.cameras.main.roundPixels = false;
     this.scale.on("resize", () => this.fitZoom());
     this.fitZoom();
@@ -64,10 +64,12 @@ export class GameScene extends Phaser.Scene {
     if (store.get().map) this.buildWorld();
     window.addEventListener("catchami:battle", this.onBattle as EventListener);
     window.addEventListener("catchami:joystick", this.onJoystick as EventListener);
+    window.addEventListener("catchami:focus", this.onFocus as EventListener);
     this.events.once("destroy", () => {
       this.unsub?.();
       window.removeEventListener("catchami:battle", this.onBattle as EventListener);
       window.removeEventListener("catchami:joystick", this.onJoystick as EventListener);
+      window.removeEventListener("catchami:focus", this.onFocus as EventListener);
     });
   }
 
@@ -76,48 +78,106 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.setZoom(Phaser.Math.Clamp(Math.min(width, height) / 520, 0.85, 1.7));
   }
 
+  private world: WorldDef | null = null;
+  private decals: Prop[] = [];
+  private chunks = new Map<string, Phaser.GameObjects.Image>();
+  private chunkQueue: string[] = [];
+  private lastArea = "";
+  private groundTex: Awaited<ReturnType<typeof loadTextures>> = {};
+
   private buildWorld() {
     const s = store.get();
     if (!s.map) return;
     this.built = true;
-    const tiles = decodeTiles(s.map.tiles);
-    const W = s.map.w * TILE, H = s.map.h * TILE;
-    if (!this.overrides.has("map")) this.textures.addCanvas("map", art.paintMap(s.map.w, s.map.h, tiles, TILE));
-    this.add.image(0, 0, "map").setOrigin(0).setDepth(-1000);
-    this.cameras.main.setBounds(-200, -200, W + 400, H + 400);
+    // Props, areas and decals come from the same deterministic world definition the server uses.
+    const world = generateWorld();
+    world.tiles = decodeTiles(s.map.tiles); // server tiles are authoritative
+    this.world = world;
+    void loadTextures().then((t) => {
+      this.groundTex = t;
+      if (Object.keys(t).length) { for (const [k, img] of this.chunks) { img.destroy(); this.textures.remove(`chunk:${k}`); } this.chunks.clear(); }
+    });
+    this.decals = world.props.filter((p) => DECAL_KINDS.has(p.kind) && !(PROP_ART[p.kind] && this.textures.exists(PROP_ART[p.kind]!.keys[0]!)));
+    const W = world.w * TILE, H = world.h * TILE;
+    this.cameras.main.setBounds(-160, -160, W + 320, H + 320);
 
-    // Animated water sparkles.
+    // Animated water glints (capped for phones).
     const rng = new Phaser.Math.RandomDataGenerator(["catchami"]);
-    for (let i = 0; i < tiles.length; i++) {
-      if (tiles[i] !== 6 || rng.frac() > 0.12) continue;
-      const x = (i % s.map.w) * TILE + 16, y = Math.floor(i / s.map.w) * TILE + 16;
+    let glints = 0;
+    for (let i = 0; i < world.tiles.length && glints < 420; i++) {
+      if (world.tiles[i] !== T.water || rng.frac() > 0.1) continue;
+      glints++;
+      const x = (i % world.w) * TILE + 16, y = Math.floor(i / world.w) * TILE + 16;
       const sp = this.add.image(x, y, "sparkle").setAlpha(0).setDepth(-900);
       this.tweens.add({ targets: sp, alpha: { from: 0, to: 0.8 }, x: x + 6, duration: 1400 + rng.between(0, 900), yoyo: true, repeat: -1, delay: rng.between(0, 4000), ease: "Sine.easeInOut" });
     }
 
-    // Props come from the same deterministic world definition as the server.
-    import("@catchami/shared").then(({ generateWorld }) => {
-      const world = generateWorld();
-      for (const p of world.props) {
-        if (p.kind === "flower") continue;
-        const img = this.add.image(p.tx * TILE + 16, p.ty * TILE + 28, p.kind).setOrigin(0.5, 1);
-        img.setDepth(img.y);
-        if (p.kind === "tree" || p.kind === "pine") this.tweens.add({ targets: img, angle: { from: -1.2, to: 1.2 }, duration: 2400 + (p.tx * 37) % 900, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+    for (const p of world.props) {
+      const genArt = PROP_ART[p.kind];
+      const genKey = genArt ? genArt.keys[p.v % genArt.keys.length]! : null;
+      const useGen = !!genKey && this.textures.exists(genKey);
+      if (DECAL_KINDS.has(p.kind) && !useGen) continue;
+      const size = PROP_SIZE[p.kind];
+      let key = `proc-${p.kind}-${p.v % 4}`;
+      if (useGen) key = genKey!;
+      else if (!this.textures.exists(key)) this.textures.addCanvas(key, drawProp(p.kind, p.v % 4));
+      const x = (p.tx + size.w / 2) * TILE, y = (p.ty + size.h) * TILE;
+      const img = this.add.image(x, y, key).setOrigin(0.5, 1);
+      if (useGen) { const src = this.textures.get(key).getSourceImage(); img.setScale(genArt!.width / src.width); img.y += 6; }
+      img.setDepth(y - 4);
+      if (p.kind === "tree" || p.kind === "pine") this.tweens.add({ targets: img, angle: { from: -1.2, to: 1.2 }, duration: 2400 + (p.tx * 37) % 900, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      if (p.kind === "windmill" && !useGen) {
+        const bl = this.add.image(x, y - 120, "blades").setDepth(y - 3);
+        this.tweens.add({ targets: bl, angle: 360, duration: 9000, repeat: -1 });
       }
-      const hqImg = this.add.image(world.hq.tx * TILE + 16, (world.hq.ty) * TILE + 8, "hq").setOrigin(0.5, 1);
-      hqImg.setDepth(hqImg.y);
-    });
+      if (p.kind === "portal" || p.kind === "glowcrystal" || p.kind === "lamp") this.tweens.add({ targets: img, alpha: { from: 1, to: 0.8 }, duration: 1300 + (p.tx % 5) * 200, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      if (p.kind === "banner") this.tweens.add({ targets: img, scaleX: { from: 1, to: 0.92 }, duration: 900, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+    }
 
     for (const n of s.nodesDef) {
       const x = n.tx * TILE + 16, y = n.ty * TILE + 30;
-      const img = this.add.image(x, y, `node-${n.resource}`).setOrigin(0.5, 1).setDepth(y).setInteractive({ useHandCursor: true });
+      const img = this.add.image(x, y + 4, `node-${n.resource}`).setOrigin(0.5, 1).setDepth(y).setInteractive({ useHandCursor: true });
+      this.fitNode(img);
       img.on("pointerup", () => store.set({ sheet: { kind: "node", id: n.id } }));
       const badge = this.add.text(x, y - 58, "", { fontFamily: "Fredoka", fontSize: "13px", color: "#2b1d3a", backgroundColor: "#fff6e5", padding: { x: 5, y: 1 } }).setOrigin(0.5).setDepth(9000).setAlpha(0);
       this.nodes.set(n.id, { img, badge, res: n.resource, depleted: false });
     }
     const hq = s.hq!;
-    this.cameras.main.centerOn(hq.tx * TILE, (hq.ty + 2) * TILE);
+    this.cameras.main.centerOn(hq.tx * TILE, (hq.ty + 4) * TILE);
+    window.dispatchEvent(new CustomEvent("catchami:world", { detail: world }));
   }
+
+  /** Paint map chunks around the camera; drop far ones. One new chunk per frame keeps frames smooth. */
+  private streamChunks() {
+    if (!this.world) return;
+    const v = this.cameras.main.worldView;
+    const CW = CHUNK_W * TILE, CH = CHUNK_H * TILE;
+    const cx0 = Math.max(0, Math.floor((v.x - CW / 2) / CW)), cx1 = Math.min(Math.ceil(this.world.w / CHUNK_W) - 1, Math.floor((v.right + CW / 2) / CW));
+    const cy0 = Math.max(0, Math.floor((v.y - CH / 2) / CH)), cy1 = Math.min(Math.ceil(this.world.h / CHUNK_H) - 1, Math.floor((v.bottom + CH / 2) / CH));
+    const want = new Set<string>();
+    for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) want.add(`${cx},${cy}`);
+    for (const [k, img] of this.chunks) if (!want.has(k)) {
+      const [cx, cy] = k.split(",").map(Number);
+      const far = cx! < cx0 - 1 || cx! > cx1 + 1 || cy! < cy0 - 1 || cy! > cy1 + 1;
+      if (far) { img.destroy(); this.textures.remove(`chunk:${k}`); this.chunks.delete(k); }
+    }
+    const missing = [...want].filter((k) => !this.chunks.has(k));
+    const k = missing[0];
+    if (!k) return;
+    const [cx, cy] = k.split(",").map(Number);
+    const canvas = paintChunk(this.world, cx! * CHUNK_W, cy! * CHUNK_H, Math.min(CHUNK_W, this.world.w - cx! * CHUNK_W), Math.min(CHUNK_H, this.world.h - cy! * CHUNK_H), this.decals, this.groundTex);
+    this.textures.addCanvas(`chunk:${k}`, canvas);
+    this.chunks.set(k, this.add.image(cx! * CW, cy! * CH, `chunk:${k}`).setOrigin(0).setDepth(-1000));
+  }
+
+  private fitNode(img: Phaser.GameObjects.Image) {
+    const src = this.textures.get(img.texture.key).getSourceImage();
+    img.setScale(src.width > 120 ? NODE_WIDTH / src.width : 1);
+  }
+
+  private onFocus = (e: CustomEvent<{ x: number; y: number }>) => {
+    this.cameras.main.pan(e.detail.x, e.detail.y, 600, "Sine.easeInOut");
+  };
 
   private tapMarker(x: number, y: number) {
     const g = this.add.graphics({ x, y }).setDepth(5);
@@ -177,6 +237,7 @@ export class GameScene extends Phaser.Scene {
 
   update(time: number) {
     if (!this.built) return;
+    this.streamChunks();
     this.pollKeys();
     const now = serverNow() - INTERP_DELAY;
     const s = store.get();
@@ -189,6 +250,10 @@ export class GameScene extends Phaser.Scene {
       ps.root.setPosition(x, y).setDepth(y);
       this.animate(ps, e, time);
       if (e.id === s.controlled) {
+        if (this.world) {
+          const a = areaAt(this.world, x, y);
+          if (a.id !== this.lastArea) { this.lastArea = a.id; window.dispatchEvent(new CustomEvent("catchami:area", { detail: a })); }
+        }
         const cam = this.cameras.main;
         cam.scrollX += (x - cam.midPoint.x) * 0.12;
         cam.scrollY += (y - cam.midPoint.y) * 0.12;
@@ -200,11 +265,13 @@ export class GameScene extends Phaser.Scene {
     for (const m of s.merchants) {
       let c = this.merchants.get(m.id);
       if (!c) {
-        const key = `merchant-${m.hue}`;
-        if (!this.textures.exists(key)) this.textures.addCanvas(key, art.merchant(m.hue));
+        let key = MERCHANT_ART[m.id] ?? "";
+        if (!this.textures.exists(key)) { key = `merchant-${m.hue}`; if (!this.textures.exists(key)) this.textures.addCanvas(key, art.merchant(m.hue)); }
         const glow = this.add.graphics();
-        const img = this.add.image(0, 0, key).setOrigin(0.5, 0.92);
-        const label = this.add.text(0, -70, m.name, { fontFamily: "Fredoka", fontSize: "12px", color: "#2b1d3a", backgroundColor: "#ffd166", padding: { x: 6, y: 2 } }).setOrigin(0.5);
+        const img = this.add.image(0, 0, key).setOrigin(0.5, 0.95);
+        const src = this.textures.get(key).getSourceImage();
+        if (src.height > 120) img.setScale(MERCHANT_HEIGHT / src.height);
+        const label = this.add.text(0, -MERCHANT_HEIGHT - 10, m.name, { fontFamily: "Fredoka", fontSize: "12px", color: "#2b1d3a", backgroundColor: "#ffd166", padding: { x: 6, y: 2 } }).setOrigin(0.5);
         c = this.add.container(m.x, m.y, [glow, img, label]);
         c.setSize(56, 64).setInteractive(new Phaser.Geom.Rectangle(-28, -62, 56, 66), Phaser.Geom.Rectangle.Contains);
         c.on("pointerup", () => store.set({ sheet: { kind: "merchant", id: m.id } }));
@@ -226,7 +293,7 @@ export class GameScene extends Phaser.Scene {
       const rem = s.nodes[id];
       if (rem === undefined) continue;
       const dep = rem <= 0;
-      if (dep !== n.depleted) { n.depleted = dep; n.img.setTexture(`node-${n.res}${dep ? "-empty" : ""}`); }
+      if (dep !== n.depleted) { n.depleted = dep; n.img.setTexture(`node-${n.res}${dep ? "-empty" : ""}`); this.fitNode(n.img); }
       const near = cpos && Math.hypot(cpos[0] - n.img.x, cpos[1] - n.img.y) < 160;
       n.badge.setText(dep ? "regrowing" : `${rem} left`).setAlpha(near ? 1 : 0);
     }
@@ -327,6 +394,7 @@ export function createGame(parent: HTMLElement) {
     render: { antialias: true, pixelArt: false, powerPreference: "high-performance" },
     fps: { target: 60 },
     input: { activePointers: 2 },
+    loader: { maxParallelDownloads: 96 },
     scene: [GameScene],
   });
   if (import.meta.env.DEV) (window as unknown as { __catchami: Phaser.Game }).__catchami = game; // debugging hook, dev builds only

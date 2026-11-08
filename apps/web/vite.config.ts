@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-const api = process.env.CATCHAMI_API ?? "http://127.0.0.1:8787";
+const api = process.env.CATCHAMI_API ?? "http://127.0.0.1:8797";
 
 // Local HTTPS (needed for phone cameras on the LAN): create with
 //   mkcert -cert-file data/certs/dev.pem -key-file data/certs/dev-key.pem localhost 127.0.0.1 <your-lan-ip>

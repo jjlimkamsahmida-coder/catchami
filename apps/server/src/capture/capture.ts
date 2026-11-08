@@ -84,14 +84,16 @@ export async function validateCapture(db: Db, detector: Detector | null, userId:
   }
 
   // Keep only the animal crop as a sticker, temporarily, until the attempt resolves.
-  const sticker = renderSticker(frame, det.bbox);
+  // Body cutout (DeepLab) with white die-cut outline; rounded photo sticker if segmentation fails.
+  const cut = detector.cutout ? await detector.cutout(frame, species, det.bbox).catch(() => null) : null;
+  const sticker = cut ?? renderSticker(frame, det.bbox);
   await mkdir(join(env.mediaDir, "pending"), { recursive: true });
   await writeFile(join(env.mediaDir, "pending", `${id}.png`), sticker);
   await db.query(
     `INSERT INTO catch_attempts (id, user_id, status, species, detection, image_hash) VALUES ($1,$2,'valid',$3,$4,$5)`,
-    [id, userId, species, JSON.stringify({ score: det.score, bbox: det.bbox, people: Math.max(...results.map((r) => r.people)), diffs }), hash],
+    [id, userId, species, JSON.stringify({ cutout: !!cut, score: det.score, bbox: det.bbox, people: Math.max(...results.map((r) => r.people)), diffs }), hash],
   );
-  return { ok: true as const, attemptId: id, species, score: det.score, expiresAt: Date.now() + VALID_FOR_MS, quotes: quotes() };
+  return { ok: true as const, attemptId: id, species, score: det.score, sticker: `data:image/png;base64,${sticker.toString("base64")}`, expiresAt: Date.now() + VALID_FOR_MS, quotes: quotes() };
 }
 
 export async function resolveAttempt(db: Db, game: Game, userId: string, attemptId: string, tier: CatchTier, clientNonce: string) {

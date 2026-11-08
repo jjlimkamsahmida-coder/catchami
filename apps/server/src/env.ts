@@ -28,7 +28,7 @@ if (!sessionSecret || sessionSecret.length < 32) throw new Error("SESSION_SECRET
 
 export const env = {
   network,
-  port: Number(req("PORT", "8787")),
+  port: Number(req("PORT", "8797")),
   databaseUrl: process.env.DATABASE_URL,
   dataDir: resolve(req("DATA_DIR", "./data")),
   mediaDir: resolve(req("MEDIA_DIR", "./data/media")),

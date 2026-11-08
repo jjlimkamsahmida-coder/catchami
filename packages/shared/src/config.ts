@@ -129,7 +129,7 @@ export const ECONOMY = {
     inventoryCapacity: 400,
     tripMinBudget: tokens(20_000_000),
     tripMaxBudget: tokens(2_000_000_000),
-    speedPxPerSec: 34,
+    speedPxPerSec: 52,
     interactRangePx: 72,
     restAtHqMs: 25_000,
     /** Return to HQ when cash below this share of trip budget. */
