@@ -67,7 +67,7 @@ export function connect() {
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return; // one connection per tab
   const proto = location.protocol === "https:" ? "wss" : "ws";
   ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`);
-  ws.onopen = () => { retry = 0; store.set({ connected: true }); send({ t: "ping", at: Date.now() }); };
+  ws.onopen = () => { retry = 0; store.set({ connected: true }); send({ t: "ping", at: Date.now() }); send({ t: "br_sync" }); };
   ws.onclose = () => {
     store.set({ connected: false });
     const delay = Math.min(10_000, 500 * 2 ** retry++);
@@ -133,6 +133,26 @@ function onMessage(m: ServerMsg) {
     case "error":
       toast("bad", m.message);
       break;
+    case "mg_round":
+      store.set({ minigame: { round: m.round, receivedAt: performance.now() } });
+      break;
+    case "mg_result":
+      store.set((s) => ({ minigame: s.minigame?.round.id === m.roundId ? null : s.minigame, mgResult: { roundId: m.roundId, grade: m.grade, gained: m.gained, resource: m.resource, detail: m.detail, note: m.note, at: performance.now() } }));
+      window.dispatchEvent(new CustomEvent("catchami:gathered", { detail: m }));
+      break;
+    case "mg_end":
+      store.set({ minigame: null });
+      toast("info", m.reason);
+      break;
+    case "br_invite":
+      store.set({ bubbleInvite: { matchId: m.matchId, fromName: m.from.name, ownerName: m.from.ownerName, sticker: m.from.sticker, species: m.from.species, look: m.from.look, toPetId: m.toPetId, expiresAt: m.expiresAt } });
+      break;
+    case "br_state":
+      store.set((s) => ({
+        bubble: m.match,
+        bubbleInvite: s.bubbleInvite?.matchId === m.match.id && m.match.state !== "invited" ? null : s.bubbleInvite,
+      }));
+      break;
     case "pong":
       clockOffset = m.serverTime - (m.at + Date.now()) / 2;
       break;
@@ -141,5 +161,8 @@ function onMessage(m: ServerMsg) {
 
 export function signOut() {
   try { localStorage.removeItem(TOKEN_KEY); } catch {}
-  location.reload();
+  location.assign("/");
 }
+
+// Debugging hook, dev builds only.
+if (import.meta.env.DEV) (window as unknown as { __catchamiDev: unknown }).__catchamiDev = { store, send };

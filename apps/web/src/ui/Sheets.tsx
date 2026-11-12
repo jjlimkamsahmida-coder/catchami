@@ -86,9 +86,13 @@ function PetSheet({ id }: { id: string }) {
           <button className="btn block" onClick={() => { send({ t: "select", petId: id }); store.set({ controlled: id, sheet: null }); }}>{controlled?.id === id ? "You're controlling this pet" : "Control this pet"}</button>
         ) : (
           <>
-            <button className="btn coral block" disabled={!controlled || dist > ECONOMY.battle.challengeRangePx} onClick={() => { send({ t: "challenge", petId: controlled!.id, targetId: id }); close(); }}>
-              {!controlled ? "Catch a pet first" : dist > ECONOMY.battle.challengeRangePx ? "Get closer to challenge" : `Challenge with ${controlled.name}`}
+            <button className="btn coral block" disabled={!controlled || dist > ECONOMY.battle.challengeRangePx} onClick={() => { send({ t: "br_challenge", petId: controlled!.id, targetId: id }); close(); }}>
+              {!controlled ? "Catch a pet first" : dist > ECONOMY.battle.challengeRangePx ? "Get closer to challenge" : `Bubble Roulette with ${controlled.name}`}
             </button>
+            <button className="btn paper block sm" disabled={!controlled || dist > ECONOMY.battle.challengeRangePx} onClick={() => { send({ t: "challenge", petId: controlled!.id, targetId: id }); close(); }}>
+              Quick scuffle (auto battle)
+            </button>
+            <p className="small muted" style={{ margin: 0 }}>Bubble Roulette is a live turn-based match — the other owner must be online and accept. HP is the score; a splash costs 20.</p>
             <p className="small muted" style={{ margin: 0 }}>
               Battles here are <b>non-redeemable</b>: no tokens are at stake. HP damage persists, and the winner can take up to 15% of the loser's carried resources. The other owner's battle settings decide whether they accept.
             </p>

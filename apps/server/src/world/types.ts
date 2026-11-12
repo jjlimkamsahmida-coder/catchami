@@ -25,7 +25,7 @@ export interface PetState {
 }
 
 export type Task =
-  | { kind: "gather"; nodeId: string; endsAt: number | null; repeat: boolean }
+  | { kind: "gather"; nodeId: string; endsAt: number | null; repeat: boolean; minigame?: boolean }
   | { kind: "rest" }
   | { kind: "sell"; merchantId: string }
   | null;
@@ -61,6 +61,12 @@ export interface PetRt {
   activity: string;
   dirty: boolean;
   metaDirty: boolean;
+  /** Open minigame round (server copy — the only one that counts). */
+  round: { id: string; params: import("@catchami/shared").RoundParams; nodeId: string; sentAt: number } | null;
+  nextRoundAt: number;
+  missedRounds: number;
+  /** Bubble Roulette match this pet is locked into. */
+  matchId: string | null;
 }
 
 export interface MerchantRt {

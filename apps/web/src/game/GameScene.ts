@@ -54,6 +54,9 @@ export class GameScene extends Phaser.Scene {
     if (this.input.keyboard) {
       this.keys = this.input.keyboard.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT") as Record<string, Phaser.Input.Keyboard.Key>;
     }
+    this.input.on("wheel", (_p: Phaser.Input.Pointer, _o: unknown, _dx: number, dy: number) => {
+      this.onZoom(new CustomEvent("z", { detail: { factor: dy > 0 ? 0.9 : 1.1 } }));
+    });
     this.input.on("pointerup", (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
       if (over.length || p.getDistance() > 12) return;
       const wp = this.cameras.main.getWorldPoint(p.x, p.y);
@@ -65,7 +68,11 @@ export class GameScene extends Phaser.Scene {
     window.addEventListener("catchami:battle", this.onBattle as EventListener);
     window.addEventListener("catchami:joystick", this.onJoystick as EventListener);
     window.addEventListener("catchami:focus", this.onFocus as EventListener);
+    window.addEventListener("catchami:zoom", this.onZoom as EventListener);
+    window.addEventListener("catchami:gathered", this.onGathered as EventListener);
     this.events.once("destroy", () => {
+      window.removeEventListener("catchami:zoom", this.onZoom as EventListener);
+      window.removeEventListener("catchami:gathered", this.onGathered as EventListener);
       this.unsub?.();
       window.removeEventListener("catchami:battle", this.onBattle as EventListener);
       window.removeEventListener("catchami:joystick", this.onJoystick as EventListener);
@@ -73,15 +80,22 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  /** User zoom multiplier (mouse wheel / +/- keys), applied on top of the screen-fit zoom. */
+  private userZoom = 1;
   private fitZoom() {
     const { width, height } = this.scale;
-    this.cameras.main.setZoom(Phaser.Math.Clamp(Math.min(width, height) / 520, 0.85, 1.7));
+    const base = Phaser.Math.Clamp(Math.min(width, height) / 520, 0.85, 1.7);
+    this.cameras.main.setZoom(Phaser.Math.Clamp(base * this.userZoom, 0.5, 2.4));
   }
+  private onZoom = (e: CustomEvent<{ factor: number }>) => {
+    this.userZoom = Phaser.Math.Clamp(this.userZoom * e.detail.factor, 0.55, 1.8);
+    this.fitZoom();
+  };
 
   private world: WorldDef | null = null;
   private decals: Prop[] = [];
   private chunks = new Map<string, Phaser.GameObjects.Image>();
-  private chunkQueue: string[] = [];
+  private chunkSeq = 0;
   private lastArea = "";
   private groundTex: Awaited<ReturnType<typeof loadTextures>> = {};
 
@@ -95,7 +109,7 @@ export class GameScene extends Phaser.Scene {
     this.world = world;
     void loadTextures().then((t) => {
       this.groundTex = t;
-      if (Object.keys(t).length) { for (const [k, img] of this.chunks) { img.destroy(); this.textures.remove(`chunk:${k}`); } this.chunks.clear(); }
+      if (Object.keys(t).length) { for (const img of this.chunks.values()) { const key = img.texture.key; img.destroy(); this.textures.remove(key); } this.chunks.clear(); }
     });
     this.decals = world.props.filter((p) => DECAL_KINDS.has(p.kind) && !(PROP_ART[p.kind] && this.textures.exists(PROP_ART[p.kind]!.keys[0]!)));
     const W = world.w * TILE, H = world.h * TILE;
@@ -159,21 +173,45 @@ export class GameScene extends Phaser.Scene {
     for (const [k, img] of this.chunks) if (!want.has(k)) {
       const [cx, cy] = k.split(",").map(Number);
       const far = cx! < cx0 - 1 || cx! > cx1 + 1 || cy! < cy0 - 1 || cy! > cy1 + 1;
-      if (far) { img.destroy(); this.textures.remove(`chunk:${k}`); this.chunks.delete(k); }
+      if (far) { const key = img.texture.key; img.destroy(); this.textures.remove(key); this.chunks.delete(k); }
     }
     const missing = [...want].filter((k) => !this.chunks.has(k));
-    const k = missing[0];
-    if (!k) return;
+    for (const k of missing.slice(0, 3)) this.paintChunkKey(k);
+  }
+
+  private paintChunkKey(k: string) {
+    if (!this.world) return;
+    const CW = CHUNK_W * TILE, CH = CHUNK_H * TILE;
     const [cx, cy] = k.split(",").map(Number);
     const canvas = paintChunk(this.world, cx! * CHUNK_W, cy! * CHUNK_H, Math.min(CHUNK_W, this.world.w - cx! * CHUNK_W), Math.min(CHUNK_H, this.world.h - cy! * CHUNK_H), this.decals, this.groundTex);
-    this.textures.addCanvas(`chunk:${k}`, canvas);
-    this.chunks.set(k, this.add.image(cx! * CW, cy! * CH, `chunk:${k}`).setOrigin(0).setDepth(-1000));
+    const key = `chunk:${k}:${++this.chunkSeq}`;
+    this.textures.addCanvas(key, canvas);
+    this.chunks.set(k, this.add.image(cx! * CW, cy! * CH, key).setOrigin(0).setDepth(-1000));
   }
 
   private fitNode(img: Phaser.GameObjects.Image) {
     const src = this.textures.get(img.texture.key).getSourceImage();
     img.setScale(src.width > 120 ? NODE_WIDTH / src.width : 1);
   }
+
+  /** Minigame feedback in the world: the spot shakes, a few chips fly, the reward floats up. */
+  private onGathered = (e: CustomEvent<{ nodeId: string; resource: Resource; grade: string; gained: number }>) => {
+    const n = this.nodes.get(e.detail.nodeId);
+    if (!n) return;
+    const img = n.img;
+    const x0 = img.x;
+    this.tweens.add({ targets: img, x: { from: x0 - 4, to: x0 + 4 }, duration: 50, yoyo: true, repeat: 3, onComplete: () => { img.x = x0; } });
+    const chip = { wood: 0xc88a55, minerals: 0x9d8ca2, fish: 0x8fdcf2, herbs: 0x6a4a2a }[e.detail.resource];
+    const count = e.detail.grade === "perfect" ? 6 : e.detail.grade === "good" ? 4 : 2;
+    for (let i = 0; i < count; i++) {
+      const c = this.add.circle(img.x, img.y - 24, 3 + Math.random() * 2, chip).setDepth(img.depth + 1).setStrokeStyle(1.5, 0x2b1d3a);
+      this.tweens.add({ targets: c, x: c.x + (Math.random() - 0.5) * 60, y: c.y - 20 - Math.random() * 26, alpha: 0, duration: 520, ease: "Quad.easeOut", onComplete: () => c.destroy() });
+    }
+    if (e.detail.gained > 0) {
+      const ic = this.add.image(img.x, img.y - 40, `icon-${e.detail.resource}`).setDepth(10001).setScale(0.9);
+      this.tweens.add({ targets: ic, y: ic.y - 40, alpha: 0, duration: 900, ease: "Cubic.easeOut", onComplete: () => ic.destroy() });
+    }
+  };
 
   private onFocus = (e: CustomEvent<{ x: number; y: number }>) => {
     this.cameras.main.pan(e.detail.x, e.detail.y, 600, "Sine.easeInOut");
@@ -185,9 +223,17 @@ export class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: g, scale: 1.6, alpha: 0, duration: 450, onComplete: () => g.destroy() });
   }
 
+  private pan(dx: number, dy: number) {
+    if (!dx && !dy) return;
+    const cam = this.cameras.main;
+    cam.scrollX += (dx * 14) / cam.zoom;
+    cam.scrollY += (dy * 14) / cam.zoom;
+  }
+
   private onJoystick = (e: CustomEvent<{ dx: number; dy: number }>) => {
     const now = performance.now();
     const { dx, dy } = e.detail;
+    if (!store.get().controlled) { this.pan(dx, dy); return; }
     if (Math.hypot(dx, dy) < 0.1) { if (this.moving) { send({ t: "move", dx: 0, dy: 0 }); this.moving = false; } return; }
     if (now - this.lastMove > 90) { send({ t: "move", dx, dy }); this.lastMove = now; this.moving = true; }
   };
@@ -250,11 +296,12 @@ export class GameScene extends Phaser.Scene {
       ps.root.setPosition(x, y).setDepth(y);
       this.animate(ps, e, time);
       if (e.id === s.controlled) {
+        const cam = this.cameras.main;
+        window.__petAnchor = { x: (x - cam.worldView.x) * cam.zoom, y: (y - cam.worldView.y) * cam.zoom };
         if (this.world) {
           const a = areaAt(this.world, x, y);
           if (a.id !== this.lastArea) { this.lastArea = a.id; window.dispatchEvent(new CustomEvent("catchami:area", { detail: a })); }
         }
-        const cam = this.cameras.main;
         cam.scrollX += (x - cam.midPoint.x) * 0.12;
         cam.scrollY += (y - cam.midPoint.y) * 0.12;
       }
@@ -304,6 +351,7 @@ export class GameScene extends Phaser.Scene {
     const k = this.keys;
     const dx = (k.D!.isDown || k.RIGHT!.isDown ? 1 : 0) - (k.A!.isDown || k.LEFT!.isDown ? 1 : 0);
     const dy = (k.S!.isDown || k.DOWN!.isDown ? 1 : 0) - (k.W!.isDown || k.UP!.isDown ? 1 : 0);
+    if (!store.get().controlled) { this.pan(dx, dy); return; }
     if (dx || dy || this.moving) this.onJoystick(new CustomEvent("k", { detail: { dx, dy } }));
   }
 
@@ -390,7 +438,7 @@ export function createGame(parent: HTMLElement) {
     type: Phaser.AUTO,
     parent,
     backgroundColor: art.PALETTE.water,
-    scale: { mode: Phaser.Scale.RESIZE, width: parent.clientWidth, height: parent.clientHeight },
+    scale: { mode: Phaser.Scale.RESIZE, width: Math.max(320, parent.clientWidth || window.innerWidth), height: Math.max(320, parent.clientHeight || window.innerHeight) },
     render: { antialias: true, pixelArt: false, powerPreference: "high-performance" },
     fps: { target: 60 },
     input: { activePointers: 2 },

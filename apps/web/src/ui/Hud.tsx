@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { ECONOMY, inventoryWeight, RESOURCES, type OwnPet } from "@catchami/shared";
 import { controlledPet, entities, store, useStore } from "../net/store.ts";
-import { send, rid } from "../net/api.ts";
+import { api, refreshWallet, send, rid } from "../net/api.ts";
+import { toast } from "../net/store.ts";
 import { fmt, Icon, PetArt, ResIcon } from "./common.tsx";
 import { MiniMap } from "./WorldHud.tsx";
 import { genUrl } from "../game/assets.ts";
@@ -126,7 +127,7 @@ export function ActionBar() {
       <svg viewBox="0 0 48 48"><circle cx="24" cy="25" r="17" fill="#ffd166" stroke="#2b1d3a" strokeWidth="3.5" /><path d="M7 25h34" stroke="#2b1d3a" strokeWidth="3.5" /><circle cx="24" cy="25" r="5.5" fill="#fff6e5" stroke="#2b1d3a" strokeWidth="3.5" /><path d="M24 8c4-5 9-5 12-2-3 4-8 4-12 2Z" fill="#6cc04a" stroke="#2b1d3a" strokeWidth="2.5" /></svg>
     </button>
   );
-  if (!p) return <div className="actions">{!own.length && <div className="panel small" style={{ padding: "8px 12px", maxWidth: 200 }}>Catch a real cat or dog to get your first pet.</div>}{catchBtn}</div>;
+  if (!p) return <><div className="actions">{catchBtn}</div>{!own.length && <FirstPetGuide />}</>;
 
   const e = entities.get(p.id);
   const pos = e?.samples.at(-1);
@@ -146,6 +147,33 @@ export function ActionBar() {
   if (ko && !koReady && p.koUntil) btns.push(<div key="ko" className="panel small" style={{ padding: "6px 10px" }}>Recovering · {Math.ceil((p.koUntil - Date.now()) / 60000)} min</div>);
   if (!ko && p.energy < p.stats.maxEnergy * 0.5 && p.status !== "sleeping") btns.push(<button key="rest" className="btn paper" onClick={() => send({ t: "rest", petId: p.id })}>Nap</button>);
   return <div className="actions">{btns.slice(0, 3)}{catchBtn}</div>;
+}
+
+/** Shown until the player owns a pet: movement and play need one. */
+function FirstPetGuide() {
+  const wallet = useStore((s) => s.wallet);
+  const network = useStore((s) => s.network);
+  const [busy, setBusy] = useState(false);
+  const hasTokens = wallet ? BigInt(wallet.available) >= ECONOMY.catch.tiers.basic.cost : false;
+  const getTokens = async () => {
+    setBusy(true);
+    try { await api("/api/dev/faucet", {}); await refreshWallet(); toast("good", "Added 20M test units (no real value)"); }
+    catch (e) { toast("bad", (e as Error).message); } finally { setBusy(false); }
+  };
+  return (
+    <div className="panel firstpet">
+      <img src={genUrl("cube-excited")} alt="" />
+      <div className="col" style={{ gap: 8 }}>
+        <h3>Get your first pet</h3>
+        <p className="small" style={{ margin: 0 }}>You don't have a pet yet, so there's nothing to move. Catch a real cat or dog and it becomes your sticker pet in this world. Until then, WASD/arrows look around.</p>
+        <div className="row" style={{ flexWrap: "wrap" }}>
+          {network === "dev" && <button className="btn sm" disabled={busy || hasTokens} onClick={getTokens}>{hasTokens ? "✓ Test tokens ready" : "1. Get free test tokens"}</button>}
+          <button className="btn coral sm" onClick={() => store.set({ screen: "catch" })}>{network === "dev" ? "2. " : ""}Catch an animal</button>
+        </div>
+        {network === "dev" && <p className="small muted" style={{ margin: 0 }}>No camera? The catch screen has "Use a photo instead".</p>}
+      </div>
+    </div>
+  );
 }
 
 export function BottomNav() {

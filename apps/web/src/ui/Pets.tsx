@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import {
   ECONOMY, EQUIPMENT, EQUIPMENT_KINDS, RESOURCES, STAT_KEYS, TRAITS, formatTokens, parseTokens,
   type OwnPet, type Strategy, type EquipmentKind,
@@ -80,7 +80,7 @@ function StatusTab({ p }: { p: OwnPet }) {
         <h3 style={{ marginBottom: 6 }}>Attributes <span className="small muted">(only you can see these)</span></h3>
         <dl className="kv">
           {STAT_KEYS.map((k) => (
-            <><dt key={k + "l"}>{label[k]}</dt><dd key={k} className="num">{p.stats[k]}{p.stats[k] !== p.baseStats[k] && <span className="small muted"> (base {p.baseStats[k]})</span>}</dd></>
+            <Fragment key={k}><dt>{label[k]}</dt><dd className="num">{p.stats[k]}{p.stats[k] !== p.baseStats[k] && <span className="small muted"> (base {p.baseStats[k]})</span>}</dd></Fragment>
           ))}
         </dl>
         <div className="row" style={{ marginTop: 8, flexWrap: "wrap" }}>

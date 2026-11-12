@@ -17,6 +17,9 @@ import { consumeHqStock, dayKey, feePostings, grantMerchant, hqStock } from "../
 import { currentEpoch } from "../fairness.ts";
 import { newId } from "../auth.ts";
 import { decide } from "./ai.ts";
+import { BubbleArena } from "./bubble.ts";
+import { epochIdAt, type Epoch } from "../fairness.ts";
+import { gradeRound, makeRound, MINIGAMES } from "@catchami/shared";
 import { freshPetState, MERCHANT_DEFS, recomputeStats, type MerchantRt, type NodeRt, type PetRt, type PetState } from "./types.ts";
 
 export interface GameClient {
@@ -56,6 +59,14 @@ export class Game {
   private lastDemand = 0;
   private lastSlow = 0;
   now = () => Date.now();
+  arena = new BubbleArena(this);
+  private epoch: Epoch | null = null;
+  /** Fair-RNG epoch for synchronous rolls (refreshed in the background each hour). */
+  epochNow(): Epoch | null {
+    const now = this.now();
+    if (!this.epoch || this.epoch.id !== epochIdAt(now)) void currentEpoch(this.db, now).then((e) => { this.epoch = e; }).catch(() => {});
+    return this.epoch && this.epoch.id === epochIdAt(now) ? this.epoch : null;
+  }
 
   db: Db;
   constructor(db: Db, world?: WorldDef) {
@@ -91,6 +102,7 @@ export class Game {
     const rows = await this.db.query<PetRow>(PET_SELECT);
     for (const row of rows.rows) this.hydrate(row, now);
     await this.refreshTreasury();
+    this.epoch = await currentEpoch(this.db, this.now());
   }
 
   start() {
@@ -123,6 +135,7 @@ export class Game {
       path: [], moveDir: null, facing: 1, anim: "idle", animUntil: 0, task: null, busy: false, manualUntil: 0,
       nextThink: now + Math.random() * 2000, balance: BigInt(row.balance ?? "0"), held: BigInt(row.held ?? "0"),
       listed: Boolean(row.listed), activity: "Waking up", dirty: false, metaDirty: true,
+      round: null, nextRoundAt: 0, missedRounds: 0, matchId: null,
     };
     this.pets.set(p.id, p);
     return p;
@@ -179,6 +192,7 @@ export class Game {
         n.nextRegen = now + ECONOMY.resources[n.resource].regenMs;
       }
     }
+    this.arena.tick(now);
     this.broadcast(now);
     if (now - this.lastFlush > 10_000) { this.lastFlush = now; void this.flush(); }
     if (now - this.lastDemand > ECONOMY.demand.recomputeSec * 1000) { this.lastDemand = now; void this.recomputeDemand(now); }
@@ -293,10 +307,14 @@ export class Game {
     }
     p.facing = nx >= s.x ? 1 : -1;
     const w = ECONOMY.resources[node.resource].weight;
-    const stop = (why: string) => { p.task = null; p.activity = why; p.anim = "idle"; };
+    const stop = (why: string) => {
+      p.task = null; p.activity = why; p.anim = "idle";
+      if (t.minigame) { p.round = null; this.toOwner(p, { t: "mg_end", petId: p.id, reason: why }); }
+    };
     if (s.energy < ECONOMY.stats.exhaustedEnergy) return stop("Too tired to gather");
     if (inventoryWeight(s.inventory) + w > p.stats.carry) return stop("Bag is full");
     if (node.remaining <= 0) return stop("This spot is picked clean — it regrows soon");
+    if (t.minigame) return this.stepMinigame(p, node, now, stop);
     if (t.endsAt === null) {
       t.endsAt = now + gatherDurationMs(p.species, p.genome.traits, p.stats.gather, node.resource);
       p.activity = `Gathering ${node.resource}`;
@@ -315,6 +333,73 @@ export class Game {
     p.metaDirty = true;
     t.endsAt = null;
     if (!t.repeat) p.task = null;
+  }
+
+  // ------------------------------------------------------------ minigames --
+
+  toOwner(p: PetRt, msg: ServerMsg) {
+    for (const c of this.clients) if (c.userId === p.ownerId) c.send(msg);
+  }
+
+  /** Manual gathering: open a round, wait for the player's input, expire if ignored. */
+  private stepMinigame(p: PetRt, node: NodeRt, now: number, stop: (why: string) => void) {
+    if (p.round) {
+      if (now - p.round.sentAt > MINIGAMES.timeoutMs + MINIGAMES.slackMs) {
+        p.round = null;
+        p.missedRounds++;
+        if (p.missedRounds >= 2) return stop("Gathering paused — tap the spot to start again");
+        p.nextRoundAt = now + 600;
+      }
+      return;
+    }
+    if (now < p.nextRoundAt) return;
+    const epoch = this.epochNow();
+    if (!epoch) return; // fair seed loading; try next tick
+    const id = newId("mg");
+    const params = makeRound(epoch.seed, id, node.resource);
+    p.round = { id, params, nodeId: node.id, sentAt: now };
+    p.anim = "gather"; p.animUntil = now + 400;
+    p.activity = `Gathering ${node.resource}`;
+    this.toOwner(p, { t: "mg_round", round: { id, petId: p.id, nodeId: node.id, resource: node.resource, params, expiresInMs: MINIGAMES.timeoutMs } });
+  }
+
+  /** Grade a minigame input. The client only reports timing; yield is computed and capped here. */
+  minigameInput(userId: string, roundId: string, ms: number) {
+    const now = this.now();
+    const p = [...this.pets.values()].find((x) => x.round?.id === roundId);
+    if (!p || p.ownerId !== userId) throw new GameError("round", "That gathering round is over");
+    const round = p.round!;
+    const elapsed = now - round.sentAt;
+    p.round = null; // single use: replays and double taps find nothing
+    if (!Number.isFinite(ms) || ms < MINIGAMES.minReactionMs || ms > elapsed + MINIGAMES.slackMs || elapsed > MINIGAMES.timeoutMs + MINIGAMES.slackMs) {
+      p.nextRoundAt = now + 700;
+      throw new GameError("timing", "That swing didn't count — try again");
+    }
+    const node = this.nodes.get(round.nodeId);
+    if (!node || p.task?.kind !== "gather" || p.task.nodeId !== node.id) throw new GameError("round", "Not gathering here anymore");
+    if (Math.hypot(tileCenter(node.tx) - p.s.x, tileCenter(node.ty) - p.s.y) > GATHER_RANGE) throw new GameError("too_far", "Too far from the spot");
+    if (p.s.energy < ECONOMY.stats.exhaustedEnergy) throw new GameError("tired", "Too tired to gather");
+    const { grade, detail } = gradeRound(round.params, ms);
+    const w = ECONOMY.resources[node.resource].weight;
+    const room = Math.floor((p.stats.carry - inventoryWeight(p.s.inventory)) / w);
+    const gained = Math.max(0, Math.min(MINIGAMES.yield[grade], node.remaining, room));
+    p.s.energy = Math.max(0, p.s.energy - MINIGAMES.energyPerAttempt);
+    if (gained > 0) {
+      node.remaining -= gained;
+      if (node.nextRegen === 0 || node.nextRegen < now) node.nextRegen = now + ECONOMY.resources[node.resource].regenMs;
+      p.s.inventory[node.resource] += gained;
+      const today = dayKey(now);
+      if (p.s.gatherDay !== today) { p.s.gatherDay = today; p.s.gatheredToday = 0; }
+      p.s.gatheredToday += gained;
+      p.s.gatheredTotal += gained;
+    }
+    p.missedRounds = 0;
+    p.dirty = true; p.metaDirty = true;
+    p.anim = "gather"; p.animUntil = now + 700;
+    p.nextRoundAt = now + 900;
+    const note = gained < MINIGAMES.yield[grade] ? (room < MINIGAMES.yield[grade] ? "bag full" : "spot running low") : undefined;
+    this.toOwner(p, { t: "mg_result", roundId, petId: p.id, nodeId: node.id, resource: node.resource, grade, gained, detail, note });
+    void this.db.query(`INSERT INTO resource_events (kind, resource, qty, ref) VALUES ('gathered', $1, $2, $3)`, [node.resource, gained, `${roundId}:${grade}`]).catch(() => {});
   }
 
   private stepMerchant(m: MerchantRt, dt: number, now: number) {
@@ -664,9 +749,11 @@ export class Game {
     });
     c.lastMeta = 0;
     c.send({ t: "market", ticker: this.ticker() });
+    this.arena.sync(c);
+    this.arena.presence();
   }
 
-  leave(c: GameClient) { this.clients.delete(c); }
+  leave(c: GameClient) { this.clients.delete(c); this.arena.presence(); }
 
   async handle(c: GameClient, msg: ClientMsg): Promise<void> {
     const now = this.now();
@@ -705,7 +792,9 @@ export class Game {
         const node = this.nodes.get(msg.nodeId);
         if (!node) throw new GameError("not_found", "No such resource spot");
         if (p.s.status !== "active" && p.s.status !== "sleeping") throw new GameError("inactive", `${p.name} can't gather right now`);
-        p.task = { kind: "gather", nodeId: node.id, endsAt: null, repeat: true };
+        if (p.matchId) throw new GameError("in_match", `${p.name} is in a Bubble Roulette match`);
+        p.task = { kind: "gather", nodeId: node.id, endsAt: null, repeat: true, minigame: true };
+        p.round = null; p.missedRounds = 0; p.nextRoundAt = 0;
         p.path = [];
         manual(p);
         return;
@@ -722,6 +811,13 @@ export class Game {
         await this.battle(p, t, "manual");
         return;
       }
+      case "mg_input": { this.minigameInput(c.userId, msg.roundId, msg.ms); return; }
+      case "mg_stop": { const p = own(msg.petId); if (p.task?.kind === "gather") { p.task = null; p.round = null; p.activity = "Stopped gathering"; } return; }
+      case "br_challenge": { const p = own(msg.petId); const t = this.pets.get(msg.targetId); if (!t) throw new GameError("not_found", "That pet is gone"); manual(p); this.arena.challenge(c, p, t); return; }
+      case "br_respond": { this.arena.respond(c, msg.matchId, msg.accept); return; }
+      case "br_action": { this.arena.action(c, msg.matchId, msg.target, msg.turnNo); return; }
+      case "br_forfeit": { this.arena.forfeit(c, msg.matchId); return; }
+      case "br_sync": { this.arena.sync(c); return; }
       case "strategy": {
         const p = own(msg.petId);
         p.s.strategy = sanitizeStrategy(msg.strategy);

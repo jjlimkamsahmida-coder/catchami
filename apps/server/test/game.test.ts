@@ -102,7 +102,8 @@ describe("gameplay economy loop", () => {
 
     // Gather (server-authoritative timing).
     const c1 = { userId: u1.userId, displayName: "a", controlled: p1.id, lastMeta: 0, send: () => {} };
-    await game.handle(c1, { t: "gather", petId: p1.id, nodeId: fishNode.id });
+    // Timed gathering (the autopilot path; manual gathering goes through the minigame — see minigames.test.ts).
+    p1.task = { kind: "gather", nodeId: fishNode.id, endsAt: null, repeat: true }; void c1;
     advance(30_000);
     expect(p1.s.inventory.fish).toBeGreaterThanOrEqual(3);
     const caught = p1.s.inventory.fish;

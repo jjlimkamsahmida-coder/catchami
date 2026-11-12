@@ -1,6 +1,6 @@
 /** Tiny external store (no dependency) + React binding. */
 import { useSyncExternalStore } from "react";
-import type { MarketTicker, MerchantDetail, MerchantPublic, OwnPet, PetAnim, PublicPet } from "@catchami/shared";
+import type { BubbleMatchView, Grade, MarketTicker, MerchantDetail, MerchantPublic, MinigameRound, OwnPet, PetAnim, PublicPet, Resource } from "@catchami/shared";
 
 export interface PetEntity {
   id: string;
@@ -35,6 +35,11 @@ export interface State {
   sheet: null | { kind: "merchant"; id: string } | { kind: "pet"; id: string } | { kind: "node"; id: string };
   screen: "world" | "catch" | "pets" | "market" | "ranks" | "wallet" | "fairness" | "map";
   petScreen: string | null;
+  /** Open gathering minigame round (client clock when it arrived). */
+  minigame: { round: MinigameRound; receivedAt: number } | null;
+  mgResult: { roundId: string; grade: Grade; gained: number; resource: Resource; detail: string; note?: string; at: number } | null;
+  bubble: BubbleMatchView | null;
+  bubbleInvite: { matchId: string; fromName: string; ownerName: string; sticker: string | null; species: "cat" | "dog"; look: OwnPet["look"]; toPetId: string; expiresAt: number } | null;
 }
 
 export const entities = new Map<string, PetEntity>();
@@ -43,6 +48,7 @@ let state: State = {
   token: null, userId: null, displayName: "", network: "", connected: false,
   map: null, nodesDef: [], pois: [], hq: null, nodes: {}, merchants: [], merchantDetail: {},
   own: [], controlled: null, wallet: null, ticker: null, toasts: [], sheet: null, screen: "world", petScreen: null,
+  minigame: null, mgResult: null, bubble: null, bubbleInvite: null,
 };
 const subs = new Set<() => void>();
 

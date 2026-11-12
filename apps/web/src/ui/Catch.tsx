@@ -93,6 +93,32 @@ export function CatchScreen() {
     return { b64: url.split(",")[1]!, url, w, h };
   };
 
+  /** DEV NETWORK ONLY: check a photo instead of the camera. Same server-side detection, duplicate and paid-roll rules. */
+  const network = useStore((s) => s.network);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const checkPhoto = async (file: File) => {
+    setStage({ k: "checking" });
+    try {
+      const img = await createImageBitmap(file);
+      const scale = Math.min(1, 960 / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+      const frame = (brightness: number) => {
+        const c = document.createElement("canvas"); c.width = w; c.height = h;
+        const g = c.getContext("2d")!; g.filter = `brightness(${brightness})`; g.drawImage(img, 0, 0, w, h);
+        const url = c.toDataURL("image/jpeg", 0.88);
+        return { url, b64: url.split(",")[1]!, w, h };
+      };
+      // A camera burst differs slightly frame to frame; mimic that so the liveness check behaves the same.
+      const frames = [frame(1), frame(1.05)];
+      const r = await api("/api/catch/validate", { frames: frames.map((f) => f.b64) });
+      if (!r.ok) { setStage({ k: "rejected", message: r.message }); return; }
+      const f = frames[0]!;
+      setStage({ k: "choose", attemptId: r.attemptId, species: r.species, quotes: r.quotes, still: f.url, bbox: r.bbox ?? [w * 0.3, h * 0.3, w * 0.4, h * 0.4], frame: { w, h }, expiresAt: r.expiresAt, sticker: r.sticker ?? null });
+    } catch (e) {
+      setStage({ k: "rejected", message: `${(e as Error).message} Nothing was charged.` });
+    }
+  };
+
   const check = async () => {
     setStage({ k: "checking" });
     const frames: Array<ReturnType<typeof grabFrame>> = [];
@@ -128,6 +154,12 @@ export function CatchScreen() {
             <button className="btn coral" style={{ minWidth: 220, fontSize: 18 }} disabled={!!camError || (modelState === "ready" && (!live || live.streak < 2))} onClick={check}>
               {live && live.streak >= 2 ? "Lock on" : "Find an animal"}
             </button>
+            {network === "dev" && (
+              <>
+                <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void checkPhoto(f); e.target.value = ""; }} />
+                <button className="btn paper sm" onClick={() => fileRef.current?.click()}>Use a photo instead (dev network only)</button>
+              </>
+            )}
             <p className="panel small" style={{ padding: "6px 10px", margin: 0, textAlign: "center", maxWidth: 360 }}>Checking an animal is free. You only choose and pay for a catch attempt after Catchami confirms a real, eligible animal.</p>
           </div>
         </>
@@ -208,17 +240,19 @@ function Throw({ stage, onResolved }: { stage: Extract<Stage, { k: "throw" }>; o
   const start = { x: window.innerWidth / 2, y: window.innerHeight - 140 };
   const [pos, setPos] = useState(start);
   const [flying, setFlying] = useState(false);
-  const [hint, setHint] = useState("Drag the CamiCube and flick it at the animal");
+  const finePointer = window.matchMedia("(pointer: fine)").matches;
+  const [hint, setHint] = useState(finePointer ? "Click the animal (or press Space) to throw — or drag & flick the CamiCube" : "Drag the CamiCube and flick it at the animal");
   const drag = useRef<{ id: number; pts: Array<{ x: number; y: number; t: number }> } | null>(null);
   const nonce = useRef(Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(36).padStart(2, "0")).join("").slice(0, 20));
 
-  const release = async (vx: number, vy: number) => {
-    if (vy > -0.3) { setPos(start); setHint("Flick upward toward the animal"); return; }
+  const release = async (vx: number, vy: number, aim?: { x: number; y: number }) => {
+    if (flying) return;
+    if (!aim && vy > -0.3) { setPos(start); setHint("Flick upward toward the animal"); return; }
     setFlying(true);
-    // Ballistic-ish flight: distance from flick speed.
-    const speed = Math.hypot(vx, vy);
+    // Ballistic-ish flight: distance from flick speed, or straight at a clicked point (mouse/keyboard).
+    const speed = Math.hypot(vx, vy) || 1;
     const dist = Math.min(window.innerHeight * 0.9, speed * 420);
-    const land = { x: pos.x + (vx / speed) * dist, y: pos.y + (vy / speed) * dist };
+    const land = aim ?? { x: pos.x + (vx / speed) * dist, y: pos.y + (vy / speed) * dist };
     const steps = 22;
     for (let i = 1; i <= steps; i++) {
       const k = i / steps;
@@ -247,9 +281,19 @@ function Throw({ stage, onResolved }: { stage: Extract<Stage, { k: "throw" }>; o
     }
   };
 
+  const aimAt = (x: number, y: number) => { setPos(start); void release(0, -1, { x, y }); };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code === "Space" || e.key === "Enter") { e.preventDefault(); aimAt(target.left + target.width / 2, target.top + target.height / 2); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
   return (
     <>
-      <div className="reticle" style={{ ...target, borderStyle: "dashed" }} />
+      {/* Click/tap anywhere on the photo to throw there (mouse-friendly). Drag on the cube still flicks. */}
+      <div style={{ position: "absolute", inset: 0, zIndex: 2, cursor: "crosshair" }} onClick={(e) => aimAt(e.clientX, e.clientY)} />
+      <div className="reticle" style={{ ...target, borderStyle: "dashed", zIndex: 3 }} />
       <div className="status panel" style={{ padding: "6px 14px", fontWeight: 600 }}>{hint}</div>
       <Cube pose={flying ? "fly" : "happy"}
         style={{ left: pos.x - 48, top: pos.y - 48, width: 96, height: 96, objectFit: "contain", transition: flying ? "none" : "left 0.15s, top 0.15s", animation: flying ? "cubespin 0.35s linear infinite" : undefined }}
@@ -298,7 +342,7 @@ function Result({ stage, onAgain }: { stage: Extract<Stage, { k: "result" }>; on
   const own = useStore((s) => s.own);
   const pet = own.find((p) => p.id === stage.petId);
   return (
-    <div className="bottom" style={{ top: 0, display: "flex", flexDirection: "column", justifyContent: "flex-end", overflow: "auto", background: "rgba(43,29,58,0.45)" }}>
+    <div className="bottom full" style={{ top: 0, display: "flex", flexDirection: "column", justifyContent: "flex-end", overflow: "auto", background: "rgba(43,29,58,0.45)" }}>
       <div className="col" style={{ alignItems: "center", gap: 10, padding: "16px 0" }}>
         {stage.success ? (
           <>

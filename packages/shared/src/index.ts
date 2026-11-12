@@ -6,3 +6,4 @@ export * from "./combat.ts";
 export * from "./economy.ts";
 export * from "./world.ts";
 export * from "./protocol.ts";
+export * from "./minigames.ts";

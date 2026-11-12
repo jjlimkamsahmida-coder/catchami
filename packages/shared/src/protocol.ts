@@ -128,7 +128,14 @@ export type ClientMsg =
   | { t: "rest"; petId: string }
   | { t: "challenge"; petId: string; targetId: string }
   | { t: "strategy"; petId: string; strategy: Strategy }
-  | { t: "ping"; at: number };
+  | { t: "ping"; at: number }
+  | { t: "mg_input"; roundId: string; ms: number }
+  | { t: "mg_stop"; petId: string }
+  | { t: "br_challenge"; petId: string; targetId: string }
+  | { t: "br_respond"; matchId: string; accept: boolean }
+  | { t: "br_action"; matchId: string; target: "self" | "opponent"; turnNo: number }
+  | { t: "br_forfeit"; matchId: string }
+  | { t: "br_sync" };
 
 export interface BattleEvent {
   id: string;
@@ -161,7 +168,47 @@ export type ServerMsg =
   | { t: "battle"; battle: BattleEvent }
   | { t: "toast"; kind: "info" | "good" | "bad"; text: string; petId?: string }
   | { t: "error"; code: string; message: string; rid?: string }
-  | { t: "pong"; at: number; serverTime: number };
+  | { t: "pong"; at: number; serverTime: number }
+  | { t: "mg_round"; round: import("./minigames.ts").MinigameRound }
+  | { t: "mg_result"; roundId: string; petId: string; nodeId: string; resource: import("./config.ts").Resource; grade: import("./minigames.ts").Grade; gained: number; detail: string; note?: string }
+  | { t: "mg_end"; petId: string; reason: string }
+  | { t: "br_invite"; matchId: string; from: { petId: string; name: string; ownerName: string; species: Species; rarity: Rarity; sticker: string | null; look: PetLook }; toPetId: string; expiresAt: number }
+  | { t: "br_state"; match: BubbleMatchView };
+
+export interface BubbleSide {
+  petId: string;
+  ownerId: string;
+  ownerName: string;
+  name: string;
+  species: Species;
+  rarity: Rarity;
+  sticker: string | null;
+  look: PetLook;
+  battleHp: number;
+  startHp: number;
+  connected: boolean;
+}
+
+export interface BubbleMatchView {
+  id: string;
+  state: "invited" | "active" | "finished" | "cancelled";
+  a: BubbleSide;
+  b: BubbleSide;
+  you: "a" | "b" | null;
+  turn: "a" | "b";
+  turnNo: number;
+  /** Server clock (ms) when the current turn times out. */
+  turnEndsAt: number;
+  chamberNo: number;
+  slotsLeft: number;
+  splashesLeft: number;
+  last: { by: "a" | "b"; target: "a" | "b"; loaded: boolean; reloaded: boolean; turnNo: number } | null;
+  winner: "a" | "b" | null;
+  reason: string;
+  epoch: number;
+  commitment: string;
+  mode: "nonredeemable";
+}
 
 export interface CatchQuote {
   tier: CatchTier;

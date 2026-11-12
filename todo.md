@@ -53,6 +53,8 @@
 - [ ] Sticker storage on S3/R2
 - [ ] Load testing and mobile device QA
 - [ ] Testnet deployment end to end (deposit → play → withdraw)
+- [x] Gathering mini-games (chop, mine, fish, pull-the-herb) that affect yield
+- [ ] Highlight resource points in the world so they're easy to spot
 
 ## My own items
 - [ ] 
