@@ -32,14 +32,19 @@ function myPos(): [number, number] | null {
 
 /** "📍 Cozy Meadow" banner when the controlled pet enters a new area, plus a persistent chip. */
 export function AreaBanner() {
-  const [area, setArea] = useState<{ name: string; key: number } | null>(null);
+  const [area, setArea] = useState<{ id: string; name: string; key: number } | null>(null);
   useEffect(() => {
-    const h = (e: Event) => setArea({ name: (e as CustomEvent<{ name: string }>).detail.name, key: Date.now() });
+    const h = (e: Event) => { const d = (e as CustomEvent<{ id: string; name: string }>).detail; setArea({ id: d.id, name: d.name, key: Date.now() }); };
     window.addEventListener("catchami:area", h);
     return () => window.removeEventListener("catchami:area", h);
   }, []);
   if (!area) return null;
-  return <div key={area.key} className="area-banner"><img src={genUrl("ui-pin")} alt="" />{area.name}</div>;
+  return (
+    <div key={area.key} className="area-card">
+      <img src={`/assets/gen/banner-${area.id}.webp`} alt="" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+      <span><img src={genUrl("ui-pin")} alt="" />{area.name}{area.id === "village" ? " · safe zone" : ""}</span>
+    </div>
+  );
 }
 
 export function MiniMap() {
@@ -94,7 +99,7 @@ export function QuickButtons() {
   );
 }
 
-const AREA_CENTERS: Record<string, [number, number]> = { meadow: [36, 28], town: [108, 28], forest: [36, 84], mines: [108, 84] };
+const AREA_CENTERS: Record<string, [number, number]> = { forest: [36, 8], village: [96, 8], mines: [156, 8] };
 
 export function MapScreen() {
   const world = useWorld();

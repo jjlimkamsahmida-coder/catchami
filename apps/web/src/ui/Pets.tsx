@@ -128,7 +128,7 @@ function StrategyTab({ p }: { p: OwnPet }) {
       <div className="card col">
         <h3>Work</h3>
         <span className="small muted">Effort</span>{seg("work", [["low", "Low"], ["balanced", "Balanced"], ["high", "High"]])}
-        <span className="small muted">Gather</span>{seg("resource", [["demand", "Highest demand"], ["fish", "Fish"], ["herbs", "Herbs"], ["wood", "Wood"], ["minerals", "Minerals"]])}
+        <span className="small muted">Gather</span>{seg("resource", [["demand", "Highest demand"], ["fish", "Fish"], ["herbs", "Herbs"], ["wood", "Wood"], ["minerals", "Stone"]])}
         <span className="small muted">Selling</span>{seg("sell", [["immediate", "Sell often"], ["full", "When full"], ["best_price", "Best-paying merchant"], ["nearest", "Nearest merchant"], ["hold", "Hold selected"]])}
         <span className="small muted">Never sell</span>
         <div className="seg">{RESOURCES.map((r) => <button key={r} className={s.hold.includes(r) ? "on" : ""} onClick={() => set("hold", s.hold.includes(r) ? s.hold.filter((x) => x !== r) : [...s.hold, r])}><ResIcon r={r} size={14} /> {r}</button>)}</div>

@@ -4,7 +4,7 @@
  * know (its own state, public merchant positions/preferences, global demand)
  * and only spends through the same authorized game actions a player uses.
  */
-import { ECONOMY, inventoryWeight, RESOURCES, tileCenter, toTile, type Resource } from "@catchami/shared";
+import { ECONOMY, inventoryWeight, RESOURCE_LABEL, RESOURCES, tileCenter, toTile, type Resource } from "@catchami/shared";
 import type { Game } from "./game.ts";
 import type { MerchantRt, PetRt } from "./types.ts";
 
@@ -97,7 +97,7 @@ export function decide(g: Game, p: PetRt, now: number, urgentOnly = false) {
   const choice = nodes[Math.min(nodes.length - 1, Math.floor(Math.random() * Math.min(3, nodes.length)))];
   if (!choice) { p.activity = `No ${resource} left nearby — waiting for regrowth`; return; }
   p.task = { kind: "gather", nodeId: choice.n.id, endsAt: null, repeat: true };
-  p.activity = `Going to gather ${resource}`;
+  p.activity = `Going to gather ${RESOURCE_LABEL[resource].toLowerCase()}`;
   if (st.work === "low") p.nextThink = now + 6_000;
 }
 

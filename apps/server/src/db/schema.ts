@@ -215,4 +215,7 @@ export const MIGRATIONS: string[] = [
     at TIMESTAMPTZ NOT NULL DEFAULT now()
   );
   `,
+  `
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding JSONB
+  `,
 ];

@@ -80,6 +80,8 @@ export interface OwnPet extends PublicPet {
   x: number;
   y: number;
   autopilotResumesAt: number | null;
+  /** When the pet was caught (ms). */
+  createdAt: number;
   listed: boolean;
   hp: number;
   energy: number;

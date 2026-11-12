@@ -21,12 +21,11 @@ const hash = (x: number, y: number, k = 0) => { let h = (x * 374761393 + y * 668
 
 // Area palettes: [base, dark, light, alt] for walkable ground.
 const PAL = {
-  meadow: { grass: "#8fd35f", dark: "#6fbd47", light: "#b4e77d", alt: "#a8de6c" },
-  town: { grass: "#89cf5d", dark: "#6bb846", light: "#ade277", alt: "#9fd86a" },
+  village: { grass: "#89cf5d", dark: "#6bb846", light: "#ade277", alt: "#9fd86a" },
   forest: { grass: "#58b673", dark: "#3f9a5c", light: "#7ccd8c", alt: "#6cc27c" },
   mines: { grass: "#dcbd8b", dark: "#c29d69", light: "#ead3a6", alt: "#e3c697" },
 };
-const AREA_KEYS = ["meadow", "town", "forest", "mines"] as const;
+const AREA_KEYS = ["village", "forest", "mines"] as const;
 const WATER = "#4cb3e6", DEEP = "#3a96d6", SHALLOW = "#82d8ea", SAND = "#f2d89a", SAND_DK = "#d7b26a";
 const EARTH = "#b07a4c", EARTH_DK = "#875735", ROCK = "#9d8ca2", ROCK_DK = "#6e5c78", ROCK_LT = "#c2b4c6";
 const PATH = "#e8cb8e", PATH_DK = "#c9a467", COBBLE = "#ddd2bf", COBBLE_DK = "#bfb19a";
@@ -219,6 +218,8 @@ export function drawProp(kind: PropKind, v: number): HTMLCanvasElement {
     case "crate": return crate();
     case "deadtree": return deadtree();
     case "portal": return portal(fw);
+    case "barricade": return barricade(fw);
+    case "signpost": return signpost();
     default: { const [c] = cnv(2, 2); return c; }
   }
 }
@@ -545,6 +546,29 @@ function smithy(fw: number): HTMLCanvasElement {
   rect(g, x + fw - 34, H - 30, 24, 8, INK); rect(g, x + fw - 30, H - 22, 16, 12, INK);
   const gr = g.createRadialGradient(x + 26, H - 30, 2, x + 26, H - 30, 18); gr.addColorStop(0, "rgba(255,140,60,0.9)"); gr.addColorStop(1, "rgba(255,140,60,0)");
   g.fillStyle = gr; g.fillRect(x + 6, H - 50, 40, 40);
+  return c;
+}
+
+/** Closed road: striped wooden barrier with a "coming soon" plank. */
+function barricade(fw: number): HTMLCanvasElement {
+  const W = fw + 8, [c, g] = cnv(W, 70);
+  shadow(g, W / 2, 64, W / 2 - 6, 6);
+  for (const x of [10, W - 18]) { rect(g, x - 2, 22, 12, 44, INK); rect(g, x, 24, 8, 40, "#9a6a42"); }
+  for (const y of [26, 44]) {
+    rect(g, 2, y - 2, W - 4, 16, INK);
+    for (let x = 4, k = 0; x < W - 4; x += 16, k++) rect(g, x, y, Math.min(16, W - 4 - x), 12, k % 2 ? "#fff6e5" : "#ff7a59");
+  }
+  rect(g, W / 2 - 34, 2, 68, 20, INK); rect(g, W / 2 - 32, 4, 64, 16, "#ffd166");
+  g.fillStyle = INK; g.font = "700 12px Fredoka, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("SOON", W / 2, 12.5);
+  return c;
+}
+
+function signpost(): HTMLCanvasElement {
+  const [c, g] = cnv(48, 72);
+  shadow(g, 24, 66, 12, 4);
+  rect(g, 20, 20, 9, 48, INK); rect(g, 22, 22, 5, 44, "#9a6a42");
+  poly(g, [[4, 10], [38, 10], [46, 18], [38, 26], [4, 26]], INK); poly(g, [[6, 12], [37, 12], [43, 18], [37, 24], [6, 24]], "#e3b97c");
+  poly(g, [[44, 30], [10, 30], [2, 38], [10, 46], [44, 46]], INK); poly(g, [[42, 32], [11, 32], [5, 38], [11, 44], [42, 44]], "#d9a36a");
   return c;
 }
 

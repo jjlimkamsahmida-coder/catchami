@@ -16,6 +16,7 @@ import { CaptureError, quotes, resolveAttempt, validateCapture } from "./capture
 import type { Detector } from "./capture/detector.ts";
 import { GameError, type Game, type GameClient } from "./world/game.ts";
 import * as svc from "./services.ts";
+import * as onb from "./onboarding.ts";
 
 type Handler = (ctx: Ctx) => Promise<unknown>;
 interface Ctx { req: IncomingMessage; body: Record<string, unknown>; params: Record<string, string>; query: URLSearchParams; userId: string | null }
@@ -67,8 +68,23 @@ export function startHttp(db: Db, game: Game, detector: () => Detector | null, s
   route("GET", "/api/me", async (c) => {
     const u = await getUser(db, uid(c));
     if (!u) throw new HttpError(401, "auth", "Unknown account");
-    return { user: { id: u.id, displayName: u.display_name, nearAccount: u.near_account }, wallet: await svc.wallet(db, u.id) };
+    return { user: { id: u.id, displayName: u.display_name, nearAccount: u.near_account }, wallet: await svc.wallet(db, u.id), onboarding: await onb.getOnboarding(db, u.id) };
   }, { auth: true });
+  // New-player journey.
+  route("POST", "/api/onboarding", async (c) => onb.setOnboarding(db, uid(c), c.body.stage, c.body.tutorial), { auth: true });
+  route("POST", "/api/onboarding/starter", async (c) => onb.starterGrant(db, uid(c)), { auth: true });
+  route("POST", "/api/handoff", async (c) => onb.createHandoff(uid(c)), { auth: true });
+  route("POST", "/api/handoff/redeem", async (c) => {
+    if (!allow(`handoff:${ip(c.req)}`, 1 / 10, 10)) throw new HttpError(429, "rate_limited", "Too many tries");
+    return onb.redeemHandoff(c.body.code);
+  });
+  route("POST", "/api/near/challenge", async (c) => onb.linkChallenge(c.userId));
+  route("POST", "/api/near/link", async (c) => onb.linkNear(db, uid(c), c.body), { auth: true });
+  route("POST", "/api/auth/near", async (c) => {
+    if (!allow(`nearauth:${ip(c.req)}`, 1 / 10, 10)) throw new HttpError(429, "rate_limited", "Too many tries");
+    return onb.signInNear(db, c.body);
+  });
+  route("POST", "/api/pets/:id/name", async (c) => onb.renamePet(db, game, uid(c), c.params.id!, c.body.name), { auth: true });
   route("POST", "/api/dev/faucet", async (c) => svc.devFaucet(db, uid(c)), { auth: true });
 
   // Economy transparency (public).

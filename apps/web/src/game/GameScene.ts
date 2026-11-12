@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { areaAt, decodeTiles, generateWorld, PROP_SIZE, RARITY_LABEL, T, type BattleEvent, type Prop, type Resource, type WorldDef } from "@catchami/shared";
+import { AREA_BOUNDS, areaAt, decodeTiles, generateWorld, PROP_SIZE, RARITY_LABEL, T, type BattleEvent, type Prop, type Resource, type WorldDef } from "@catchami/shared";
 import { entities, store, type PetEntity } from "../net/store.ts";
 import { send, serverNow } from "../net/api.ts";
 import * as art from "./art.ts";
@@ -300,7 +300,16 @@ export class GameScene extends Phaser.Scene {
         window.__petAnchor = { x: (x - cam.worldView.x) * cam.zoom, y: (y - cam.worldView.y) * cam.zoom };
         if (this.world) {
           const a = areaAt(this.world, x, y);
-          if (a.id !== this.lastArea) { this.lastArea = a.id; window.dispatchEvent(new CustomEvent("catchami:area", { detail: a })); }
+          if (a.id !== this.lastArea) {
+            const first = !this.lastArea;
+            this.lastArea = a.id;
+            // Each area is its own map: the camera stays inside it, with a quick fade through the gate.
+            const [bx0, by0, bx1, by1] = AREA_BOUNDS[a.id];
+            const enter = () => { cam.setBounds(bx0 * TILE, by0 * TILE, (bx1 - bx0) * TILE, (by1 - by0) * TILE); cam.centerOn(x, y); };
+            enter();
+            if (!first) { cam.resetFX(); cam.fadeIn(420, 43, 29, 58); }
+            window.dispatchEvent(new CustomEvent("catchami:area", { detail: a }));
+          }
         }
         cam.scrollX += (x - cam.midPoint.x) * 0.12;
         cam.scrollY += (y - cam.midPoint.y) * 0.12;

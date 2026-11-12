@@ -36,6 +36,11 @@ export const PROP_ART: Partial<Record<PropKind, { keys: string[]; width: number 
   mushroom: { keys: ["prop-mushroom"], width: 34 },
   barrel: { keys: ["prop-barrel"], width: 36 },
   wagon: { keys: ["prop-cart-merchant"], width: 84 },
+  barricade: { keys: ["prop-barricade"], width: 132 },
+  signpost: { keys: ["prop-signpost"], width: 54 },
+  forestgate: { keys: ["prop-forestgate"], width: 130 },
+  minegate: { keys: ["prop-minegate"], width: 130 },
+  noticeboard: { keys: ["prop-noticeboard"], width: 74 },
 };
 
 export const NODE_ART = ["fish", "herbs", "wood", "minerals"].flatMap((r) => [`node-${r}`, `node-${r}-empty`]);

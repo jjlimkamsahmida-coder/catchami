@@ -1,3 +1,4 @@
+import "./load-env.ts"; // must stay first
 import { mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";

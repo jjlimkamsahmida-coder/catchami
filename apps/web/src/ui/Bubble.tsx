@@ -8,6 +8,9 @@ import { store, useStore } from "../net/store.ts";
 import { send, serverNow } from "../net/api.ts";
 import { PetArt } from "./common.tsx";
 import { sfx } from "./sfx.ts";
+import { genUrl } from "../game/assets.ts";
+
+const art = (k: string) => genUrl(k);
 
 export function BubbleInvite() {
   const inv = useStore((s) => s.bubbleInvite);
@@ -80,7 +83,7 @@ export function BubbleScreen() {
     <div className="br">
       <div className="br-top">
         <span className="br-title">Bubble Roulette</span>
-        {m.state === "active" && <span className={`br-turn ${myTurn ? "mine" : ""}`}>{myTurn ? "Your turn" : `${theirs.name}'s turn`} · {secs}s</span>}
+        {m.state === "active" && <span className={`br-turn ${myTurn ? "mine" : ""}`}><img className="br-clock" src={art("br-timer")} alt="" />{myTurn ? "Your turn" : `${theirs.name}'s turn`} · {secs}s</span>}
         {!finished && <button className="btn sm paper" onClick={() => { if (confirm(m.state === "invited" ? "Withdraw the challenge?" : "Leave the match? Leaving counts as a loss.")) send({ t: "br_forfeit", matchId: m.id }); }}>{m.state === "invited" ? "Cancel" : "Leave"}</button>}
       </div>
 
@@ -96,8 +99,9 @@ export function BubbleScreen() {
               <div className="br-hp"><b>{s.name}</b><span>{hp[side]}</span><i><em style={{ width: `${hp[side]}%` }} /></i>{!s.connected && m.state === "active" && <small>reconnecting…</small>}</div>
               <div className={`br-sticker ${hit && fx?.kind === "splash" ? "soaked" : ""} ${hit && fx?.kind === "puff" ? "giggle" : ""} ${winner ? "cheer" : ""}`}>
                 <PetArt sticker={s.sticker} species={s.species} look={s.look} />
-                {hit && fx?.kind === "splash" && <div className="drops">{Array.from({ length: 7 }, (_, i) => <i key={i} style={{ ["--a" as string]: `${i * 51}deg` }} />)}</div>}
-                {lost && <div className="foam">{[[10, 62], [28, 74], [50, 70], [70, 60], [18, 30], [76, 24], [44, 10]].map(([l, t], i) => <i key={i} style={{ left: `${l}%`, top: `${t}%`, animationDelay: `${i * 70}ms` }} />)}</div>}
+                {hit && fx?.kind === "splash" && <img key={fx.id} className="br-fx pop" src={art("br-pop")} alt="" />}
+                {hit && fx?.kind === "puff" && <img key={fx.id} className="br-fx dodge" src={art("br-dodge")} alt="" />}
+                {lost && <img className="br-fx suds" src={art("br-suds")} alt="" />}
               </div>
             </div>
           );
@@ -116,7 +120,9 @@ export function BubbleScreen() {
       {m.state === "invited" && <div className="br-note panel">Waiting for {theirs.name}'s owner to accept…</div>}
       {finished && (
         <div className="br-note panel col">
-          <b style={{ fontSize: 20 }}>{m.state === "cancelled" ? "No match" : won ? "You win!" : `${m[m.winner ?? them].name} wins`}</b>
+          {m.state === "finished"
+            ? <div className={`br-ribbon ${won ? "win" : "lose"}`}><img src={art(won ? "br-ribbon-win" : "br-ribbon-lose")} alt="" /><b>{won ? "You win!" : `${m[m.winner ?? them].name} wins`}</b></div>
+            : <b style={{ fontSize: 20 }}>No match</b>}
           <span className="small">{m.reason}</span>
           {m.state === "finished" && <span className="small muted">Battle HP carries back to your pet. Match #{m.id.slice(3, 9)} · fair-roll epoch {m.epoch}</span>}
           <button className="btn" onClick={close}>Back to the world</button>
@@ -132,31 +138,13 @@ function Launcher({ m, fx }: { m: BubbleMatchView; fx: Fx | null }) {
   const shoot = fx ? (fx.target === (m.you ?? "a") ? "left" : "right") : null;
   return (
     <div className={`launcher ${fx ? "firing" : ""}`}>
-      <svg viewBox="0 0 160 120" width="160" height="120" aria-label="Bubble launcher">
-        {/* Body: a chubby toy bubble blower — original design */}
-        <ellipse cx="80" cy="104" rx="46" ry="8" fill="rgba(43,29,58,0.2)" />
-        <rect x="40" y="52" width="80" height="44" rx="22" fill="#2b1d3a" />
-        <rect x="43" y="55" width="74" height="38" rx="19" fill="#7fd5e6" />
-        <rect x="50" y="60" width="30" height="8" rx="4" fill="#c8f1ff" />
-        {/* Wand rings on both sides */}
-        <circle cx="30" cy="74" r="14" fill="none" stroke="#2b1d3a" strokeWidth="7" /><circle cx="30" cy="74" r="14" fill="none" stroke="#ff8fc8" strokeWidth="3.5" />
-        <circle cx="130" cy="74" r="14" fill="none" stroke="#2b1d3a" strokeWidth="7" /><circle cx="130" cy="74" r="14" fill="none" stroke="#ff8fc8" strokeWidth="3.5" />
-        {/* Drum with six slots: used slots are empty dents, the rest are mystery bubbles */}
-        <g className="drum" style={{ transformOrigin: "80px 40px" }}>
-          <circle cx="80" cy="40" r="30" fill="#2b1d3a" />
-          <circle cx="80" cy="40" r="27" fill="#fff6e5" />
-          {Array.from({ length: BUBBLE.slots }, (_, i) => {
-            const ang = (i / BUBBLE.slots) * Math.PI * 2 - Math.PI / 2;
-            const x = 80 + Math.cos(ang) * 17, y = 40 + Math.sin(ang) * 17;
-            const gone = i < used;
-            return <circle key={i} cx={x} cy={y} r="7" fill={gone ? "#e2d6c2" : "#bfe9ff"} stroke="#2b1d3a" strokeWidth="2.5" strokeDasharray={gone ? "3 3" : undefined} />;
-          })}
-          <circle cx="80" cy="40" r="5" fill="#ffd166" stroke="#2b1d3a" strokeWidth="2.5" />
-        </g>
-      </svg>
+      <img className="launcher-art" src={art("br-launcher-idle")} alt="Bubble launcher" draggable={false} />
+      <div className="chambers" aria-label={`${m.slotsLeft} slots left`}>
+        {Array.from({ length: BUBBLE.slots }, (_, i) => <img key={i} src={art(i < used ? "br-empty" : "br-loaded")} alt="" className={i < used ? "gone" : ""} />)}
+      </div>
       <div className="launcher-info"><b>{m.slotsLeft}</b> slots · <b>{m.splashesLeft}</b> splash{m.splashesLeft === 1 ? "" : "es"}</div>
-      {fx?.kind === "splash" && <span key={fx.id} className={`shot bubble ${shoot}`} />}
-      {fx?.kind === "puff" && <span key={fx.id} className={`shot puff ${shoot}`} />}
+      {fx?.kind === "splash" && <img key={fx.id} className={`shot ${shoot}`} src={art("br-bubble")} alt="" />}
+      {fx?.kind === "puff" && <img key={fx.id} className={`shot puff ${shoot}`} src={art("br-puff")} alt="" />}
       {fx?.reload && <span key={`r${fx.id}`} className="reload">reloaded!</span>}
     </div>
   );

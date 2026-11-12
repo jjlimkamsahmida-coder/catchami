@@ -1,10 +1,12 @@
 import {
-  DEFAULT_STRATEGY, ECONOMY, effectiveStats, emptyInventory,
+  DEFAULT_STRATEGY, ECONOMY, effectiveStats, emptyInventory, WORLD_SEED,
   type EquipmentKind, type EquippedItem, type Inventory, type PetAnim, type PetGenome, type PetStatus,
   type Rarity, type Resource, type Species, type Stats, type Strategy,
 } from "@catchami/shared";
 
 export interface PetState {
+  /** World seed the position belongs to; a new map moves the pet back to the village. */
+  worldSeed?: string;
   hp: number;
   energy: number;
   hunger: number;
@@ -95,10 +97,12 @@ export function freshPetState(x: number, y: number, stats: Stats): PetState {
     energy: stats.maxEnergy,
     hunger: 200,
     x, y,
+    worldSeed: WORLD_SEED,
     inventory: emptyInventory(),
     status: "active",
     koUntil: null,
-    strategy: { ...DEFAULT_STRATEGY },
+    // New pets start under the player's control; the tutorial shows how to turn autopilot on.
+    strategy: { ...DEFAULT_STRATEGY, auto: false },
     gatheredToday: 0,
     gatherDay: "",
     gatheredTotal: 0,
@@ -116,8 +120,8 @@ export function recomputeStats(p: Pick<PetRt, "genome" | "equipment">): Stats {
 }
 
 export const MERCHANT_DEFS: Array<Pick<MerchantRt, "id" | "name" | "hue" | "prefs" | "route">> = [
-  { id: "finn", name: "Finn the Fishmonger", hue: 200, prefs: { fish: 1_200, wood: -600 }, route: ["hq", "town_west", "lake", "windmill", "meadow", "town_west", "hq"] },
-  { id: "marigold", name: "Sage Marigold", hue: 120, prefs: { herbs: 1_200, minerals: -600 }, route: ["hq", "town_west", "farm", "forest_gate", "forest", "pond", "forest_gate", "town_west", "hq"] },
-  { id: "tom", name: "Timber Tom", hue: 30, prefs: { wood: 1_200, fish: -600 }, route: ["hq", "town_south", "valley_west", "forest_east", "forest", "ruins", "forest", "forest_east", "valley_west", "town_south", "hq"] },
-  { id: "ruby", name: "Rocky Ruby", hue: 330, prefs: { minerals: 1_200, herbs: -600 }, route: ["hq", "town_south", "mines", "mine", "smithy", "mines", "town_south", "hq"] },
+  { id: "finn", name: "Finn the Fishmonger", hue: 200, prefs: { fish: 1_200, wood: -600 }, route: ["hq", "village_west", "forest_gate", "lake", "forest", "forest_gate", "village_west", "hq"] },
+  { id: "marigold", name: "Sage Marigold", hue: 120, prefs: { herbs: 1_200, minerals: -600 }, route: ["hq", "village_west", "forest_gate", "forest", "ruins", "forest", "forest_gate", "village_west", "hq"] },
+  { id: "tom", name: "Timber Tom", hue: 30, prefs: { wood: 1_200, fish: -600 }, route: ["hq", "village_west", "forest_gate", "lake", "ruins", "forest", "forest_gate", "village_west", "hq"] },
+  { id: "ruby", name: "Rocky Ruby", hue: 330, prefs: { minerals: 1_200, herbs: -600 }, route: ["hq", "village_east", "mines_gate", "mines", "mine", "smithy", "mines", "mines_gate", "village_east", "hq"] },
 ];

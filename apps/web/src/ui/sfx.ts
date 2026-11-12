@@ -40,6 +40,10 @@ export const sfx = {
   whirr: () => tone(260, 0.35, "triangle", 0.05, 520),
   win: () => [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => tone(f, 0.16, "triangle", 0.08), i * 90)),
   tick: () => tone(1500, 0.03, "square", 0.025),
+  whoosh: () => { noise(0.3, 0.08, 1800); tone(400, 0.3, "sine", 0.04, 900); },
+  bad: () => { tone(330, 0.14, "triangle", 0.08, 220); setTimeout(() => tone(220, 0.2, "triangle", 0.08, 160), 110); },
+  type: () => tone(700 + Math.random() * 300, 0.025, "square", 0.018),
+  sparkle: () => [1320, 1760, 2093].forEach((f, i) => setTimeout(() => tone(f, 0.12, "sine", 0.05), i * 70)),
   get muted() { return muted; },
   toggle() { muted = !muted; try { localStorage.setItem("catchami.muted", muted ? "1" : "0"); } catch {} return muted; },
 };

@@ -121,7 +121,7 @@ describe("gathering minigame (server-authoritative)", () => {
 describe("Bubble Roulette", () => {
   it("plays a full server-authoritative match with turn checks and single settlement", async () => {
     const ua = await createGuest(db), ub = await createGuest(db);
-    const hq = game.world.pois[0]!;
+    const hq = game.world.pois.find((q) => q.id === "forest")!; // battles are off in the village
     const a = await spawn(ua.userId, hq.tx, hq.ty), b = await spawn(ub.userId, hq.tx + 1, hq.ty);
     const ca = client(ua.userId), cb = client(ub.userId);
     game.join(ca); game.join(cb);
@@ -171,7 +171,7 @@ describe("Bubble Roulette", () => {
 
   it("two missed turns forfeit; one missed turn just passes", async () => {
     const ua = await createGuest(db), ub = await createGuest(db);
-    const hq = game.world.pois[0]!;
+    const hq = game.world.pois.find((q) => q.id === "forest")!; // battles are off in the village
     const a = await spawn(ua.userId, hq.tx - 2, hq.ty), b = await spawn(ub.userId, hq.tx - 1, hq.ty);
     const ca = client(ua.userId), cb = client(ub.userId);
     game.join(ca); game.join(cb);

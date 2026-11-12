@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type Phaser from "phaser";
 import { store, useStore } from "./net/store.ts";
-import { boot, startAsGuest } from "./net/api.ts";
+import { boot } from "./net/api.ts";
 import { ActionBar, BottomNav, Joystick, PetCard, Toasts, TopBar } from "./ui/Hud.tsx";
 import { Sheets } from "./ui/Sheets.tsx";
 import { PetsScreen } from "./ui/Pets.tsx";
@@ -10,11 +10,13 @@ import { AreaBanner, MapScreen, QuickButtons } from "./ui/WorldHud.tsx";
 import { EconomyGuide } from "./ui/EconomyGuide.tsx";
 import { MinigameLayer } from "./ui/Minigame.tsx";
 import { BubbleInvite, BubbleScreen } from "./ui/Bubble.tsx";
+import { Journey, PhoneCatch, WelcomeBack } from "./ui/Journey.tsx";
+import { TutorialCoach } from "./ui/Tutorial.tsx";
 
 const CatchScreen = lazy(() => import("./ui/Catch.tsx").then((m) => ({ default: m.CatchScreen })));
 const AdminPage = lazy(() => import("./ui/Admin.tsx").then((m) => ({ default: m.AdminPage })));
 
-/** Routes: "/" is always the title scene; "/game" is the game; "/admin" is operations. */
+/** Routes: "/" title scene · "/start" new-player journey · "/catch" phone hand-off · "/game" the game · "/admin" operations. */
 function usePath(): [string, (p: string, replace?: boolean) => void] {
   const [path, setPath] = useState(location.pathname);
   useEffect(() => {
@@ -31,27 +33,29 @@ function usePath(): [string, (p: string, replace?: boolean) => void] {
 
 export function App() {
   const token = useStore((s) => s.token);
+  const stage = useStore((s) => s.onboarding?.stage);
   const [booted, setBooted] = useState(false);
   const [path, go] = usePath();
   useEffect(() => { void boot().finally(() => setBooted(true)); }, []);
-  // No account yet: the game route sends you back to the title scene.
-  useEffect(() => { if (booted && !token && path.startsWith("/game")) go("/", true); }, [booted, token, path]);
+  const inGame = stage === "tutorial" || stage === "done";
+  // The game needs an account that has finished the story up to the tutorial.
+  useEffect(() => {
+    if (!booted || !path.startsWith("/game")) return;
+    if (!token) go("/", true);
+    else if (stage && !inGame) go("/start", true);
+  }, [booted, token, path, stage]);
   if (path.startsWith("/admin")) return <Suspense fallback={null}><AdminPage /></Suspense>;
   if (!booted) return <div className="title-screen"><img className="title-logo" src="/assets/gen/logo.png" alt="Catchami" /></div>;
-  if (path.startsWith("/game") && token) return <Shell />;
-  return <Welcome onStart={() => go("/game")} />;
+  if (path.startsWith("/catch")) return <PhoneCatch onGame={() => go("/game")} />;
+  if (path.startsWith("/start")) return <Journey onEnterGame={() => go("/game", true)} onExit={() => go("/")} />;
+  if (path.startsWith("/game") && token && inGame) return <Shell />;
+  return <Welcome onStart={() => go(token ? (inGame ? "/game" : "/start") : "/start")} onNew={() => go("/start")} />;
 }
 
-function Welcome({ onStart }: { onStart: () => void }) {
+function Welcome({ onStart, onNew }: { onStart: () => void; onNew: () => void }) {
   const token = useStore((s) => s.token);
-  const name = useStore((s) => s.displayName);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const start = async () => {
-    if (token) return onStart();
-    setBusy(true); setErr(null);
-    try { await startAsGuest(); onStart(); } catch (e) { setErr((e as Error).message); setBusy(false); }
-  };
+  const [back, setBack] = useState(false);
+  const start = () => { if (token) setBack(true); else onStart(); };
   const [help, setHelp] = useState(false);
   const [econ, setEcon] = useState(false);
   return (
@@ -59,9 +63,9 @@ function Welcome({ onStart }: { onStart: () => void }) {
       <TitleLife />
       <img className="title-logo" src="/assets/gen/logo.png" alt="Catchami" />
       <div className="title-menu">
-        <button className="game-btn start" disabled={busy} onClick={start}>
+        <button className="game-btn start" onClick={start}>
           <img className="gb-icon" src="/assets/gen/cube-happy.png" alt="" />
-          <span className="gb-label">{busy ? "Loading…" : "Start game"}</span>
+          <span className="gb-label">Start game</span>
           <span className="gb-shine" />
         </button>
         <button className="game-btn help" onClick={() => setHelp(true)}>
@@ -72,21 +76,21 @@ function Welcome({ onStart }: { onStart: () => void }) {
           <img className="gb-coin" src="/assets/gen/ui-coin.png" alt="" />
           <span className="gb-label">How coins work</span>
         </button>
-        {err && <span className="title-who err">{err}</span>}
       </div>
       <p className="title-legal">Paid features use the $CATCHAMI token on NEAR. Token prices can fall; nothing in Catchami promises earnings.</p>
       {help && <HowToPlay onClose={() => setHelp(false)} />}
       {econ && <EconomyGuide onClose={() => setEcon(false)} />}
+      {back && <WelcomeBack onContinue={onStart} onNew={onNew} onClose={() => setBack(false)} />}
     </div>
   );
 }
 
 const HOW_TO: Array<[string, string, string]> = [
   ["cube-excited", "Catch a real animal", "Point your camera at a real cat or dog, then throw the CamiCube. A catch becomes your sticker pet."],
-  ["icon-herbs", "Gather", "Walk to a resource spot and tap Gather. Time your tap (or hold & release for herbs) to get more."],
+  ["icon-herbs", "Gather", "Outside the village, walk to a glowing resource spot and tap Gather. Time your tap (or hold & release for herbs) to get more."],
   ["merchant-finn", "Trade", "Sell what you gather to travelling merchants. Buy meals and medicine to keep your pet going."],
-  ["ui-map", "Explore", "Four big areas: Cozy Meadow, Fantasy Town, Enchanted Forest and Mining Valley."],
-  ["cube-wobble", "Bubble Roulette", "Challenge another player's pet. Splash yourself or your opponent — last pet with HP wins."],
+  ["ui-map", "Explore", "Start in peaceful Paw Village, then head west to the Whispering Forest (wood, fish, herbs) or east to Mining Valley (stone)."],
+  ["cube-wobble", "Bubble Roulette", "In the Forest or Mining Valley, challenge another player's pet. Splash yourself or your opponent — last pet with HP wins. No battles in the village."],
   ["ui-backpack", "Autopilot", "Set a strategy and your pet keeps working while you're away."],
 ];
 
@@ -179,6 +183,7 @@ function Shell() {
         <BubbleInvite />
         {bubble && <BubbleScreen />}
         {screen === "world" && <KeyHint />}
+        {(screen === "world" || screen === "map") && <TutorialCoach />}
         {screen === "pets" && <PetsScreen />}
         {screen === "market" && <MarketScreen />}
         {screen === "ranks" && <RanksScreen />}
@@ -199,12 +204,6 @@ function TitleLife() {
   return (
     <div className="title-life" aria-hidden>
       <span className="cloud c1" /><span className="cloud c2" /><span className="cloud c3" />
-      <div className="walker w1"><img src="/assets/gen/merchant-finn.png" alt="" /></div>
-      <div className="walker w2 flip"><img src="/assets/gen/merchant-marigold.png" alt="" /></div>
-      <div className="walker w3"><img src="/assets/gen/cube-happy.png" alt="" /></div>
-      <div className="walker w4 flip"><img src="/assets/gen/merchant-tom.png" alt="" /></div>
-      <img className="leaper" src="/assets/gen/icon-fish.png" alt="" />
-      <span className="flutter f1" /><span className="flutter f2" />
     </div>
   );
 }

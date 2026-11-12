@@ -42,13 +42,17 @@ export async function loadSegmenter(modelDir: string): Promise<Segmenter> {
       const pred = (await out.data()) as Int32Array;
       out.dispose();
       const [, ph, pw] = out.shape.length === 3 ? out.shape : [1, out.shape[0]!, out.shape[1]!];
-      // Upscale (nearest) to the original resolution.
+      // Upscale with bilinear filtering of the class mask, thresholded at 0.5:
+      // smooth silhouettes instead of blocky nearest-neighbour stairs.
+      const W = pw!, H = ph!;
+      const on = (x: number, y: number) => (pred[Math.min(H - 1, Math.max(0, y)) * W + Math.min(W - 1, Math.max(0, x))] === cls ? 1 : 0);
       const mask = new Uint8Array(img.width * img.height);
       for (let y = 0; y < img.height; y++) {
-        const sy = Math.min(ph! - 1, Math.floor((y / img.height) * ph!));
+        const fy = ((y + 0.5) / img.height) * H - 0.5, y0 = Math.floor(fy), ty = fy - y0;
         for (let x = 0; x < img.width; x++) {
-          const sx = Math.min(pw! - 1, Math.floor((x / img.width) * pw!));
-          mask[y * img.width + x] = pred[sy * pw! + sx] === cls ? 1 : 0;
+          const fx = ((x + 0.5) / img.width) * W - 0.5, x0 = Math.floor(fx), tx = fx - x0;
+          const v = (on(x0, y0) * (1 - tx) + on(x0 + 1, y0) * tx) * (1 - ty) + (on(x0, y0 + 1) * (1 - tx) + on(x0 + 1, y0 + 1) * tx) * ty;
+          mask[y * img.width + x] = v >= 0.5 ? 1 : 0;
         }
       }
       return mask;

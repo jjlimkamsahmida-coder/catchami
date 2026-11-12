@@ -21,6 +21,7 @@ import { acct, ensureAccount, LedgerError, post } from "../ledger/ledger.ts";
 import { freshPetState } from "../world/types.ts";
 import type { Game } from "../world/game.ts";
 import type { Detector } from "./detector.ts";
+import { verifyWithVision, visionEnabled, type VisionVerdict } from "./vision.ts";
 import { decodeJpeg, dHash, frameDifference, hamming, renderSticker } from "./image.ts";
 
 export class CaptureError extends Error {
@@ -64,18 +65,43 @@ export async function validateCapture(db: Db, detector: Detector | null, userId:
   if (diffs.every((d) => d < 0.15)) return reject("static_frames", "That looks like a still image. Point your camera at a real animal.", { diffs });
   if (diffs.some((d) => d > 40)) return reject("inconsistent_frames", "The frames don't match — hold the camera steady on the animal.", { diffs });
 
-  const results = [];
+  const results: Array<Awaited<ReturnType<Detector["detect"]>>> = [];
   for (const im of imgs) results.push(await detector.detect(im.data, im.width, im.height));
   const hits = results.filter((r) => r.best && r.best.score >= ECONOMY.catch.minDetectionScore);
-  if (hits.length < 2) {
-    const seen = results.flatMap((r) => r.all.filter((a) => a.score > 0.5).map((a) => a.cls));
-    return reject("no_animal", seen.length ? `No supported animal found (saw: ${[...new Set(seen)].join(", ")}). Cats and dogs are supported right now.` : "No supported animal found. Get closer, with good light.", { results });
-  }
-  const species = hits[0]!.best!.species;
-  if (hits.some((h) => h.best!.species !== species)) return reject("ambiguous", "Couldn't tell which animal this is. Try again with just one animal in view.", { results });
-  const bestIdx = results.findIndex((r) => r === hits.sort((a, b) => b.best!.score - a.best!.score)[0]);
+  const seen = () => [...new Set(results.flatMap((r) => r.all.filter((a) => a.score > 0.5).map((a) => a.cls)))];
+  // Best frame: the strongest detection, or the middle frame if the detector saw nothing.
+  const ranked = results.map((r, i) => [r.best?.score ?? 0, i] as const).sort((x, y) => y[0] - x[0]);
+  const bestIdx = ranked[0]![0] > 0 ? ranked[0]![1] : Math.floor(imgs.length / 2);
   const frame = imgs[bestIdx]!;
-  const det = results[bestIdx]!.best!;
+  let species: Species;
+  let bbox: [number, number, number, number];
+  let score: number;
+  let vision: VisionVerdict | null = null;
+  if (visionEnabled()) {
+    vision = await verifyWithVision(frame).catch((e) => { console.error("vision check failed, using on-server detector only:", (e as Error).message); return null; });
+  }
+  if (vision) {
+    // The vision model is the authority when configured.
+    if (!vision.animal || vision.species === "none") return reject("no_animal", `No animal found — ${vision.reason}`, { results, vision });
+    if (vision.species === "other") return reject("unsupported", `${vision.reason} Only cats and dogs can be caught right now.`, { results, vision });
+    if (!vision.live) return reject("not_live", `That looks like a screen, photo or toy — ${vision.reason} Catch a real animal in front of you.`, { results, vision });
+    if (vision.confidence < 0.6) return reject("unclear", "Couldn't get a clear look. Get a little closer, with good light.", { results, vision });
+    species = vision.species;
+    const coco = results[bestIdx]!.best;
+    bbox = vision.bbox ?? (coco && coco.species === species ? coco.bbox : [frame.width * 0.15, frame.height * 0.15, frame.width * 0.7, frame.height * 0.7]);
+    score = vision.confidence;
+  } else {
+    // On-server detector only: a majority of the burst must agree.
+    if (hits.length < Math.ceil(imgs.length / 2)) {
+      const s = seen();
+      return reject("no_animal", s.length ? `No supported animal found (saw: ${s.join(", ")}). Cats and dogs are supported right now.` : "No supported animal found. Get closer, with good light.", { results });
+    }
+    species = hits[0]!.best!.species;
+    if (hits.some((h) => h.best!.species !== species)) return reject("ambiguous", "Couldn't tell which animal this is. Try again with just one animal in view.", { results });
+    bbox = results[bestIdx]!.best!.bbox;
+    score = results[bestIdx]!.best!.score;
+  }
+  const det = { species, bbox, score };
   const hash = dHash(frame, det.bbox.map(Math.round) as [number, number, number, number]);
 
   const recent = await db.query<{ image_hash: string }>(`SELECT image_hash FROM catch_attempts WHERE image_hash IS NOT NULL AND status <> 'rejected' AND created_at > now() - interval '30 days'`);
@@ -91,7 +117,7 @@ export async function validateCapture(db: Db, detector: Detector | null, userId:
   await writeFile(join(env.mediaDir, "pending", `${id}.png`), sticker);
   await db.query(
     `INSERT INTO catch_attempts (id, user_id, status, species, detection, image_hash) VALUES ($1,$2,'valid',$3,$4,$5)`,
-    [id, userId, species, JSON.stringify({ cutout: !!cut, score: det.score, bbox: det.bbox, people: Math.max(...results.map((r) => r.people)), diffs }), hash],
+    [id, userId, species, JSON.stringify({ cutout: !!cut, vision: vision ? { species: vision.species, live: vision.live, confidence: vision.confidence } : null, score: det.score, bbox: det.bbox, people: Math.max(...results.map((r) => r.people)), diffs }), hash],
   );
   return { ok: true as const, attemptId: id, species, score: det.score, bbox: det.bbox, sticker: `data:image/png;base64,${sticker.toString("base64")}`, expiresAt: Date.now() + VALID_FOR_MS, quotes: quotes() };
 }
@@ -116,7 +142,9 @@ export async function resolveAttempt(db: Db, game: Game, userId: string, attempt
       throw new CaptureError("expired", "The animal wandered off (capture expired). Nothing was charged.");
     }
     const label = `${attemptId}:${clientNonce}`;
-    const roll = rollCatch(epoch.seed, label, tier);
+    const prior = await tx.query<{ n: string }>(`SELECT COUNT(*)::text n FROM catch_attempts WHERE user_id = $1 AND status = 'caught'`, [userId]);
+    const first = ECONOMY.catch.firstCatchGuaranteed && Number(prior.rows[0]!.n) === 0;
+    const roll = rollCatch(epoch.seed, label, tier, first);
     let petId: string | null = null;
     try {
       if (roll.success) {
@@ -152,9 +180,9 @@ export async function resolveAttempt(db: Db, game: Game, userId: string, attempt
     }
     await tx.query(
       `UPDATE catch_attempts SET status = $2, tier = $3, cost = $4, client_nonce = $5, epoch_id = $6, success = $7, rarity = $8, draws = $9, pet_id = $10, resolved_at = now() WHERE id = $1`,
-      [attemptId, roll.success ? "caught" : "failed", tier, cost.toString(), clientNonce, epoch.id, roll.success, roll.rarity, JSON.stringify(roll), petId],
+      [attemptId, roll.success ? "caught" : "failed", tier, cost.toString(), clientNonce, epoch.id, roll.success, roll.rarity, JSON.stringify({ ...roll, guaranteed: first }), petId],
     );
-    return { roll, petId, epoch: epoch.id, commitment: epoch.commitment };
+    return { roll, petId, epoch: epoch.id, commitment: epoch.commitment, first };
   });
 
   const pending = join(env.mediaDir, "pending", `${attemptId}.png`);
@@ -166,6 +194,7 @@ export async function resolveAttempt(db: Db, game: Game, userId: string, attempt
   await rm(pending, { force: true });
   return {
     success: result.roll.success,
+    firstCatch: result.first,
     rarity: result.roll.rarity,
     petId: result.petId,
     cost: toWire(cost),

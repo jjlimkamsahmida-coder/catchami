@@ -1,4 +1,4 @@
-import { ECONOMY, RESOURCES, inventoryWeight, type Resource } from "@catchami/shared";
+import { AREA_BOUNDS, ECONOMY, RESOURCE_LABEL, RESOURCES, inventoryWeight, type Resource } from "@catchami/shared";
 import { controlledPet, entities, store, useStore } from "../net/store.ts";
 import { send } from "../net/api.ts";
 import { fmt, PetArt, RarityTag, ResIcon, Sheet } from "./common.tsx";
@@ -42,7 +42,7 @@ function MerchantSheet({ id }: { id: string }) {
               {RESOURCES.map((r) => (
                 <div className="row" key={r}>
                   <ResIcon r={r} size={24} />
-                  <span className="grow" style={{ textTransform: "capitalize", fontWeight: 600 }}>{r}</span>
+                  <span className="grow" style={{ fontWeight: 600 }}>{RESOURCE_LABEL[r]}</span>
                   <span className="small muted">stock {det.detail.inventory[r]}</span>
                   <span className="num" style={{ minWidth: 70, textAlign: "right", fontWeight: 700 }}>{fmt(det.detail.prices[r])}</span>
                   <button className="btn sm leaf" disabled={!p || !p.carried[r]} onClick={() => sell({ [r]: p!.carried[r] })}>Sell {p?.carried[r] ?? 0}</button>
@@ -68,6 +68,9 @@ function PetSheet({ id }: { id: string }) {
   const last = e!.samples.at(-1);
   const cl = controlled ? entities.get(controlled.id)?.samples.at(-1) : null;
   const dist = last && cl ? Math.hypot(last[1] - cl[1], last[2] - cl[2]) : Infinity;
+  // Paw Village is a safe zone (the server enforces this too).
+  const inVillage = (px?: number) => px !== undefined && px / 32 >= AREA_BOUNDS.village[0] && px / 32 < AREA_BOUNDS.village[2];
+  const safe = inVillage(cl?.[1]) || inVillage(last?.[1]);
   return (
     <Sheet onClose={close}>
       <div className="row" style={{ gap: 14, alignItems: "flex-start" }}>
@@ -86,10 +89,10 @@ function PetSheet({ id }: { id: string }) {
           <button className="btn block" onClick={() => { send({ t: "select", petId: id }); store.set({ controlled: id, sheet: null }); }}>{controlled?.id === id ? "You're controlling this pet" : "Control this pet"}</button>
         ) : (
           <>
-            <button className="btn coral block" disabled={!controlled || dist > ECONOMY.battle.challengeRangePx} onClick={() => { send({ t: "br_challenge", petId: controlled!.id, targetId: id }); close(); }}>
-              {!controlled ? "Catch a pet first" : dist > ECONOMY.battle.challengeRangePx ? "Get closer to challenge" : `Bubble Roulette with ${controlled.name}`}
+            <button className="btn coral block" disabled={!controlled || safe || dist > ECONOMY.battle.challengeRangePx} onClick={() => { send({ t: "br_challenge", petId: controlled!.id, targetId: id }); close(); }}>
+              {!controlled ? "Catch a pet first" : safe ? "No battles in Paw Village" : dist > ECONOMY.battle.challengeRangePx ? "Get closer to challenge" : `Bubble Roulette with ${controlled.name}`}
             </button>
-            <button className="btn paper block sm" disabled={!controlled || dist > ECONOMY.battle.challengeRangePx} onClick={() => { send({ t: "challenge", petId: controlled!.id, targetId: id }); close(); }}>
+            <button className="btn paper block sm" disabled={!controlled || safe || dist > ECONOMY.battle.challengeRangePx} onClick={() => { send({ t: "challenge", petId: controlled!.id, targetId: id }); close(); }}>
               Quick scuffle (auto battle)
             </button>
             <p className="small muted" style={{ margin: 0 }}>Bubble Roulette is a live turn-based match — the other owner must be online and accept. HP is the score; a splash costs 20.</p>
@@ -112,7 +115,7 @@ function NodeSheet({ id }: { id: string }) {
   return (
     <Sheet onClose={close}>
       <div className="col" style={{ gap: 10 }}>
-        <div className="row"><ResIcon r={n.resource} size={34} /><h2 style={{ textTransform: "capitalize" }}>{n.resource} spot</h2></div>
+        <div className="row"><ResIcon r={n.resource} size={34} /><h2>{RESOURCE_LABEL[n.resource]} spot</h2></div>
         <dl className="kv">
           <dt>Available now</dt><dd>{rem === undefined ? "get closer to see" : rem <= 0 ? "picked clean — regrowing" : `${rem} of ${cfg.nodeCapacity}`}</dd>
           <dt>Weight per unit</dt><dd>{cfg.weight}</dd>

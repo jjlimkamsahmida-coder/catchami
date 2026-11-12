@@ -15,7 +15,7 @@
  *    disabled behind the legal gate (ECONOMY.battle.realTokenPvp + REAL_PVP_APPROVED).
  *  - An unfinished match is voided (no HP change) if the server restarts.
  */
-import { BUBBLE, ECONOMY, fromBattleHp, makeChamber, Rng, toBattleHp, type BubbleMatchView, type BubbleSide } from "@catchami/shared";
+import { battlesAllowed, BUBBLE, ECONOMY, fromBattleHp, makeChamber, Rng, toBattleHp, type BubbleMatchView, type BubbleSide } from "@catchami/shared";
 import { newId } from "../auth.ts";
 import type { Game, GameClient } from "./game.ts";
 import { GameError } from "./game.ts";
@@ -96,6 +96,7 @@ export class BubbleArena {
     if (p.s.status !== "active" && p.s.status !== "sleeping") return "not active";
     if (toBattleHp(p.s.hp, p.stats.maxHp) < BUBBLE.minHp) return "too low on HP";
     if (now - p.s.lastBattleAt < ECONOMY.battle.petCooldownSec * 1000) return "catching breath";
+    if (!battlesAllowed(this.game.world, p.s.x, p.s.y)) return "in Paw Village — battles only happen in the Forest and Mining Valley";
     return null;
   }
 

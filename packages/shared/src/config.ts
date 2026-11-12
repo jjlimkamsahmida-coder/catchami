@@ -15,6 +15,8 @@ export const RARITIES = ["common", "uncommon", "rare", "epic", "legendary", "myt
 export type Rarity = (typeof RARITIES)[number];
 
 export const RESOURCES = ["fish", "herbs", "wood", "minerals"] as const;
+/** Player-facing names ("minerals" is mined as stone in Mining Valley). */
+export const RESOURCE_LABEL = { fish: "Fish", herbs: "Herbs", wood: "Wood", minerals: "Stone" } as const;
 export type Resource = (typeof RESOURCES)[number];
 
 export const CATCH_TIERS = ["basic", "enhanced", "premium"] as const;
@@ -52,6 +54,10 @@ export const ECONOMY = {
     /** Valid detection but failed catch: everything to HQ. */
     failedSplit: { hq: 10_000 },
     maxCapturesPerUserPerDay: 30,
+    /** A player's first ever catch always succeeds (rarity is still a fair roll). */
+    firstCatchGuaranteed: true,
+    /** One-time starter grant on testnet/dev so a new player can afford their first CamiCube and meals. */
+    starterGrantWhole: 10_000_000,
     minDetectionScore: 0.6,
     duplicateHammingThreshold: 6,
   },

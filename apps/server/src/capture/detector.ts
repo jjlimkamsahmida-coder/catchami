@@ -51,9 +51,13 @@ export async function loadDetector(modelDir: string): Promise<Detector> {
     ready: true,
     async cutout(img, species, bbox) {
       if (!seg) return null;
-      const raw = await seg.segment(img, VOC[species]);
-      const m = cleanMask(raw, img.width, img.height, bbox.map(Math.round) as [number, number, number, number]);
-      return m ? renderCutout(img, m) : null;
+      // Segment only the animal's box (plus a margin) so the model's 513px input
+      // is spent on the animal, not the whole room: much sharper silhouettes.
+      const crop = cropAround(img, bbox, 0.14);
+      const raw = await seg.segment(crop.img, VOC[species]);
+      const box = [bbox[0] - crop.x, bbox[1] - crop.y, bbox[2], bbox[3]].map(Math.round) as [number, number, number, number];
+      const m = cleanMask(raw, crop.img.width, crop.img.height, box);
+      return m ? renderCutout(crop.img, m) : null;
     },
     async detect(rgba, w, h) {
       const rgb = new Uint8Array(w * h * 3);
@@ -71,4 +75,15 @@ export async function loadDetector(modelDir: string): Promise<Detector> {
       }
     },
   };
+}
+
+/** Copy the box (grown by `margin` of its size on each side) out of the frame. */
+function cropAround(img: Rgba, bbox: [number, number, number, number], margin: number) {
+  const [bx, by, bw, bh] = bbox;
+  const x = Math.max(0, Math.floor(bx - bw * margin)), y = Math.max(0, Math.floor(by - bh * margin));
+  const x2 = Math.min(img.width, Math.ceil(bx + bw * (1 + margin))), y2 = Math.min(img.height, Math.ceil(by + bh * (1 + margin)));
+  const w = Math.max(1, x2 - x), h = Math.max(1, y2 - y);
+  const data = new Uint8Array(w * h * 4);
+  for (let j = 0; j < h; j++) data.set(img.data.subarray(((y + j) * img.width + x) * 4, ((y + j) * img.width + x + w) * 4), j * w * 4);
+  return { x, y, img: { width: w, height: h, data } as Rgba };
 }

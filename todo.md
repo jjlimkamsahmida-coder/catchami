@@ -36,6 +36,7 @@
 - [ ] Monitoring / error tracking / alerts
 
 ## Art & sound
+- [ ] Generate the art in `docs/ASSET_PROMPTS.md` (the Keeper first, then Bubble Roulette) and drop it in `apps/web/art-src/raw/`
 - [ ] Final art for map, props, HQ, resource spots, merchants, icons (keys listed in ASSETS.md)
 - [ ] Capture charm design and catch animations
 - [ ] Sound effects and music
@@ -44,12 +45,18 @@
 - [ ] Play on my phone over Wi-Fi: https://192.168.0.167:5173 (allow Node through Windows Firewall if asked)
 - [ ] Optional: install `C:\Users\HP\AppData\Local\mkcert\rootCA.pem` on the phone to remove the certificate warning
 - [ ] Try real catches with real cats/dogs and report anything odd
+- [ ] Optional: add `OPENAI_API_KEY` to `.env` for the stricter animal check (see `docs/ASSET_PROMPTS.md`, bottom)
+- [ ] Try the laptop → phone QR catch and the NEAR testnet wallet sign-in (Meteor or MyNearWallet)
 - [ ] Invite a few testers for multiplayer
 
 ## Development still to build (ask Claude)
 - [ ] Operator signer + settlement batches + deposit/withdrawal indexer
 - [ ] World sharding (~250 pets per world)
-- [ ] NEAR wallet login
+- [x] NEAR testnet wallet sign-in (NEP-413 signed message)
+- [x] New-player journey: story intro, join, starter coins, first catch (QR hand-off on laptop), naming, tutorial
+- [x] Three areas: Paw Village (safe), Whispering Forest, Mining Valley
+- [ ] Better sticker cutouts (BiRefNet or a background-removal API) — decide which
+- [ ] Starter coins as a real testnet token transfer once the token contract is deployed
 - [ ] Sticker storage on S3/R2
 - [ ] Load testing and mobile device QA
 - [ ] Testnet deployment end to end (deposit → play → withdraw)

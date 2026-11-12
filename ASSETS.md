@@ -57,3 +57,13 @@ There is no audio yet. Suggested hooks: catch throw/wobble/success/fail, gather 
 ## Reference games
 
 Patch Quest (world density, scale, game feel) and CatchCat (real-animal capture) informed the direction. No assets, layouts or capture presentation were copied: the capture object is an original glowing seed-pod charm, and the world, palette and UI are original.
+
+## Batch 3 — Keeper, Bubble Roulette, gates, onboarding (sliced with `apps/web/scripts/slice-grid.ts`)
+
+Source sheets: `apps/web/art-src/raw/batch3/`. Output in `apps/web/public/assets/gen/`:
+
+- Keeper: `keeper` (main), `keeper-idle`, `keeper-toss`, `keeper-wave`, `keeper-point`
+- Bubble Roulette: `br-launcher-idle`, `br-bubble`, `br-pop`, `br-puff`, `br-dodge`, `br-suds`, `br-foam-hit` (unused: has a cat drawn in), `br-ribbon-win`, `br-ribbon-lose`, `br-hpbar` (unused), `br-loaded`, `br-empty`, `br-timer`, `br-arena-land.webp`, `br-arena-port.webp`
+- World props: `prop-forestgate`, `prop-minegate`, `prop-barricade`, `prop-signpost`, `prop-noticeboard`
+- Onboarding: `gift`, `handoff`; area cards `banner-village.webp`, `banner-forest.webp`, `banner-mines.webp`
+- Not used: the launcher's spin and fire frames (the source frames overlap their grid cells); the drum spin is animated in code instead.

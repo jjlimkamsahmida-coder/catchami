@@ -1,27 +1,33 @@
 /**
- * Catch flow. The on-device model only drives the live reticle; the server
- * re-runs detection on the uploaded frames and is the only authority.
- * Money is never taken for: no animal, unclear photo, duplicates, expired
- * captures, missed throws, or any server/network error.
+ * Catch flow: point the camera at a real cat or dog, pick a CamiCube, then
+ * throw it (flick, tap the animal, or Space). The throw grabs a short camera
+ * burst; the server verifies the animal and, if it's real and eligible,
+ * resolves the paid catch in the same motion.
+ *
+ * The on-device model only drives the live reticle; the server re-runs
+ * detection (and an optional vision check) and is the only authority.
+ * Nothing is charged for: missed throws, no/unsupported animal, screens or
+ * photos, duplicates, or any network/server error.
  */
 import { useEffect, useRef, useState } from "react";
-import { RARITY_LABEL, type CatchQuote, type CatchTier, type Rarity } from "@catchami/shared";
+import { ECONOMY, RARITY_LABEL, type CatchQuote, type CatchTier, type Rarity } from "@catchami/shared";
 import { store, toast, useStore } from "../net/store.ts";
 import { api, ApiError, refreshWallet } from "../net/api.ts";
 import * as art from "../game/art.ts";
 import { fmt, Icon, pct } from "./common.tsx";
 import { CollectorCard } from "./CollectorCard.tsx";
 import { CUBE, genUrl } from "../game/assets.ts";
+import { sfx } from "./sfx.ts";
 
 type Box = [number, number, number, number];
+type Frame = { b64: string; url: string; w: number; h: number };
 type Stage =
-  | { k: "camera" }
-  | { k: "checking" }
-  | { k: "rejected"; message: string }
-  | { k: "choose"; attemptId: string; species: string; quotes: CatchQuote[]; still: string; bbox: Box; frame: { w: number; h: number }; expiresAt: number; sticker: string | null }
-  | { k: "throw"; attemptId: string; tier: CatchTier; quote: CatchQuote; still: string; bbox: Box; frame: { w: number; h: number }; sticker: string | null; species: string }
-  | { k: "rolling"; still: string; at: { x: number; y: number }; sticker: string | null }
-  | { k: "result"; success: boolean; rarity: Rarity | null; petId: string | null; cost: string; label: string; epoch: number; still: string; sticker: string | null; species: string };
+  | { k: "aim" }
+  | { k: "flying"; from: Pt; to: Pt }
+  | { k: "working"; at: Pt; phase: "checking" | "rolling"; sticker: string | null }
+  | { k: "bounced"; at: Pt; message: string }
+  | { k: "result"; success: boolean; rarity: Rarity | null; petId: string | null; cost: string; label: string; epoch: number; sticker: string | null; species: string; first: boolean };
+type Pt = { x: number; y: number };
 
 interface Coco { detect(v: HTMLVideoElement, max?: number, min?: number): Promise<Array<{ class: string; score: number; bbox: Box }>> }
 let modelPromise: Promise<Coco> | null = null;
@@ -35,55 +41,72 @@ async function loadModel(): Promise<Coco> {
   return modelPromise;
 }
 
-/** CamiCube pose image (generated art), with the procedural charm as a fallback. */
 const cubeSrc = (pose: keyof typeof CUBE) => genUrl(CUBE[pose]);
 const fallbackCube = (() => { let u = ""; return () => (u ||= art.capsule().toDataURL()); })();
-function Cube({ pose, style, className = "capsule", ...rest }: { pose: keyof typeof CUBE; style?: React.CSSProperties; className?: string } & React.HTMLAttributes<HTMLImageElement>) {
+export function Cube({ pose, style, className = "capsule", ...rest }: { pose: keyof typeof CUBE; style?: React.CSSProperties; className?: string } & React.HTMLAttributes<HTMLImageElement>) {
   return <img className={className} src={cubeSrc(pose)} onError={(e) => { (e.target as HTMLImageElement).src = fallbackCube(); }} alt="CamiCube" draggable={false} style={style} {...rest} />;
 }
 
-export function CatchScreen() {
+const TIER_LABEL: Record<CatchTier, string> = { basic: "Basic", enhanced: "Enhanced", premium: "Premium" };
+
+export interface CatchProps {
+  /** Guided first catch (onboarding): basic cube, guaranteed success, no tier picker. */
+  first?: boolean;
+  onClose?: () => void;
+  /** Called after a successful catch with the new pet's id. */
+  onCaught?: (petId: string) => void;
+}
+
+export function CatchScreen({ first = false, onClose, onCaught }: CatchProps = {}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const [stage, setStage] = useState<Stage>({ k: "camera" });
+  const [stage, setStage] = useState<Stage>({ k: "aim" });
   const [camError, setCamError] = useState<string | null>(null);
   const [modelState, setModelState] = useState<"loading" | "ready" | "failed">("loading");
   const [live, setLive] = useState<{ box: Box; cls: string; score: number; streak: number } | null>(null);
+  const [quotes, setQuotes] = useState<CatchQuote[] | null>(null);
+  const [tier, setTier] = useState<CatchTier>("basic");
+  const [hint, setHint] = useState<string | null>(null);
   const wallet = useStore((s) => s.wallet);
-  const close = () => store.set({ screen: "world" });
+  const close = onClose ?? (() => store.set({ screen: "world" }));
+  const devPhoto = useRef<Frame[] | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const allowDevPhoto = new URLSearchParams(location.search).has("devphoto");
 
-  // Camera.
+  // Camera + model + prices.
   useEffect(() => {
     let stopped = false;
+    void api<{ quotes: CatchQuote[] }>("/api/catch/quotes").then((r) => setQuotes(r.quotes)).catch(() => {});
     if (!navigator.mediaDevices?.getUserMedia) { setCamError(window.isSecureContext ? "This browser can't open the camera." : "The camera needs a secure (https) connection."); return; }
     navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 960 } }, audio: false })
       .then((s) => { if (stopped) { s.getTracks().forEach((t) => t.stop()); return; } streamRef.current = s; if (videoRef.current) { videoRef.current.srcObject = s; void videoRef.current.play(); } })
-      .catch((e: DOMException) => setCamError(e.name === "NotAllowedError" ? "Camera permission was denied. Allow camera access to catch animals." : e.name === "NotFoundError" ? "No camera found on this device. Catching needs a live camera." : `Camera unavailable (${e.name}).`));
+      .catch((e: DOMException) => setCamError(e.name === "NotAllowedError" ? "Camera permission was denied. Allow camera access to catch animals." : e.name === "NotFoundError" ? "No camera found on this device." : `Camera unavailable (${e.name}).`));
     loadModel().then(() => setModelState("ready")).catch(() => setModelState("failed"));
     return () => { stopped = true; streamRef.current?.getTracks().forEach((t) => t.stop()); };
   }, []);
 
-  // Live detection loop (preview only).
+  // Live detection loop (reticle only — never decides anything).
   useEffect(() => {
-    if (stage.k !== "camera" || modelState !== "ready") return;
+    if (stage.k !== "aim" || modelState !== "ready") return;
     let alive = true;
     const loop = async () => {
       const v = videoRef.current;
       if (!alive) return;
       if (v && v.readyState >= 2) {
         const model = await loadModel();
-        const preds = await model.detect(v, 6, 0.4).catch(() => []);
+        const preds = await model.detect(v, 6, 0.35).catch(() => []);
         const best = preds.filter((p) => p.class === "cat" || p.class === "dog").sort((a, b) => b.score - a.score)[0];
         setLive((prev) => (best ? { box: best.bbox, cls: best.class, score: best.score, streak: prev && prev.cls === best.class ? prev.streak + 1 : 1 } : null));
       }
-      if (alive) setTimeout(loop, 220);
+      if (alive) setTimeout(loop, 200);
     };
     void loop();
     return () => { alive = false; };
   }, [stage.k, modelState]);
 
-  const grabFrame = (): { b64: string; url: string; w: number; h: number } => {
-    const v = videoRef.current!;
+  const grabFrame = (): Frame | null => {
+    const v = videoRef.current;
+    if (!v || !v.videoWidth) return null;
     const scale = Math.min(1, 960 / Math.max(v.videoWidth, v.videoHeight));
     const w = Math.round(v.videoWidth * scale), h = Math.round(v.videoHeight * scale);
     const c = document.createElement("canvas");
@@ -93,99 +116,144 @@ export function CatchScreen() {
     return { b64: url.split(",")[1]!, url, w, h };
   };
 
-  /** DEV NETWORK ONLY: check a photo instead of the camera. Same server-side detection, duplicate and paid-roll rules. */
-  const network = useStore((s) => s.network);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const checkPhoto = async (file: File) => {
-    setStage({ k: "checking" });
+  const quote = quotes?.find((q) => q.tier === (first ? "basic" : tier)) ?? null;
+  const afford = !!(quote && wallet && BigInt(wallet.available) >= BigInt(quote.cost));
+  const target = (): { box: { left: number; top: number; width: number; height: number } | null } => {
+    const v = videoRef.current;
+    return { box: live && v && v.videoWidth ? toScreen(live.box, v.videoWidth, v.videoHeight) : null };
+  };
+  const start = (): Pt => ({ x: window.innerWidth / 2, y: window.innerHeight - (first ? 150 : 200) });
+
+  /** Throw toward a screen point. The camera burst is taken during the flight. */
+  const throwAt = async (to: Pt) => {
+    if (stage.k !== "aim") return;
+    if (camError && !devPhoto.current) return;
+    if (!quote) { setHint("Loading prices…"); return; }
+    if (!afford) { setHint(`You need ${fmt(quote.cost)} $CATCHAMI for this cube.`); return; }
+    const t = target().box;
+    const from = start();
+    sfx.whoosh();
+    setStage({ k: "flying", from, to });
+    const frames: Frame[] = [];
+    if (devPhoto.current) frames.push(...devPhoto.current);
+    else for (let i = 0; i < 3; i++) { const f = grabFrame(); if (f) frames.push(f); await sleep(130); }
+    await sleep(Math.max(0, 480 - frames.length * 130));
+    // A visible animal box that the cube clearly missed: free retry.
+    if (t) {
+      const cx = t.left + t.width / 2, cy = t.top + t.height / 2;
+      const rx = Math.max(70, t.width * 0.65), ry = Math.max(70, t.height * 0.65);
+      if (((to.x - cx) / rx) ** 2 + ((to.y - cy) / ry) ** 2 > 1) { setStage({ k: "bounced", at: to, message: "Missed! No charge — throw again." }); return; }
+    }
+    if (frames.length < 2) { setStage({ k: "bounced", at: to, message: "The camera isn't ready yet. Nothing was charged." }); return; }
+    setStage({ k: "working", at: to, phase: "checking", sticker: null });
     try {
-      const img = await createImageBitmap(file);
-      const scale = Math.min(1, 960 / Math.max(img.width, img.height));
-      const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
-      const frame = (brightness: number) => {
-        const c = document.createElement("canvas"); c.width = w; c.height = h;
-        const g = c.getContext("2d")!; g.filter = `brightness(${brightness})`; g.drawImage(img, 0, 0, w, h);
-        const url = c.toDataURL("image/jpeg", 0.88);
-        return { url, b64: url.split(",")[1]!, w, h };
-      };
-      // A camera burst differs slightly frame to frame; mimic that so the liveness check behaves the same.
-      const frames = [frame(1), frame(1.05)];
-      const r = await api("/api/catch/validate", { frames: frames.map((f) => f.b64) });
-      if (!r.ok) { setStage({ k: "rejected", message: r.message }); return; }
-      const f = frames[0]!;
-      setStage({ k: "choose", attemptId: r.attemptId, species: r.species, quotes: r.quotes, still: f.url, bbox: r.bbox ?? [w * 0.3, h * 0.3, w * 0.4, h * 0.4], frame: { w, h }, expiresAt: r.expiresAt, sticker: r.sticker ?? null });
+      const v = await api("/api/catch/validate", { frames: frames.map((f) => f.b64) });
+      if (!v.ok) { sfx.bad(); setStage({ k: "bounced", at: to, message: `${v.message} Nothing was charged.` }); return; }
+      setStage({ k: "working", at: to, phase: "rolling", sticker: v.sticker ?? null });
+      const t0 = Date.now();
+      const r = await submit(v.attemptId, first ? "basic" : tier, nonce());
+      await sleep(Math.max(0, 3200 - (Date.now() - t0)));
+      if (r.success) sfx.win(); else sfx.bad();
+      setStage({ k: "result", success: r.success, rarity: r.rarity, petId: r.petId, cost: r.cost, label: r.fairness?.label ?? "", epoch: r.fairness?.epoch ?? 0, sticker: v.sticker ?? null, species: v.species, first: Boolean(r.firstCatch) });
+      void refreshWallet();
     } catch (e) {
-      setStage({ k: "rejected", message: `${(e as Error).message} Nothing was charged.` });
+      setStage({ k: "bounced", at: to, message: `${(e as Error).message} Nothing was charged.` });
     }
   };
 
-  const check = async () => {
-    setStage({ k: "checking" });
-    const frames: Array<ReturnType<typeof grabFrame>> = [];
-    for (let i = 0; i < 3; i++) { frames.push(grabFrame()); await new Promise((r) => setTimeout(r, 180)); }
-    try {
-      const r = await api("/api/catch/validate", { frames: frames.map((f) => f.b64) });
-      if (!r.ok) { setStage({ k: "rejected", message: r.message }); return; }
-      const f = frames[0]!;
-      const box: Box = live ? scaleBox(live.box, videoRef.current!, f.w) : [f.w * 0.3, f.h * 0.3, f.w * 0.4, f.h * 0.4];
-      setStage({ k: "choose", attemptId: r.attemptId, species: r.species, quotes: r.quotes, still: f.url, bbox: box, frame: { w: f.w, h: f.h }, expiresAt: r.expiresAt, sticker: r.sticker ?? null });
-    } catch (e) {
-      setStage({ k: "rejected", message: `${(e as Error).message} Nothing was charged.` });
-    }
+  // Mouse / keyboard: Space or Enter throws at the animal (or the centre).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.code === "Space" || e.key === "Enter") && stage.k === "aim") {
+        e.preventDefault();
+        const t = target().box;
+        void throwAt(t ? { x: t.left + t.width / 2, y: t.top + t.height / 2 } : { x: window.innerWidth / 2, y: window.innerHeight * 0.42 });
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  const loadDevPhoto = async (file: File) => {
+    const img = await createImageBitmap(file);
+    const scale = Math.min(1, 960 / Math.max(img.width, img.height));
+    const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+    const frame = (b: number): Frame => {
+      const c = document.createElement("canvas"); c.width = w; c.height = h;
+      const g = c.getContext("2d")!; g.filter = `brightness(${b})`; g.drawImage(img, 0, 0, w, h);
+      const url = c.toDataURL("image/jpeg", 0.88);
+      return { url, b64: url.split(",")[1]!, w, h };
+    };
+    devPhoto.current = [frame(1), frame(1.05)];
+    setCamError(null);
+    setHint("Dev photo loaded — throw the cube.");
   };
 
+  const t = target().box;
+  const locked = !!(live && live.streak >= 2);
   return (
     <div className="catch">
-      <video ref={videoRef} playsInline muted style={{ display: stage.k === "camera" || stage.k === "checking" ? "block" : "none" }} />
-      {"still" in stage && <img src={stage.still} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
+      <video ref={videoRef} playsInline muted style={{ display: devPhoto.current ? "none" : "block" }} />
+      {devPhoto.current && <img src={devPhoto.current[0]!.url} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
       <div className="top">
         <button className="btn paper sm" onClick={close} aria-label="Close"><Icon name="close" /></button>
-        <div className="chip"><span className="coin" style={{ width: 22, height: 22, borderRadius: 99, background: "var(--sun)", border: "2px solid var(--ink)", display: "inline-block" }} /> {fmt(wallet?.available)}</div>
+        <div className="grow" />
+        <div className="chip"><img src={genUrl("ui-coin")} alt="" style={{ width: 22, height: 22 }} /> {fmt(wallet?.available)}</div>
       </div>
 
-      {stage.k === "camera" && (
+      {stage.k === "aim" && (
         <>
-          {live && videoRef.current && <Reticle box={live.box} video={videoRef.current} />}
-          <div className="status panel" style={{ padding: "6px 14px", fontWeight: 600 }}>
-            {camError ?? (modelState === "loading" ? "Warming up animal finder…" : modelState === "failed" ? "Live preview unavailable — you can still try a check" : live ? `${live.cls === "cat" ? "Cat" : "Dog"} spotted!` : "Point at a real cat or dog")}
+          {t && <div className={`reticle ${locked ? "locked" : ""}`} style={t}><span className="reticle-tag">{live!.cls === "cat" ? "Cat" : "Dog"}{locked ? " · throw!" : ""}</span></div>}
+          {/* Tap the photo to throw there (mouse friendly). */}
+          <div style={{ position: "absolute", inset: 0, zIndex: 2, cursor: "crosshair" }} onClick={(e) => void throwAt({ x: e.clientX, y: e.clientY })} />
+          <div className="status panel catch-status">
+            {camError ?? hint ?? (modelState === "loading" ? "Warming up the animal finder…" : locked ? "Got it! Flick or tap to throw" : live ? "Hold steady…" : "Point at a real cat or dog")}
           </div>
-          <div className="bottom col" style={{ alignItems: "center" }}>
-            <Cube pose={live && live.streak >= 2 ? "excited" : "happy"} className="" style={{ width: 92, height: 92, objectFit: "contain", animation: live && live.streak >= 2 ? "cubehop 0.5s ease-in-out infinite" : "cubebob 2.4s ease-in-out infinite", filter: "drop-shadow(0 6px 0 rgba(43,29,58,0.35))" }} />
-            <button className="btn coral" style={{ minWidth: 220, fontSize: 18 }} disabled={!!camError || (modelState === "ready" && (!live || live.streak < 2))} onClick={check}>
-              {live && live.streak >= 2 ? "Lock on" : "Find an animal"}
-            </button>
-            {network === "dev" && (
+          <ThrowCube start={start()} disabled={!!camError && !devPhoto.current} onThrow={(to) => void throwAt(to)} excited={locked} />
+          <div className="bottom catch-bottom">
+            {first ? (
+              <div className="panel catch-note">
+                <b>Your first CamiCube always holds!</b> Costs {quote ? fmt(quote.cost) : "…"} from your starter coins — rarity is still a fair roll.
+              </div>
+            ) : (
+              <div className="tier-chips">
+                {(quotes ?? []).map((q) => (
+                  <button key={q.tier} className={`tier-chip ${tier === q.tier ? "on" : ""}`} onClick={() => setTier(q.tier)}>
+                    <b>{TIER_LABEL[q.tier]}</b><span>{fmt(q.cost)}</span><small>{pct(q.successPpm)} catch</small>
+                  </button>
+                ))}
+              </div>
+            )}
+            {quote && !first && <p className="catch-fine">Caught: {fmt(quote.split.pet)} goes into your pet's piggy bank. Escaped: {fmt(quote.failedToHq)} goes to HQ. Missed throws and invalid photos are free.</p>}
+            {allowDevPhoto && (
               <>
-                <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void checkPhoto(f); e.target.value = ""; }} />
-                <button className="btn paper sm" onClick={() => fileRef.current?.click()}>Use a photo instead (dev network only)</button>
+                <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void loadDevPhoto(f); e.target.value = ""; }} />
+                <button className="btn paper sm" style={{ alignSelf: "center" }} onClick={() => fileRef.current?.click()}>Dev: load a test photo</button>
               </>
             )}
-            <p className="panel small" style={{ padding: "6px 10px", margin: 0, textAlign: "center", maxWidth: 360 }}>Checking an animal is free. You only choose and pay for a catch attempt after Catchami confirms a real, eligible animal.</p>
           </div>
         </>
       )}
-      {stage.k === "checking" && <div className="status panel" style={{ padding: "8px 16px", fontWeight: 600 }}>Checking the animal…</div>}
-      {stage.k === "rejected" && (
-        <div className="bottom"><div className="panel col" style={{ padding: 16 }}>
-          <h3>Not a valid capture</h3>
-          <p style={{ margin: 0 }}>{stage.message}</p>
-          <p className="small muted" style={{ margin: 0 }}>Nothing was charged.</p>
-          <button className="btn" onClick={() => setStage({ k: "camera" })}>Try again</button>
-        </div></div>
+      {stage.k === "flying" && <FlyingCube from={stage.from} to={stage.to} />}
+      {stage.k === "working" && <CaptureSequence at={stage.at} sticker={stage.sticker} phase={stage.phase} />}
+      {stage.k === "bounced" && (
+        <>
+          <Cube pose="dizzy" style={{ left: stage.at.x - 48, top: stage.at.y - 48, width: 96, height: 96, objectFit: "contain", animation: "cubebounce 0.7s ease-out forwards" }} />
+          <div className="bottom"><div className="panel col" style={{ padding: 16 }}>
+            <h3 style={{ margin: 0 }}>The cube bounced off</h3>
+            <p style={{ margin: 0 }}>{stage.message}</p>
+            <button className="btn coral" onClick={() => { setHint(null); setStage({ k: "aim" }); }}>Try again</button>
+          </div></div>
+        </>
       )}
-      {stage.k === "choose" && <TierPicker stage={stage} onPick={(tier) => setStage({ k: "throw", attemptId: stage.attemptId, tier, quote: stage.quotes.find((q) => q.tier === tier)!, still: stage.still, bbox: stage.bbox, frame: stage.frame, sticker: stage.sticker, species: stage.species })} onCancel={() => setStage({ k: "camera" })} />}
-      {stage.k === "throw" && <Throw stage={stage} onResolved={setStage} />}
-      {stage.k === "rolling" && <CaptureSequence at={stage.at} sticker={stage.sticker} />}
-      {stage.k === "result" && <Result stage={stage} onAgain={() => setStage({ k: "camera" })} />}
-      <style>{`@keyframes wobble { 0%,100% { transform: rotate(0) } 25% { transform: rotate(-18deg) } 75% { transform: rotate(18deg) } } @keyframes cubebob { 50% { transform: translateY(-6px) } } @keyframes cubehop { 50% { transform: translateY(-14px) scale(1.06) } } @keyframes cubespin { to { transform: rotate(360deg) } } @keyframes cubepop { from { transform: scale(0.6) } to { transform: scale(1) } } @keyframes suckin { to { transform: translateY(150px) scale(0.05) rotate(25deg); opacity: 0.2 } } @keyframes pulse { to { transform: scale(1.15); opacity: 0.7 } }`}</style>
+      {stage.k === "result" && <Result stage={stage} first={first} onAgain={() => setStage({ k: "aim" })} onCaught={onCaught} />}
+      <style>{`@keyframes wobble { 0%,100% { transform: rotate(0) } 25% { transform: rotate(-18deg) } 75% { transform: rotate(18deg) } } @keyframes cubebob { 50% { transform: translateY(-6px) } } @keyframes cubehop { 50% { transform: translateY(-14px) scale(1.06) } } @keyframes cubespin { to { transform: rotate(360deg) } } @keyframes cubepop { from { transform: scale(0.6) } to { transform: scale(1) } } @keyframes suckin { to { transform: translateY(150px) scale(0.05) rotate(25deg); opacity: 0.2 } } @keyframes pulse { to { transform: scale(1.15); opacity: 0.7 } } @keyframes cubebounce { 0% { transform: translate(0,0) rotate(0) } 40% { transform: translate(40px,-60px) rotate(120deg) } 100% { transform: translate(90px,140px) rotate(260deg); opacity: 0 } }`}</style>
     </div>
   );
 }
 
-function scaleBox(b: Box, v: HTMLVideoElement, frameW: number): Box {
-  const k = frameW / v.videoWidth;
-  return [b[0] * k, b[1] * k, b[2] * k, b[3] * k];
-}
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const nonce = () => Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(36).padStart(2, "0")).join("").slice(0, 20);
 
 /** Map a box in source-image pixels to screen pixels for an object-fit: cover element. */
 function toScreen(b: Box, srcW: number, srcH: number) {
@@ -195,121 +263,42 @@ function toScreen(b: Box, srcW: number, srcH: number) {
   return { left: ox + b[0] * s, top: oy + b[1] * s, width: b[2] * s, height: b[3] * s };
 }
 
-function Reticle({ box, video }: { box: Box; video: HTMLVideoElement }) {
-  return <div className="reticle" style={toScreen(box, video.videoWidth, video.videoHeight)} />;
-}
-
-function TierPicker({ stage, onPick, onCancel }: { stage: Extract<Stage, { k: "choose" }>; onPick: (t: CatchTier) => void; onCancel: () => void }) {
-  const [tier, setTier] = useState<CatchTier>("basic");
-  const wallet = useStore((s) => s.wallet);
-  const q = stage.quotes.find((x) => x.tier === tier)!;
-  const afford = wallet ? BigInt(wallet.available) >= BigInt(q.cost) : false;
-  const left = Math.max(0, Math.round((stage.expiresAt - Date.now()) / 60000));
+/** The cube in your hand: drag and flick it upward to throw. */
+function ThrowCube({ start, disabled, excited, onThrow }: { start: Pt; disabled: boolean; excited: boolean; onThrow: (to: Pt) => void }) {
+  const [pos, setPos] = useState<Pt | null>(null);
+  const drag = useRef<{ id: number; pts: Array<Pt & { t: number }> } | null>(null);
+  const p = pos ?? start;
   return (
-    <div className="bottom">
-      <div className="panel col" style={{ padding: 14, gap: 10, maxHeight: "72vh", overflow: "auto" }}>
-        <div className="row">
-          {stage.sticker && <img src={stage.sticker} alt="" style={{ width: 64, height: 64, objectFit: "contain" }} />}
-          <h3 className="grow">Real {stage.species} confirmed!</h3><span className="small muted">{left} min to throw</span>
-        </div>
-        <div className="col" style={{ gap: 8 }}>
-          {stage.quotes.map((x) => (
-            <button key={x.tier} className={`card tier ${tier === x.tier ? "on" : ""}`} onClick={() => setTier(x.tier)}>
-              <div className="row"><b className="grow" style={{ textTransform: "capitalize" }}>{x.tier} CamiCube</b><b className="num">{fmt(x.cost)}</b></div>
-              <div className="small">Catch chance <b>{pct(x.successPpm)}</b></div>
-              <div className="odds">{(Object.keys(x.rarityPpm) as Rarity[]).map((r) => <span key={r}>{RARITY_LABEL[r]} <b>{pct(x.rarityPpm[r])}</b></span>)}</div>
-            </button>
-          ))}
-        </div>
-        <div className="notice small">
-          <b>If caught:</b> {fmt(q.split.pet)} goes into your new pet's balance, {fmt(q.split.hq)} to HQ, {fmt(q.split.team)} to the team.<br />
-          <b>If it escapes:</b> the full {fmt(q.failedToHq)} goes to HQ and no NFT is created.<br />
-          A missed throw costs nothing — you can throw again. Rarity odds apply after a successful catch; Mythic is never guaranteed.
-        </div>
-        <div className="row">
-          <button className="btn paper" onClick={onCancel}>Back</button>
-          <button className="btn coral grow" disabled={!afford} onClick={() => onPick(tier)}>{afford ? `Throw ${tier} CamiCube · ${fmt(q.cost)}` : "Not enough tokens"}</button>
-        </div>
-      </div>
-    </div>
+    <Cube pose={excited ? "excited" : "happy"}
+      style={{ left: p.x - 52, top: p.y - 52, width: 104, height: 104, objectFit: "contain", zIndex: 4, cursor: disabled ? "default" : "grab", touchAction: "none",
+        animation: pos ? undefined : excited ? "cubehop 0.5s ease-in-out infinite" : "cubebob 2.4s ease-in-out infinite", filter: "drop-shadow(0 8px 0 rgba(43,29,58,0.35))", opacity: disabled ? 0.5 : 1 }}
+      onPointerDown={(e) => { if (disabled) return; e.stopPropagation(); (e.target as HTMLElement).setPointerCapture(e.pointerId); drag.current = { id: e.pointerId, pts: [{ x: e.clientX, y: e.clientY, t: performance.now() }] }; }}
+      onPointerMove={(e) => { const d = drag.current; if (!d || d.id !== e.pointerId) return; d.pts.push({ x: e.clientX, y: e.clientY, t: performance.now() }); if (d.pts.length > 6) d.pts.shift(); setPos({ x: e.clientX, y: e.clientY }); }}
+      onPointerUp={(e) => {
+        e.stopPropagation();
+        const d = drag.current; drag.current = null; setPos(null);
+        if (!d || d.pts.length < 2) return;
+        const a = d.pts[0]!, b = d.pts[d.pts.length - 1]!;
+        const dt = Math.max(16, b.t - a.t), vx = (b.x - a.x) / dt, vy = (b.y - a.y) / dt;
+        if (vy > -0.3) return; // not a flick upward
+        const speed = Math.hypot(vx, vy);
+        const dist = Math.min(window.innerHeight * 0.85, speed * 420);
+        onThrow({ x: b.x + (vx / speed) * dist, y: b.y + (vy / speed) * dist });
+      }} />
   );
 }
 
-function Throw({ stage, onResolved }: { stage: Extract<Stage, { k: "throw" }>; onResolved: (s: Stage) => void }) {
-  const target = toScreen(stage.bbox, stage.frame.w, stage.frame.h);
-  const start = { x: window.innerWidth / 2, y: window.innerHeight - 140 };
-  const [pos, setPos] = useState(start);
-  const [flying, setFlying] = useState(false);
-  const finePointer = window.matchMedia("(pointer: fine)").matches;
-  const [hint, setHint] = useState(finePointer ? "Click the animal (or press Space) to throw — or drag & flick the CamiCube" : "Drag the CamiCube and flick it at the animal");
-  const drag = useRef<{ id: number; pts: Array<{ x: number; y: number; t: number }> } | null>(null);
-  const nonce = useRef(Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(36).padStart(2, "0")).join("").slice(0, 20));
-
-  const release = async (vx: number, vy: number, aim?: { x: number; y: number }) => {
-    if (flying) return;
-    if (!aim && vy > -0.3) { setPos(start); setHint("Flick upward toward the animal"); return; }
-    setFlying(true);
-    // Ballistic-ish flight: distance from flick speed, or straight at a clicked point (mouse/keyboard).
-    const speed = Math.hypot(vx, vy) || 1;
-    const dist = Math.min(window.innerHeight * 0.9, speed * 420);
-    const land = aim ?? { x: pos.x + (vx / speed) * dist, y: pos.y + (vy / speed) * dist };
-    const steps = 22;
-    for (let i = 1; i <= steps; i++) {
-      const k = i / steps;
-      setPos({ x: pos.x + (land.x - pos.x) * k, y: pos.y + (land.y - pos.y) * k - Math.sin(k * Math.PI) * 120 });
-      await new Promise((r) => setTimeout(r, 16));
-    }
-    const cx = target.left + target.width / 2, cy = target.top + target.height / 2;
-    const rx = Math.max(60, target.width * 0.6), ry = Math.max(60, target.height * 0.6);
-    const hit = ((land.x - cx) / rx) ** 2 + ((land.y - cy) / ry) ** 2 <= 1;
-    if (!hit) {
-      setHint("Missed! No charge — throw again");
-      setFlying(false);
-      setPos(start);
-      return;
-    }
-    onResolved({ k: "rolling", still: stage.still, at: land, sticker: stage.sticker });
-    const t0 = Date.now();
-    try {
-      const r = await submit(stage.attemptId, stage.tier, nonce.current);
-      await new Promise((res) => setTimeout(res, Math.max(0, 3300 - (Date.now() - t0))));
-      onResolved({ k: "result", success: r.success, rarity: r.rarity, petId: r.petId, cost: r.cost, label: r.fairness?.label ?? `${stage.attemptId}:${nonce.current}`, epoch: r.fairness?.epoch ?? r.epoch_id, still: stage.still, sticker: stage.sticker, species: stage.species });
-      void refreshWallet();
-    } catch (e) {
-      toast("bad", (e as Error).message);
-      onResolved(stage);
-    }
-  };
-
-  const aimAt = (x: number, y: number) => { setPos(start); void release(0, -1, { x, y }); };
+function FlyingCube({ from, to }: { from: Pt; to: Pt }) {
+  const [k, setK] = useState(0);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.code === "Space" || e.key === "Enter") { e.preventDefault(); aimAt(target.left + target.width / 2, target.top + target.height / 2); }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  });
-  return (
-    <>
-      {/* Click/tap anywhere on the photo to throw there (mouse-friendly). Drag on the cube still flicks. */}
-      <div style={{ position: "absolute", inset: 0, zIndex: 2, cursor: "crosshair" }} onClick={(e) => aimAt(e.clientX, e.clientY)} />
-      <div className="reticle" style={{ ...target, borderStyle: "dashed", zIndex: 3 }} />
-      <div className="status panel" style={{ padding: "6px 14px", fontWeight: 600 }}>{hint}</div>
-      <Cube pose={flying ? "fly" : "happy"}
-        style={{ left: pos.x - 48, top: pos.y - 48, width: 96, height: 96, objectFit: "contain", transition: flying ? "none" : "left 0.15s, top 0.15s", animation: flying ? "cubespin 0.35s linear infinite" : undefined }}
-        onPointerDown={(e) => { if (flying) return; (e.target as HTMLElement).setPointerCapture(e.pointerId); drag.current = { id: e.pointerId, pts: [{ x: e.clientX, y: e.clientY, t: performance.now() }] }; }}
-        onPointerMove={(e) => { const d = drag.current; if (!d || d.id !== e.pointerId) return; d.pts.push({ x: e.clientX, y: e.clientY, t: performance.now() }); if (d.pts.length > 6) d.pts.shift(); setPos({ x: e.clientX, y: e.clientY }); }}
-        onPointerUp={(e) => {
-          const d = drag.current; drag.current = null;
-          if (!d || d.pts.length < 2) return;
-          const a = d.pts[0]!, b = d.pts[d.pts.length - 1]!;
-          const dt = Math.max(16, b.t - a.t);
-          void release((b.x - a.x) / dt, (b.y - a.y) / dt);
-          void e;
-        }} />
-      <div className="bottom"><p className="panel small" style={{ margin: 0, padding: "6px 10px", textAlign: "center" }}>{stage.tier} CamiCube · {fmt(stage.quote.cost)} · {pct(stage.quote.successPpm)} catch chance</p></div>
-    </>
-  );
+    let raf = 0; const t0 = performance.now();
+    const tick = () => { const v = Math.min(1, (performance.now() - t0) / 460); setK(v); if (v < 1) raf = requestAnimationFrame(tick); };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  const x = from.x + (to.x - from.x) * k, y = from.y + (to.y - from.y) * k - Math.sin(k * Math.PI) * 140;
+  const size = 104 - 40 * k;
+  return <Cube pose="fly" style={{ left: x - size / 2, top: y - size / 2, width: size, height: size, objectFit: "contain", zIndex: 4, animation: "cubespin 0.35s linear infinite" }} />;
 }
 
 /** Resolve the paid attempt. If the response is lost, look the attempt up instead of guessing. */
@@ -325,54 +314,64 @@ async function submit(attemptId: string, tier: CatchTier, clientNonce: string) {
   }
 }
 
-/** Unfold → the animal is pulled in → the cube wobbles shut three times. */
-function CaptureSequence({ at, sticker }: { at: { x: number; y: number }; sticker: string | null }) {
-  const [phase, setPhase] = useState<"open" | "wobble">("open");
-  useEffect(() => { const t = setTimeout(() => setPhase("wobble"), 1100); return () => clearTimeout(t); }, []);
+/** Cube lands → opens → the animal is pulled in → it wobbles shut three times. */
+function CaptureSequence({ at, sticker, phase }: { at: Pt; sticker: string | null; phase: "checking" | "rolling" }) {
+  const [shut, setShut] = useState(false);
+  useEffect(() => { if (phase !== "rolling") return; const t = setTimeout(() => setShut(true), 1100); return () => clearTimeout(t); }, [phase]);
+  const open = phase === "rolling" && !shut;
   return (
     <>
-      {phase === "open" && sticker && <img src={sticker} alt="" style={{ position: "absolute", left: at.x - 70, top: at.y - 190, width: 140, height: 140, objectFit: "contain", zIndex: 4, animation: "suckin 1.05s cubic-bezier(.6,0,.9,.4) forwards" }} />}
-      {phase === "open" && <div style={{ position: "absolute", left: at.x - 90, top: at.y - 110, width: 180, height: 180, borderRadius: "50%", background: "radial-gradient(circle, rgba(255,226,120,0.85), rgba(255,226,120,0) 70%)", zIndex: 3, animation: "pulse 0.5s ease-in-out infinite alternate" }} />}
-      <Cube pose={phase === "open" ? "open" : "wobble"} style={{ left: at.x - 56, top: at.y - 56, width: 112, height: 112, objectFit: "contain", zIndex: 5, animation: phase === "wobble" ? "wobble 0.7s ease-in-out 3" : "cubepop 0.3s ease-out" }} />
+      {open && sticker && <img src={sticker} alt="" style={{ position: "absolute", left: at.x - 70, top: at.y - 190, width: 140, height: 140, objectFit: "contain", zIndex: 4, animation: "suckin 1.05s cubic-bezier(.6,0,.9,.4) forwards" }} />}
+      {phase === "checking" && <div style={{ position: "absolute", left: at.x - 90, top: at.y - 90, width: 180, height: 180, borderRadius: "50%", background: "radial-gradient(circle, rgba(140,220,255,0.7), rgba(140,220,255,0) 70%)", zIndex: 3, animation: "pulse 0.5s ease-in-out infinite alternate" }} />}
+      {open && <div style={{ position: "absolute", left: at.x - 90, top: at.y - 110, width: 180, height: 180, borderRadius: "50%", background: "radial-gradient(circle, rgba(255,226,120,0.85), rgba(255,226,120,0) 70%)", zIndex: 3, animation: "pulse 0.5s ease-in-out infinite alternate" }} />}
+      <Cube pose={phase === "checking" ? "excited" : open ? "open" : "wobble"} style={{ left: at.x - 56, top: at.y - 56, width: 112, height: 112, objectFit: "contain", zIndex: 5, animation: shut ? "wobble 0.7s ease-in-out 3" : phase === "checking" ? "cubehop 0.45s ease-in-out infinite" : "cubepop 0.3s ease-out" }} />
+      <div className="status panel catch-status">{phase === "checking" ? "Checking the animal…" : shut ? "Wobble… wobble…" : "Cami spark found!"}</div>
     </>
   );
 }
 
-function Result({ stage, onAgain }: { stage: Extract<Stage, { k: "result" }>; onAgain: () => void }) {
+function Result({ stage, first, onAgain, onCaught }: { stage: Extract<Stage, { k: "result" }>; first: boolean; onAgain: () => void; onCaught?: (petId: string) => void }) {
   const own = useStore((s) => s.own);
   const pet = own.find((p) => p.id === stage.petId);
   return (
-    <div className="bottom full" style={{ top: 0, display: "flex", flexDirection: "column", justifyContent: "flex-end", overflow: "auto", background: "rgba(43,29,58,0.45)" }}>
+    <div className="bottom full" style={{ top: 0, display: "flex", flexDirection: "column", justifyContent: "flex-end", overflow: "auto", background: "rgba(43,29,58,0.5)" }}>
       <div className="col" style={{ alignItems: "center", gap: 10, padding: "16px 0" }}>
         {stage.success ? (
           <>
             <div className="row" style={{ gap: 6 }}>
               <Cube pose="excited" className="" style={{ width: 70, height: 70, objectFit: "contain", animation: "cubehop 0.6s ease-in-out 3" }} />
-              <h2 style={{ color: "#fff", WebkitTextStroke: "4px #2b1d3a", paintOrder: "stroke fill", fontSize: 30 }}>Caught{pet ? ` ${pet.name}` : ""}!</h2>
+              <h2 className="outline-title" style={{ fontSize: 30 }}>Caught!</h2>
             </div>
             <CollectorCard flipIn width={Math.min(300, window.innerWidth - 48)} card={{
               id: stage.petId ?? "pet_new", name: pet?.name ?? "New friend", species: (pet?.species ?? stage.species) as "cat" | "dog", rarity: (stage.rarity ?? "common") as Rarity,
               sticker: pet?.sticker ?? (stage.petId ? `/media/stickers/${stage.petId}.png` : stage.sticker), look: pet?.look ?? { hue: 30, outline: 0, pattern: 0, bounce: 100 },
               stats: pet?.baseStats ?? null, traits: pet?.traits,
             }} />
+            <span className="rarity-pill">{RARITY_LABEL[(stage.rarity ?? "common") as Rarity]}</span>
           </>
         ) : (
           <>
             <Cube pose="dizzy" className="" style={{ width: 130, height: 130, objectFit: "contain", animation: "wobble 0.5s ease-in-out 2" }} />
-            <h2 style={{ color: "#fff", WebkitTextStroke: "4px #2b1d3a", paintOrder: "stroke fill", fontSize: 28 }}>It slipped away…</h2>
+            <h2 className="outline-title" style={{ fontSize: 28 }}>It slipped away…</h2>
           </>
         )}
         <div className="panel col" style={{ padding: 14, width: "min(420px, calc(100vw - 28px))" }}>
           {stage.success
-            ? <p className="small" style={{ margin: 0 }}>80% of the CamiCube cost is now in your pet's balance. NFT mint is queued for the chain.</p>
-            : <p style={{ margin: 0 }}>The CamiCube cost ({fmt(stage.cost)}) went to HQ. No NFT was created.</p>}
+            ? <p className="small" style={{ margin: 0 }}>{stage.first ? "Your first cube held, as promised. " : ""}{pct(ECONOMY.catch.successSplit.pet * 100)} of the cube's cost is now in your pet's piggy bank.</p>
+            : <p style={{ margin: 0 }}>The cube's cost ({fmt(stage.cost)}) went to HQ, which pays it back out to players. No NFT was created.</p>}
           <div className="row" style={{ width: "100%" }}>
-            <button className="btn paper grow" onClick={onAgain}>{stage.success ? "Catch another" : "Find another animal"}</button>
-            {stage.success && <button className="btn leaf grow" onClick={() => store.set({ screen: "pets", petScreen: stage.petId })}>Meet your pet</button>}
+            {stage.success && onCaught && stage.petId
+              ? <button className="btn leaf grow" onClick={() => onCaught(stage.petId!)}>Continue</button>
+              : <>
+                <button className="btn paper grow" onClick={onAgain}>{stage.success ? "Catch another" : "Try again"}</button>
+                {stage.success && !first && <button className="btn leaf grow" onClick={() => store.set({ screen: "pets", petScreen: stage.petId })}>Meet your pet</button>}
+              </>}
           </div>
-          <p className="small muted" style={{ margin: 0 }}>Verify later in Wallet → Fairness · epoch {stage.epoch} · label {stage.label}</p>
+          {stage.label && <p className="small muted" style={{ margin: 0 }}>Verify later in Wallet → Fairness · epoch {stage.epoch} · label {stage.label}</p>}
         </div>
       </div>
     </div>
   );
 }
+
+export function toastCatchError(e: unknown) { toast("bad", (e as Error).message); }

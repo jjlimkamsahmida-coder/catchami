@@ -34,7 +34,7 @@ export async function boot() {
     store.set({ token });
     try {
       const me = await api("/api/me");
-      store.set({ userId: me.user.id, displayName: me.user.displayName, wallet: me.wallet, network: me.wallet.network });
+      store.set({ userId: me.user.id, displayName: me.user.displayName, wallet: me.wallet, network: me.wallet.network, onboarding: me.onboarding, nearAccount: me.user.nearAccount });
       connect();
       return;
     } catch { token = null; }
@@ -44,15 +44,38 @@ export async function boot() {
 
 export async function startAsGuest() {
   const g = await api("/api/auth/guest", {});
-  try { localStorage.setItem(TOKEN_KEY, g.token); } catch {}
-  store.set({ token: g.token, userId: g.userId, displayName: g.displayName });
+  await adoptSession(g.token);
+}
+
+/** Use a session token (new guest, NEAR sign-in or phone handoff) for this device. */
+export async function adoptSession(token: string) {
+  disconnect();
+  try { localStorage.setItem(TOKEN_KEY, token); } catch {}
+  store.set({ token, own: [], controlled: null });
   await refreshWallet();
   connect();
 }
 
 export async function refreshWallet() {
   const me = await api("/api/me");
-  store.set({ wallet: me.wallet, network: me.wallet.network, displayName: me.user.displayName });
+  store.set({ userId: me.user.id, wallet: me.wallet, network: me.wallet.network, displayName: me.user.displayName, onboarding: me.onboarding, nearAccount: me.user.nearAccount });
+}
+
+export async function setOnboarding(stage: import("./store.ts").OnboardingStage, tutorial?: number) {
+  store.set({ onboarding: { stage, tutorial } });
+  await api("/api/onboarding", { stage, tutorial }).catch(() => {});
+}
+
+/** Forget this device's account (the account itself stays on the server). */
+export function forgetDevice() {
+  disconnect();
+  try { localStorage.removeItem(TOKEN_KEY); } catch {}
+  store.set({ token: null, onboarding: null, userId: null, own: [], controlled: null, wallet: null, nearAccount: null });
+}
+
+function disconnect() {
+  if (ws) { ws.onclose = null; ws.close(); ws = null; }
+  store.set({ connected: false });
 }
 
 let ws: WebSocket | null = null;
@@ -70,6 +93,7 @@ export function connect() {
   ws.onopen = () => { retry = 0; store.set({ connected: true }); send({ t: "ping", at: Date.now() }); send({ t: "br_sync" }); };
   ws.onclose = () => {
     store.set({ connected: false });
+    if (!store.get().token) return;
     const delay = Math.min(10_000, 500 * 2 ** retry++);
     setTimeout(connect, delay);
   };

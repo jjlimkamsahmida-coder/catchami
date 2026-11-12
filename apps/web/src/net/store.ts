@@ -14,8 +14,13 @@ export interface PetEntity {
 
 export interface Toast { id: number; kind: "info" | "good" | "bad"; text: string }
 
+export type OnboardingStage = "intro" | "wallet" | "catch" | "name" | "world" | "tutorial" | "done";
+export interface Onboarding { stage: OnboardingStage; tutorial?: number }
+
 export interface State {
   token: string | null;
+  onboarding: Onboarding | null;
+  nearAccount: string | null;
   userId: string | null;
   displayName: string;
   network: string;
@@ -45,7 +50,7 @@ export interface State {
 export const entities = new Map<string, PetEntity>();
 
 let state: State = {
-  token: null, userId: null, displayName: "", network: "", connected: false,
+  token: null, onboarding: null, nearAccount: null, userId: null, displayName: "", network: "", connected: false,
   map: null, nodesDef: [], pois: [], hq: null, nodes: {}, merchants: [], merchantDetail: {},
   own: [], controlled: null, wallet: null, ticker: null, toasts: [], sheet: null, screen: "world", petScreen: null,
   minigame: null, mgResult: null, bubble: null, bubbleInvite: null,

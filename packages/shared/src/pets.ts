@@ -12,11 +12,15 @@ export interface CatchRoll {
   rarityDraw: number | null;
 }
 
-/** Catch outcome for a validated attempt. Deterministic given seed + label. */
-export function rollCatch(seedHex: string, label: string, tier: CatchTier): CatchRoll {
+/**
+ * Catch outcome for a validated attempt. Deterministic given seed + label.
+ * `guaranteed` (a player's very first catch) skips only the success check;
+ * the success draw is still recorded and rarity is rolled exactly as usual.
+ */
+export function rollCatch(seedHex: string, label: string, tier: CatchTier, guaranteed = false): CatchRoll {
   const rng = new Rng(seedHex, `catch:${label}`);
   const successDraw = rng.int(1_000_000);
-  const success = successDraw < ECONOMY.catch.tiers[tier].successPpm;
+  const success = guaranteed || successDraw < ECONOMY.catch.tiers[tier].successPpm;
   if (!success) return { success, rarity: null, successDraw, rarityDraw: null };
   const rarityDraw = rng.int(1_000_000);
   const table = ECONOMY.catch.rarityPpm[tier];

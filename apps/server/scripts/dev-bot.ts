@@ -19,8 +19,8 @@ ws.on("message", (raw) => {
     const p = m.pets[0];
     ws.send(JSON.stringify({ t: "strategy", petId: p.id, strategy: { ...p.strategy, auto: false, battle: "balanced" } }));
     ws.send(JSON.stringify({ t: "select", petId: p.id }));
-    ws.send(JSON.stringify({ t: "goto", x: 104 * 32 + 16, y: 33 * 32 + 16 }));
-    console.log("parking", p.name, "at the plaza");
+    ws.send(JSON.stringify({ t: "goto", x: 46 * 32 + 16, y: 30 * 32 + 16 })); // forest trail (battles are off in the village)
+    console.log("parking", p.name, "on the forest trail");
   }
   if (m.t === "br_invite") { console.log("invite from", m.from.name, "→ accepting"); setTimeout(() => ws.send(JSON.stringify({ t: "br_respond", matchId: m.matchId, accept: true })), 1500); }
   if (m.t === "br_state") {

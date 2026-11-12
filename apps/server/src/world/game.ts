@@ -19,7 +19,7 @@ import { newId } from "../auth.ts";
 import { decide } from "./ai.ts";
 import { BubbleArena } from "./bubble.ts";
 import { epochIdAt, type Epoch } from "../fairness.ts";
-import { gradeRound, makeRound, MINIGAMES } from "@catchami/shared";
+import { battlesAllowed, RESOURCE_LABEL, gradeRound, makeRound, MINIGAMES } from "@catchami/shared";
 import { freshPetState, MERCHANT_DEFS, recomputeStats, type MerchantRt, type NodeRt, type PetRt, type PetState } from "./types.ts";
 
 export interface GameClient {
@@ -127,7 +127,8 @@ export class Game {
     // Offline catch-up for needs while the server was down (capped at 24h).
     const gap = Math.min(24 * 3600, Math.max(0, (now - new Date(row.updated_at).getTime()) / 1000));
     s.hunger = Math.min(ECONOMY.stats.hungerMax, s.hunger + gap * ECONOMY.stats.hungerPerSec);
-    if (!walkable(this.world, toTile(s.x), toTile(s.y))) { s.x = this.hq().x; s.y = this.hq().y; }
+    if (s.worldSeed !== WORLD_SEED || !walkable(this.world, toTile(s.x), toTile(s.y))) { s.x = this.hq().x + (Math.random() - 0.5) * 64; s.y = this.hq().y + 16 + Math.random() * 32; }
+    s.worldSeed = WORLD_SEED;
     const p: PetRt = {
       id: row.id, ownerId: row.owner_id, ownerName: row.display_name, name: row.name, species: row.species, rarity: row.rarity,
       genome, sticker: row.sticker, nftTokenId: row.nft_token_id, mintStatus: row.mint_status, createdAt: new Date(row.created_at).getTime(),
@@ -317,7 +318,7 @@ export class Game {
     if (t.minigame) return this.stepMinigame(p, node, now, stop);
     if (t.endsAt === null) {
       t.endsAt = now + gatherDurationMs(p.species, p.genome.traits, p.stats.gather, node.resource);
-      p.activity = `Gathering ${node.resource}`;
+      p.activity = `Gathering ${RESOURCE_LABEL[node.resource].toLowerCase()}`;
       return;
     }
     if (now < t.endsAt) return;
@@ -359,7 +360,7 @@ export class Game {
     const params = makeRound(epoch.seed, id, node.resource);
     p.round = { id, params, nodeId: node.id, sentAt: now };
     p.anim = "gather"; p.animUntil = now + 400;
-    p.activity = `Gathering ${node.resource}`;
+    p.activity = `Gathering ${RESOURCE_LABEL[node.resource].toLowerCase()}`;
     this.toOwner(p, { t: "mg_round", round: { id, petId: p.id, nodeId: node.id, resource: node.resource, params, expiresInMs: MINIGAMES.timeoutMs } });
   }
 
@@ -645,6 +646,7 @@ export class Game {
     if (p.s.status !== "active") return "not active";
     if (p.s.energy < ECONOMY.stats.exhaustedEnergy * 2) return "too tired";
     if (now - p.s.lastBattleAt < ECONOMY.battle.petCooldownSec * 1000) return "catching breath";
+    if (!battlesAllowed(this.world, p.s.x, p.s.y)) return "in Paw Village — battles only happen in the Forest and Mining Valley";
     return null;
   }
 
@@ -875,6 +877,7 @@ export class Game {
       ...this.publicView(p),
       x: Math.round(p.s.x), y: Math.round(p.s.y),
       autopilotResumesAt: p.s.strategy.auto && p.manualUntil > now ? p.manualUntil : null,
+      createdAt: p.createdAt,
       listed: p.listed,
       hp: Math.round(p.s.hp), energy: Math.round(p.s.energy), hunger: Math.round(p.s.hunger),
       stats: p.stats, baseStats: p.genome.stats, traits: p.genome.traits, strategy: p.s.strategy,
@@ -896,7 +899,7 @@ export class Game {
 }
 
 export function describeInv(inv: Partial<Inventory>): string {
-  const parts = RESOURCES.filter((k) => (inv[k] ?? 0) > 0).map((k) => `${inv[k]} ${k}`);
+  const parts = RESOURCES.filter((k) => (inv[k] ?? 0) > 0).map((k) => `${inv[k]} ${RESOURCE_LABEL[k].toLowerCase()}`);
   return parts.length ? parts.join(", ") : "nothing";
 }
 
