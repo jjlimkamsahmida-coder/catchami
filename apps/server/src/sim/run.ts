@@ -117,7 +117,6 @@ function runScenario(sc: Scenario, seed: string) {
         // Eat.
         if (p.hunger >= 600) {
           if (stock.fish >= 1 && L.split(acct, ECONOMY.food.price, ECONOMY.food.split)) { stock.fish--; consumed.fish++; foodSold++; p.hunger -= ECONOMY.food.hungerRestore; p.energy = Math.min(p.stats.maxEnergy, p.energy + ECONOMY.food.energyRestore); }
-          else if (p.inv.fish > 0) { p.inv.fish--; consumed.fish++; p.hunger -= ECONOMY.food.ownFishHunger; p.energy = Math.min(p.stats.maxEnergy, p.energy + ECONOMY.food.ownFishEnergy); }
           else if (stock.fish < 1) stockouts++;
         }
         p.inactive = p.energy <= 0 && p.hunger >= 1000;

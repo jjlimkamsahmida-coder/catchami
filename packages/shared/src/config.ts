@@ -103,9 +103,6 @@ export const ECONOMY = {
     hungerRestore: 350,
     energyRestore: 220,
     fishPerMeal: 10,
-    /** Eating your own carried fish: no tokens, smaller effect. */
-    ownFishHunger: 220,
-    ownFishEnergy: 120,
     split: { hq: 9_000, team: 1_000 },
   },
   medicine: {

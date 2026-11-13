@@ -128,7 +128,6 @@ export type ClientMsg =
   | { t: "gather"; petId: string; nodeId: string }
   | { t: "sell"; petId: string; merchantId: string; items: Partial<Inventory> }
   | { t: "buy"; petId: string; item: "food" | "medicine"; rid: string }
-  | { t: "eat_own"; petId: string }
   | { t: "rest"; petId: string }
   | { t: "challenge"; petId: string; targetId: string }
   | { t: "strategy"; petId: string; strategy: Strategy }

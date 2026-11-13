@@ -27,7 +27,6 @@ export function decide(g: Game, p: PetRt, now: number, urgentOnly = false) {
   const canBuyFood = avail >= ECONOMY.food.price && g.hqStockCache.fish >= ECONOMY.food.fishPerMeal;
   if (s.hunger >= st.eatAtHunger || s.status === "inactive") {
     if (canBuyFood && s.hunger >= 50) { void g.buy(p, "food", `ai:${p.id}:${now}`).catch(fail); return; }
-    if (s.inventory.fish > 0 && (s.hunger >= 850 || !canBuyFood || s.status === "inactive")) { try { g.eatOwn(p); } catch (e) { fail(e as Error); } return; }
     if (s.status === "inactive") { p.activity = "Inactive: no money or food — deposit tokens to recover"; return; }
   }
   if (st.buyMedicine && s.hp < p.stats.maxHp * 0.3 && avail >= ECONOMY.medicine.price && g.hqStockCache.herbs >= ECONOMY.medicine.herbsPerDose) {

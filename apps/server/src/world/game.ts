@@ -684,20 +684,6 @@ export class Game {
     });
   }
 
-  eatOwn(p: PetRt) {
-    if (p.busy) throw new GameError("busy", `${p.name} is busy`);
-    if (p.s.inventory.fish <= 0) throw new GameError("no_fish", `${p.name} has no fish`);
-    if (p.s.status === "knocked_out") throw new GameError("ko", `${p.name} is knocked out`);
-    p.s.inventory.fish--;
-    p.s.hunger = Math.max(0, p.s.hunger - ECONOMY.food.ownFishHunger);
-    p.s.energy = Math.min(p.stats.maxEnergy, p.s.energy + ECONOMY.food.ownFishEnergy);
-    if (p.s.status === "inactive" && p.s.energy > 0) p.s.status = "active";
-    this.pendingConsume.fish++;
-    p.anim = "eat"; p.animUntil = this.now() + 1500;
-    p.activity = "Ate a fish";
-    p.dirty = true; p.metaDirty = true;
-  }
-
   canBattle(p: PetRt, now: number): string | null {
     if (p.busy) return "busy";
     if (p.s.status !== "active") return "not active";
@@ -871,7 +857,6 @@ export class Game {
       }
       case "sell": { const p = own(msg.petId); manual(p); await this.sell(p, msg.merchantId, msg.items); return; }
       case "buy": { const p = own(msg.petId); await this.buy(p, msg.item, `${c.userId}:${msg.rid}`); return; }
-      case "eat_own": { this.eatOwn(own(msg.petId)); return; }
       case "rest": { const p = own(msg.petId); p.task = { kind: "rest" }; p.path = []; manual(p); return; }
       case "challenge": {
         const p = own(msg.petId);

@@ -78,7 +78,6 @@ export function BagScreen({ p }: { p: OwnPet }) {
           </div>
           <div className="bag-cap"><span>Bag space</span><i><b style={{ width: `${Math.min(100, (w / cap) * 100)}%` }} /></i><em>{fmtQty(w)} / {fmtQty(cap)}</em></div>
           <div className="bag-actions">
-            {p.carried.fish > 0 && p.hunger > 100 && <button className="gbig leaf" onClick={() => { send({ t: "eat_own", petId: p.id }); sfx.pop(); }}><img src={genUrl("icon-fish")} alt="" />Eat own fish</button>}
             <button className="gbig sun" disabled={p.hunger < 50 || (ticker?.hqStock.fish ?? 0) < ECONOMY.food.fishPerMeal} onClick={() => send({ t: "buy", petId: p.id, item: "food", rid: rid() })}>🍖 Buy meal · {fmt(ECONOMY.food.price)}</button>
             <button className="gbig coral" disabled={p.status !== "knocked_out" && p.hp >= p.stats.maxHp} onClick={() => send({ t: "buy", petId: p.id, item: "medicine", rid: rid() })}>💊 Medicine · {fmt(ECONOMY.medicine.price)}</button>
             <button className="gbig sky" disabled={p.status === "knocked_out"} onClick={() => send({ t: "rest", petId: p.id })}>💤 Take a nap</button>

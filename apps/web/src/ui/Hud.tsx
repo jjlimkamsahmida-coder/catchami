@@ -232,7 +232,6 @@ export function ActionBar() {
   // The tutorial teaches one thing per stage: only selling and gathering show up there.
   if (tut) return btns.length ? <div className="actions">{btns}</div> : null;
   if (p.hunger > 300 && !ko) {
-    if (p.carried.fish > 0) btns.push(<button key="eat" className="btn paper" onClick={() => send({ t: "eat_own", petId: p.id })}><ResIcon r="fish" /> Eat fish</button>);
     btns.push(<button key="food" className="btn paper" disabled={(ticker?.hqStock.fish ?? 0) < 1} title={(ticker?.hqStock.fish ?? 0) < 1 ? "HQ kitchen is out of fish" : ""} onClick={() => send({ t: "buy", petId: p.id, item: "food", rid: rid() })}>Buy meal · {fmt(ECONOMY.food.price)}</button>);
   }
   if ((ko && koReady) || (!ko && p.hp < p.stats.maxHp * 0.6)) btns.push(<button key="med" className="btn coral" disabled={(ticker?.hqStock.herbs ?? 0) < ECONOMY.medicine.herbsPerDose} onClick={() => send({ t: "buy", petId: p.id, item: "medicine", rid: rid() })}>Medicine · {fmt(ECONOMY.medicine.price)}</button>);
