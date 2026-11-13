@@ -1,5 +1,5 @@
 import { AREA_BOUNDS, ECONOMY, nodeStock, RESOURCE_LABEL, RESOURCES, inventoryWeight, shopPrice, type Resource, toWire } from "@catchami/shared";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CraftPanel } from "./Pets.tsx";
 import { controlledPet, entities, store, useStore } from "../net/store.ts";
 import { rid, send } from "../net/api.ts";
@@ -46,7 +46,9 @@ function MerchantSheet({ id }: { id: string }) {
   const p = useStore(controlledPet);
   const tut = useStore((s) => s.onboarding?.stage === "tutorial");
   const ticker = useStore((s) => s.ticker);
-  const [crafting, setCrafting] = useState(false);
+  const [crafting, setCrafting] = useState(id === "smith");
+  // Talking to a merchant: they wait for you while the shop is open.
+  useEffect(() => { send({ t: "talk", merchantId: id }); const t = setInterval(() => send({ t: "talk", merchantId: id }), 2_000); return () => clearInterval(t); }, [id]);
   if (!m) return null;
   const meal = shopPrice("food", ticker?.hqStock.fish ?? 0), med = shopPrice("medicine", ticker?.hqStock.herbs ?? 0);
   const fresh = det && Date.now() - det.at < 2500;
@@ -85,7 +87,7 @@ function MerchantSheet({ id }: { id: string }) {
               <button className="btn sun grow" disabled={!p || p.hunger < 50} onClick={() => p && send({ t: "buy", petId: p.id, item: "food", rid: rid() })}>🍖 Buy meal · {fmt(tut ? ECONOMY.food.price : meal.price)}</button>
               <button className="btn coral grow" disabled={!p || (!tut && p.status !== "knocked_out" && p.hp >= p.stats.maxHp)} onClick={() => p && send({ t: "buy", petId: p.id, item: "medicine", rid: rid() })}>💊 Medicine · {fmt(tut ? ECONOMY.medicine.price : med.price)}</button>
             </div>
-            {!tut && p && (
+            {(!tut || id === "smith") && p && (
               <div className="card col" style={{ gap: 6 }}>
                 <button className="btn sky block" onClick={() => setCrafting((v) => !v)}>🛠️ Craft gear {crafting ? "▴" : "▾"}</button>
                 {crafting && <CraftPanel p={p} />}

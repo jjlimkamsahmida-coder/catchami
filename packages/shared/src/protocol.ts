@@ -141,6 +141,8 @@ export type ClientMsg =
   | { t: "br_sync" }
   | { t: "tutorial"; petId: string; action: "enter" | "exit" | "stage"; stage?: number }
   | { t: "fight_bandit"; petId: string; banditId: string }
+  /** The player has this merchant's shop open: the merchant waits. */
+  | { t: "talk"; merchantId: string }
   /** Result of the bandit battle minigame: how many of the 3 attacks landed. */
   | { t: "duel_input"; duelId: string; hits: number };
 

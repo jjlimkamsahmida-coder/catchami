@@ -1722,3 +1722,6 @@ html.has-touch .joystick { display: block !important; }
 .bagfull { white-space: normal; max-width: calc(100vw - 24px); width: max-content; }
 @media (max-width: 480px) { .bagfull { padding: 6px 12px 6px 8px; gap: 8px; } .bagfull b { font-size: 17px; } .bagfull small { font-size: 11.5px; } .bagfull-ico { font-size: 22px; } }
 .hud.tutorial-on .petcard2, .hud.tutorial-on .wallet-btn { cursor: default; }
+
+.autopilot-intro { background: linear-gradient(#e7f6ff, #fff); }
+.autopilot-intro ul { margin: 0; padding-left: 4px; list-style: none; display: grid; gap: 4px; font-weight: 600; }

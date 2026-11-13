@@ -118,12 +118,19 @@ export function StrategyTab({ p }: { p: OwnPet }) {
   const seg = <K extends keyof Strategy>(k: K, opts: Array<[Strategy[K], string]>) => (
     <div className="seg">{opts.map(([v, l]) => <button key={String(v)} className={s[k] === v ? "on" : ""} onClick={() => set(k, v)}>{l}</button>)}</div>
   );
-  const save = () => { send({ t: "strategy", petId: p.id, strategy: s }); toast("good", `${p.name}'s strategy saved`); };
+  const save = () => { send({ t: "strategy", petId: p.id, strategy: { ...s, auto: true } }); toast("good", `${p.name}'s strategy saved`); };
   return (
     <div className="col" style={{ gap: 12 }}>
-      <div className="card col">
-        <div className="row"><h3 className="grow">Autopilot</h3>{seg("auto", [[true, "On"], [false, "Off"]])}</div>
-        <p className="small muted" style={{ margin: 0 }}>Autopilot keeps working while you're offline using only the rules below. Moving the pet yourself pauses it for 45 seconds.</p>
+      <div className="card col autopilot-intro">
+        <h3>🤖 Autopilot is always on</h3>
+        <p style={{ margin: 0 }}>When you're offline — or just not steering — {p.name} keeps working by itself:</p>
+        <ul>
+          <li>🪵 gathers resources</li>
+          <li>🪙 sells to merchants</li>
+          <li>🍖 walks to a merchant for a meal when hungry</li>
+          <li>💊 buys medicine when hurt</li>
+        </ul>
+        <p className="small muted" style={{ margin: 0 }}>Move {p.name} yourself any time — autopilot picks up again a moment after you stop. The settings below are optional.</p>
       </div>
       <div className="card col">
         <h3>Work</h3>
@@ -134,14 +141,12 @@ export function StrategyTab({ p }: { p: OwnPet }) {
         <div className="seg">{RESOURCES.map((r) => <button key={r} className={s.hold.includes(r) ? "on" : ""} onClick={() => set("hold", s.hold.includes(r) ? s.hold.filter((x) => x !== r) : [...s.hold, r])}><ResIcon r={r} size={14} /> {r}</button>)}</div>
       </div>
       <div className="card col">
-        <h3>Battles</h3>
-        <label className="field">Fight only above {Math.round(s.minHpBps / 100)}% HP<input type="range" min={1000} max={10000} step={500} value={s.minHpBps} onChange={(e) => set("minHpBps", Number(e.target.value))} /></label>
-        <label className="field">Head to a merchant once carrying {Math.round(s.maxCarryRiskBps / 100)}% of capacity (theft exposure)<input type="range" min={1000} max={10000} step={500} value={s.maxCarryRiskBps} onChange={(e) => set("maxCarryRiskBps", Number(e.target.value))} /></label>
+        <h3>Selling</h3>
+        <label className="field">Head to a merchant once carrying {Math.round(s.maxCarryRiskBps / 100)}% of capacity<input type="range" min={1000} max={10000} step={500} value={s.maxCarryRiskBps} onChange={(e) => set("maxCarryRiskBps", Number(e.target.value))} /></label>
       </div>
       <div className="card col">
         <h3>Survival</h3>
         <label className="field">Eat when hunger reaches {s.eatAtHunger}<input type="range" min={200} max={950} step={50} value={s.eatAtHunger} onChange={(e) => set("eatAtHunger", Number(e.target.value))} /></label>
-        <label className="field">Keep {s.foodReserve} fish as emergency food<input type="range" min={0} max={10} value={s.foodReserve} onChange={(e) => set("foodReserve", Number(e.target.value))} /></label>
         <label className="field">Rest below {s.restBelowEnergy} energy<input type="range" min={0} max={600} step={25} value={s.restBelowEnergy} onChange={(e) => set("restBelowEnergy", Number(e.target.value))} /></label>
         <div className="row"><span className="grow">Buy medicine when needed</span>{seg("buyMedicine", [[true, "Yes"], [false, "No"]])}</div>
       </div>

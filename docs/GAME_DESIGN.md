@@ -93,7 +93,7 @@ Stages: `intro → wallet → catch → name → world → tutorial → done`.
 2. **Wallet** — sign in with NEAR (testnet today) or as a guest, then pick a starter pouch.
 3. **Catch** — your first catch always succeeds (rarity is still a fair roll). On a PC the game shows a QR code that opens the camera on your phone.
 4. **Name** your pet.
-5. **Tutorial in the Keeper's Glade** — nine short tutorials ("Tutorial 1…9"), each in its own walled-off arena or screen, with a pointing hand and a glowing highlight on every button to tap:
+5. **Tutorial in the Keeper's Glade** — ten short tutorials ("Tutorial 1…10"), each in its own walled-off arena or screen, with a pointing hand and a glowing highlight on every button to tap:
 
 | Tutorial | Where | Goal |
 |---|---|---|
@@ -102,10 +102,11 @@ Stages: `intro → wallet → catch → name → world → tutorial → done`.
 | 3 Trading | Merchant Mari's stall | Open shop → **Sell everything** |
 | 4 Hungry! | New scene: the pet arrives with an **empty food bar** (highlighted) | Walk to **Chef Coco** → Open shop → **Buy meal** |
 | 5 Ouch! | New scene: the pet arrives at **0 HP** (heart bar highlighted; it can still walk slowly) | Walk to **Nurse Nana** → Open shop → **Buy medicine** |
-| 6 Battles | Coach Kiki, a practice partner | Walk up to her and tap **⚔️ Battle**, read How to Play, then win a practice match (no HP or loot at stake). The hand points at both splash buttons |
-| 7 Marketplace | Bottom menu appears | Tap **Market** in the bottom menu, look around, come back |
-| 8 Profile | Pet Profile page | Tap **Profile** → learn the Bag (bag space bar at the bottom) → open **Autopilot** (on by default, explained) → open **Piggy bank** (explained) |
-| 9 Graduation | Portal | Step into the portal to Paw Village |
+| 6 Crafting | New scene: the workshop. Smith Sora hands you the wood and stone for Trail Boots | Walk to Smith Sora → Open shop → **Craft from bag**; then learn that gear goes to the Profile's Gear tab |
+| 7 Battles | Coach Kiki, a practice partner | Walk up to her and tap **⚔️ Battle**, read How to Play, then win a practice match (no HP or loot at stake). The hand points at both splash buttons |
+| 8 Marketplace | Bottom menu appears | Tap **Market** in the bottom menu, look around, come back |
+| 9 Profile | Pet Profile page | Tap **Profile** → learn the Bag (bag space bar at the bottom) → open **Autopilot** (on by default, explained) → open **Piggy bank** (explained) |
+| 10 Graduation | Portal | Step into the portal to Paw Village |
 
 Tutorial rules: other Keepers' pets aren't shown in the Glade; the profile badge and wallet are locked until the tutorial ends; leaving the tutorial restores full HP, food and energy. Tutorial spots hold only 10 units and refill 15 s after
 emptying (the bag can never fill up and block you). Meals in the Glade don't
@@ -413,7 +414,7 @@ Every pet can run on its own while you're away:
 | Sell | immediately / when full / best price / nearest merchant / hold |
 | Battles | Accept challenges / Avoid battles (autopilot never starts a battle) |
 
-Autopilot is **on by default**; steering your pet pauses it and it resumes when you stop.
+Autopilot is **always on** (there's no off switch): whenever you're offline or not steering, the pet gathers, sells, walks to merchants for meals and medicine. Steering pauses it; it resumes when you stop. Merchants stand still while a player has their shop open.
 | Eat when hunger is above | 600 by default |
 | Nap when energy is below | 150 by default |
 | Buy medicine automatically | yes / no |

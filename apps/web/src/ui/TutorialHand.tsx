@@ -61,6 +61,7 @@ function findTargets(goal: string | undefined): Pt[] {
   if (goal === "autopilot") return some(btn(".gtabs", "Autopilot"));
   if (goal === "piggy") return some(btn(".gtabs", "Piggy"));
   if (s.sheet?.kind === "merchant") {
+    if (goal === "craft") return some(btn(".sheet", "Craft from bag"));
     if (goal === "sell") return some(btn(".sheet", "Sell everything"));
     if (goal === "meal") return some(btn(".sheet", "Buy meal"));
     if (goal === "medicine") return some(btn(".sheet", "Medicine"));
@@ -68,16 +69,16 @@ function findTargets(goal: string | undefined): Pt[] {
   if (goal === "gather4") {
     const b = btn(".actions", "Gather");
     if (b) return [b];
-    if (!TOUCH && window.__w2s) for (const n of s.nodesDef) {
+    if (window.__w2s) for (const n of s.nodesDef) {
       if (!n.id.startsWith("glade") || (s.nodes[n.id] ?? 1) <= 0) continue;
       const x = n.tx * 32 + 16, y = n.ty * 32 + 30;
-      if (petNear(x, y, 120)) return [window.__w2s(x, y + 24)];
+      if (petNear(x, y, 120)) return [window.__w2s(x, y + 22)];
     }
   }
-  if (goal === "sell" || goal === "meal" || goal === "medicine") {
+  if (goal === "sell" || goal === "meal" || goal === "medicine" || goal === "craft") {
     const b = btn(".actions", "Open shop");
     if (b) return [b];
-    const m = s.merchants.find((q) => ["keeper", "chef", "nurse"].includes(q.id) && petNear(q.x, q.y, ECONOMY.merchants.interactRangePx));
+    const m = s.merchants.find((q) => ["keeper", "chef", "nurse", "smith"].includes(q.id) && petNear(q.x, q.y, ECONOMY.merchants.interactRangePx));
     if (!TOUCH && m && window.__w2s) return [window.__w2s(m.x, m.y - MERCHANT_HEIGHT - 44)];
     // Still walking over: just glow the bar that explains why (no pointing).
     const bar = goal === "meal" ? elPt(".pc-stat.fd") : goal === "medicine" ? elPt(".pc-stat.hp") : null;

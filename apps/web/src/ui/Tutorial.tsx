@@ -1,13 +1,13 @@
 /**
  * Tutorial-by-tutorial training in the Keeper's Glade, like a real game:
- * First Steps, Gathering, Trading, Hungry!, Ouch!, Battles, Marketplace,
+ * First Steps, Gathering, Trading, Hungry!, Ouch!, Crafting, Battles, Marketplace,
  * Profile, Graduation. Each opens with a "Tutorial N" card, moves the pet to
  * that scene's arena, and ends with a "Tutorial N Clear!" card.
  * Objectives tick themselves off; "Skip tutorial" sends the pet straight to
  * the village.
  */
 import { useEffect, useRef, useState } from "react";
-import { AREA_BOUNDS, ECONOMY, inventoryWeight, RESOURCES, type Resource } from "@catchami/shared";
+import { AREA_BOUNDS, ECONOMY, EQUIPMENT, inventoryWeight, RESOURCES, type Resource } from "@catchami/shared";
 import { controlledPet, entities, store, useStore } from "../net/store.ts";
 import { send, setOnboarding } from "../net/api.ts";
 import { fmt, ResIcon } from "./common.tsx";
@@ -17,7 +17,7 @@ import { TutorialHand } from "./TutorialHand.tsx";
 
 const TILE = 32;
 type Target = { x: number; y: number; label: string } | null;
-type Goal = "flag" | "gather4" | "sell" | "meal" | "medicine" | "fight" | "market" | "profile" | "autopilot" | "piggy" | "portal";
+type Goal = "flag" | "gather4" | "sell" | "meal" | "medicine" | "craft" | "fight" | "market" | "profile" | "autopilot" | "piggy" | "portal";
 const TOUCH = typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
 interface Step {
   title: string;
@@ -100,6 +100,13 @@ const STAGES: Stage[] = [
     ],
   },
   {
+    name: "Crafting", icon: "🛠️", learn: ["Crafting gear at a merchant"],
+    steps: [
+      { title: "The workshop", pose: "point", text: (n) => `Gear makes ${n} faster, tougher or better at gathering. Smith Sora gave you some wood and stone — walk over, open the shop and craft a pair of Trail Boots (${fmt(EQUIPMENT.boots.fee)} fee).`, goal: "craft", goalText: "Craft gear at Smith Sora", target: () => poi("glade_smith") },
+      { title: "Nice boots!", pose: "wave", text: (n) => `Crafted gear goes to the 🛡️ Gear tab in ${n}'s Profile, where you can equip it. Gear can also be sold on the Market. Out in the world, craft at any merchant.` },
+    ],
+  },
+  {
     name: "Battles", icon: "⚔️", learn: ["Battling other Keepers", "Bubble Roulette"],
     steps: [
       {
@@ -142,7 +149,7 @@ export function tutorialShowsNav(step: number | undefined) {
 }
 
 /** Which glade arena each tutorial plays in (Profile happens on a page, so it stays at the market stall). */
-const ARENA = [1, 2, 3, 4, 5, 6, 7, 7, 8];
+const ARENA = [1, 2, 3, 4, 5, 6, 7, 8, 8, 9];
 
 const STEPS = STAGES.flatMap((st, si) => st.steps.map((s, k) => ({ ...s, stage: si, k, first: k === 0, last: k === st.steps.length - 1 })));
 
@@ -166,7 +173,7 @@ export function TutorialCoach() {
   const [met, setMet] = useState(false);
   const [got, setGot] = useState<Resource[]>([]);
   const [min, setMin] = useState(false);
-  const base = useRef<{ x: number; y: number; carried: number; hunger: number; byRes: Record<Resource, number>; balance: bigint } | null>(null);
+  const base = useRef<{ x: number; y: number; carried: number; hunger: number; byRes: Record<Resource, number>; balance: bigint; wood: number } | null>(null);
   const readyAt = useRef(0);
   const stepStart = useRef(Date.now());
   const arrow = useRef<HTMLDivElement>(null);
@@ -248,7 +255,7 @@ export function TutorialCoach() {
       if (Date.now() < readyAt.current) return; // wait for the stage teleport to land
       const p = petPos(), me = controlledPet(store.get());
       if (!p || !me) return;
-      base.current ??= { x: p.x, y: p.y, carried: inventoryWeight(me.carried), hunger: me.hunger, byRes: { ...me.carried }, balance: BigInt(me.balance) };
+      base.current ??= { x: p.x, y: p.y, carried: inventoryWeight(me.carried), hunger: me.hunger, byRes: { ...me.carried }, balance: BigInt(me.balance), wood: me.carried.wood };
       const st = store.get();
       if (cur.goal === "profile" && st.screen === "pets" && st.petScreen) done();
       if (cur.goal === "autopilot" && st.screen === "pets" && st.profileTab === "strategy") done();
@@ -264,6 +271,8 @@ export function TutorialCoach() {
       if (cur.goal === "sell") { const w = inventoryWeight(me.carried); if (b.carried > 0 && w === 0) done(); if (w > b.carried) b.carried = w; }
       if (me.hunger > b.hunger) b.hunger = me.hunger;
       if (cur.goal === "meal" && me.hunger < b.hunger - 50) done();
+      if (me.carried.wood > b.wood) b.wood = me.carried.wood;
+      if (cur.goal === "craft" && b.wood - me.carried.wood >= 20) done(); // materials used up by crafting
       if (cur.goal === "portal") { const ex = poi("glade_exit"); if (ex && Math.hypot(p.x - ex.x, p.y - ex.y) < TILE * 2) done(); }
     }, 400);
     let raf = 0;

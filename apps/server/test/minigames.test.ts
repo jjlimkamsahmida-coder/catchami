@@ -284,7 +284,7 @@ describe("knockout (0 HP)", () => {
 describe("Coach Kiki (tutorial practice)", () => {
   it("waits for you: walk up, press Battle; practice matches cost nothing", async () => {
     const u = await createGuest(db);
-    const s6 = game.world.pois.find((q) => q.id === "glade_s6")!;
+    const s6 = game.world.pois.find((q) => q.id === "glade_s7")!;
     const p = await spawn(u.userId, s6.tx, s6.ty);
     const c = client(u.userId);
     game.join(c);
@@ -304,5 +304,23 @@ describe("Coach Kiki (tutorial practice)", () => {
     }
     expect(m.state).toBe("finished");
     expect(p.s.hp).toBe(hp);
+  }, 30_000);
+});
+
+describe("merchants", () => {
+  it("stand still while a player has their shop open", async () => {
+    const u = await createGuest(db);
+    const c = client(u.userId);
+    game.join(c);
+    const m = game.merchants.find((x) => x.id === "tom")!;
+    m.state = "travelling"; m.waitUntil = 0;
+    const hq = game.world.pois.find((q) => q.id === "hq")!;
+    m.x = tileCenter(hq.tx); m.y = tileCenter(hq.ty + 3); m.path = [[hq.tx + 10, hq.ty + 3]];
+    await game.handle(c, { t: "talk", merchantId: m.id });
+    const x0 = m.x, y0 = m.y;
+    advance(2_000);
+    expect([m.x, m.y]).toEqual([x0, y0]);
+    advance(5_000); // shop closed (no more talk pings): they carry on
+    expect(Math.hypot(m.x - x0, m.y - y0)).toBeGreaterThan(0);
   }, 30_000);
 });

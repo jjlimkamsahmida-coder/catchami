@@ -73,6 +73,8 @@ export interface PetRt {
 }
 
 export interface MerchantRt {
+  /** A player is talking to this merchant (shop open): stand still until then. */
+  talkUntil?: number;
   id: string;
   name: string;
   hue: number;
@@ -126,6 +128,7 @@ export const MERCHANT_DEFS: Array<Pick<MerchantRt, "id" | "name" | "hue" | "pref
   { id: "keeper", name: "Merchant Mari", hue: 280, prefs: {}, route: ["glade_stall"], stationary: true },
   { id: "chef", name: "Chef Coco", hue: 20, prefs: {}, route: ["glade_chef"], stationary: true },
   { id: "nurse", name: "Nurse Nana", hue: 340, prefs: {}, route: ["glade_nurse"], stationary: true },
+  { id: "smith", name: "Smith Sora", hue: 30, prefs: {}, route: ["glade_smith"], stationary: true },
   { id: "finn", name: "Finn the Fishmonger", hue: 200, prefs: { fish: 1_200, wood: -600 }, route: ["hq", "village_west", "forest_gate", "lake", "forest", "forest_gate", "village_west", "hq"] },
   { id: "marigold", name: "Sage Marigold", hue: 120, prefs: { herbs: 1_200, minerals: -600 }, route: ["hq", "village_west", "forest_gate", "forest", "ruins", "forest", "forest_gate", "village_west", "hq"] },
   { id: "tom", name: "Timber Tom", hue: 30, prefs: { wood: 1_200, fish: -600 }, route: ["hq", "village_west", "forest_gate", "lake", "ruins", "forest", "forest_gate", "village_west", "hq"] },

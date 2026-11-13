@@ -182,15 +182,16 @@ export class GameScene extends Phaser.Scene {
       img.on("pointerup", () => { const s = store.get(); const pid = s.controlled; if (!pid) return; send({ t: "gather", petId: pid, nodeId: n.id }); this.tapMarker(img.x, img.y - 6); });
       const badge = this.add.text(x, y - 58, "", { fontFamily: "Fredoka", fontSize: "13px", color: "#2b1d3a", backgroundColor: "#fff6e5", padding: { x: 5, y: 1 } }).setOrigin(0.5).setDepth(9000).setAlpha(0);
       const bg = this.add.graphics();
-      bg.fillStyle(0x2b1d3a, 1).fillRoundedRect(-50, -15, 100, 36, 18);
-      bg.fillStyle(0x6cc04a, 1).fillRoundedRect(-50, -18, 100, 34, 17);
-      bg.lineStyle(3, 0x2b1d3a, 1).strokeRoundedRect(-50, -18, 100, 34, 17);
-      bg.fillStyle(0xffffff, 0.35).fillRoundedRect(-42, -14, 84, 9, 5);
-      const label = this.add.text(0, -1, "Gather!", { fontFamily: "Fredoka", fontSize: "17px", fontStyle: "bold", color: "#ffffff", stroke: "#2b1d3a", strokeThickness: 4 }).setOrigin(0.5);
-      const btn = this.add.container(x, y + 30, [bg, label]).setDepth(9001).setVisible(false);
-      btn.setSize(100, 36).setInteractive(new Phaser.Geom.Rectangle(0, 0, 100, 36), Phaser.Geom.Rectangle.Contains);
+      // Compact pill right under the spot (phones and PC alike).
+      bg.fillStyle(0x2b1d3a, 1).fillRoundedRect(-38, -12, 76, 28, 14);
+      bg.fillStyle(0x6cc04a, 1).fillRoundedRect(-38, -14, 76, 26, 13);
+      bg.lineStyle(2.5, 0x2b1d3a, 1).strokeRoundedRect(-38, -14, 76, 26, 13);
+      bg.fillStyle(0xffffff, 0.35).fillRoundedRect(-31, -11, 62, 7, 4);
+      const label = this.add.text(0, -1, "Gather!", { fontFamily: "Fredoka", fontSize: "14px", fontStyle: "bold", color: "#ffffff", stroke: "#2b1d3a", strokeThickness: 4 }).setOrigin(0.5);
+      const btn = this.add.container(x, y + 24, [bg, label]).setDepth(9001).setVisible(false);
+      btn.setSize(84, 34).setInteractive(new Phaser.Geom.Rectangle(0, 0, 84, 34), Phaser.Geom.Rectangle.Contains);
       btn.on("pointerup", () => { const pid = store.get().controlled; if (!pid) return; send({ t: "gather", petId: pid, nodeId: n.id }); btn.setVisible(false); });
-      this.tweens.add({ targets: btn, y: y + 24, duration: 520, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      this.tweens.add({ targets: btn, y: y + 20, duration: 520, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
       this.nodes.set(n.id, { img, badge, res: n.resource, depleted: false, btn });
     }
     const hq = s.hq!;
@@ -509,7 +510,7 @@ export class GameScene extends Phaser.Scene {
       const dep = rem <= 0;
       if (dep !== n.depleted) { n.depleted = dep; n.img.setTexture(`node-${n.res}${dep ? "-empty" : ""}`); this.fitNode(n.img); }
       const near = cpos && Math.hypot(cpos[0] - n.img.x, cpos[1] - n.img.y) < 160;
-      n.btn.setVisible(!TOUCH && !dep && !s.mgSession && !!cpos && Math.hypot(cpos[0] - n.img.x, cpos[1] - n.img.y) < 120);
+      n.btn.setVisible(!dep && !s.mgSession && !!cpos && Math.hypot(cpos[0] - n.img.x, cpos[1] - n.img.y) < 120);
       n.badge.setText(dep ? "regrowing" : `${rem >= 1000 ? `${Math.round(rem / 1000)}k` : rem} left`).setAlpha(near ? 1 : 0);
     }
   }

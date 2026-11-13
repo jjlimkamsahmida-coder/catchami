@@ -5,7 +5,7 @@
  * the in-memory world is updated.
  */
 import {
-  computeTheft, DEFAULT_STRATEGY, demandLevel, ECONOMY, emptyInventory, findPath, gatherDurationMs,
+ EQUIPMENT,   computeTheft, DEFAULT_STRATEGY, demandLevel, ECONOMY, emptyInventory, findPath, gatherDurationMs,
   generateWorld, initialDemand, inventoryWeight, merchantPrice, RESOURCES, simulateBattle, standSpot,
   tileCenter, toTile, toWire, treasuryFactorBps, updateDemand, walkable, encodeTiles, WORLD_SEED,
   type DemandState, type Inventory, type MarketTicker, type MerchantDetail, type OwnPet, type PetPos,
@@ -439,6 +439,7 @@ export class Game {
   }
 
   private stepMerchant(m: MerchantRt, dt: number, now: number) {
+    if (now < (m.talkUntil ?? 0)) return; // a player is shopping: stand still
     if (m.stationary) return this.stepStationary(m, now);
     if (now < m.waitUntil) return;
     if (m.state === "at_hq" || m.state === "unavailable") {
@@ -494,11 +495,14 @@ export class Game {
       p.s.hp = p.stats.maxHp; p.s.hunger = 0; p.s.energy = p.stats.maxEnergy; p.s.status = "active"; p.s.koUntil = null;
     }
     else {
-      const id = stage && stage >= 1 && stage <= 8 ? `glade_s${stage}` : "glade_spawn";
+      const id = stage && stage >= 1 && stage <= 9 ? `glade_s${stage}` : "glade_spawn";
       // Scenes that set the pet up for the lesson.
       if (stage === 4) { p.s.hunger = ECONOMY.stats.hungerMax; p.s.energy = Math.max(p.s.energy, 500); if (p.s.status === "inactive") p.s.status = "active"; } // Hungry: empty food bar
       if (stage === 5) { p.s.hp = 0; p.s.status = "knocked_out"; p.s.koUntil = null; p.task = null; p.round = null; } // Hurt: 0 HP
-      if (stage === 6) { this.bandits.resetPractice(p.id); if (p.s.status === "knocked_out" || p.s.hp < p.stats.maxHp * 0.5) { p.s.hp = p.stats.maxHp; p.s.status = "active"; p.s.koUntil = null; } }
+      if (stage === 6) { // Crafting: the Smith's starter materials for a pair of Trail Boots
+        p.s.inventory = { ...p.s.inventory, wood: Math.max(p.s.inventory.wood, EQUIPMENT.boots.wood), minerals: Math.max(p.s.inventory.minerals, EQUIPMENT.boots.minerals) };
+      }
+      if (stage === 7) { this.bandits.resetPractice(p.id); if (p.s.status === "knocked_out" || p.s.hp < p.stats.maxHp * 0.5) { p.s.hp = p.stats.maxHp; p.s.status = "active"; p.s.koUntil = null; } }
       const poi = this.world.pois.find((q) => q.id === id) ?? this.world.pois.find((q) => q.id === "glade_spawn")!;
       p.s.x = tileCenter(poi.tx) + (Math.random() - 0.5) * 20; p.s.y = tileCenter(poi.ty) + Math.random() * 10;
     }
@@ -804,6 +808,11 @@ export class Game {
       }
       case "sell": { const p = own(msg.petId); manual(p); await this.sell(p, msg.merchantId, msg.items); return; }
       case "buy": { const p = own(msg.petId); await this.buy(p, msg.item, `${c.userId}:${msg.rid}`); return; }
+      case "talk": {
+        const m = this.merchants.find((x) => x.id === msg.merchantId);
+        if (m && m.state !== "at_hq" && m.state !== "unavailable") m.talkUntil = now + 4_000;
+        return;
+      }
       case "rest": { const p = own(msg.petId); p.task = { kind: "rest" }; p.path = []; manual(p); return; }
       case "challenge": {
         const p = own(msg.petId);
@@ -821,6 +830,7 @@ export class Game {
       case "br_forfeit": { this.arena.forfeit(c, msg.matchId); return; }
       case "br_sync": { this.arena.sync(c); return; }
       case "strategy": {
+        if (msg.strategy) (msg.strategy as { auto?: boolean }).auto = true; // autopilot is always on
         const p = own(msg.petId);
         p.s.strategy = sanitizeStrategy(msg.strategy);
         p.dirty = true;

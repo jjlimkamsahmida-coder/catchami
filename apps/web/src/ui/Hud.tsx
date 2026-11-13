@@ -293,8 +293,9 @@ export function ActionBar() {
   const btns: React.ReactNode[] = [];
   const touch = window.matchMedia("(pointer: coarse)").matches;
   const full = inventoryWeight(p.carried) >= carryCapacity(p.stats) * 0.98;
+  void full; void node; void nodes;
   if (touch && m && !store.get().sheet) btns.push(<button key="shop" className="btn big-action" onClick={() => store.set({ sheet: { kind: "merchant", id: m.id } })}>Open shop</button>);
-  if (touch && node && !store.get().mgSession) btns.push(<button key="gather" className="btn big-action" disabled={ko || (nodes[node.id] ?? 1) <= 0 || full} onClick={() => send({ t: "gather", petId: p.id, nodeId: node.id })}>{ko ? "Needs medicine" : full ? "Bag full" : (nodes[node.id] ?? 1) <= 0 ? "Regrowing…" : "Gather!"}</button>);
+  // (Gather lives on the map, right under each spot.)
   // The tutorial teaches one thing per stage: only selling and gathering show up there.
   if (tut) {
     // Tutorial 6: walk up to Coach Kiki, then press Battle.
