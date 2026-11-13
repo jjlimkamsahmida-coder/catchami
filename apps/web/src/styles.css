@@ -1755,3 +1755,19 @@ html.has-touch .joystick { display: block !important; }
 .t-album .gpage-body > .album.wide, .t-album .gpage-body > .album-filters { width: min(1080px, 100%); }
 .album.wide { padding: 24px 22px; gap: 22px 16px; }
 .t-album .album-filters button { font-size: 13px; padding: 4px 12px; }
+
+/* ---- World map: big on every screen ---- */
+.mapscreen { background: rgba(23,14,36,0.78); }
+.mapscroll { max-width: 100%; overflow-x: auto; overflow-y: hidden; border-radius: 18px; -webkit-overflow-scrolling: touch; }
+.mapscreen .mapwrap { width: min(100vw - 32px, 1200px); aspect-ratio: 192 / 60; }
+.mapscreen .mapwrap canvas { width: 100%; height: 100%; }
+.mapdot.me { animation: bigpulse 0.8s ease-in-out infinite alternate; }
+/* Portrait phones: a tall map you swipe sideways. */
+@media (max-aspect-ratio: 6/5) {
+  .mapscreen .mapwrap { width: auto; height: min(62vh, 520px); }
+  .mapscreen .mapwrap canvas { width: auto; height: 100%; aspect-ratio: 192 / 60; }
+  .maplabel { font-size: 18px; }
+}
+.mapscreen { grid-template-columns: minmax(0, 1fr); }
+.mapscreen > .col { min-width: 0; max-width: 100%; }
+.mapscroll { width: 100%; }

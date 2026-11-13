@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AREAS, type WorldDef } from "@catchami/shared";
+import { AREAS, AREA_BOUNDS, type WorldDef } from "@catchami/shared";
 import { entities, store, useStore } from "../net/store.ts";
 import { send } from "../net/api.ts";
 import { miniMap } from "../game/world-art.ts";
@@ -111,28 +111,40 @@ export function MapScreen() {
     if (!c || !world || !mapCanvas) return;
     const g = c.getContext("2d")!;
     g.imageSmoothingEnabled = false;
-    g.drawImage(mapCanvas, 0, 0, c.width, c.height);
+    // The tutorial glade (east edge) isn't a travel destination: crop it off.
+    const playW = AREA_BOUNDS.glade[0];
+    g.drawImage(mapCanvas, 0, 0, (mapCanvas.width * playW) / world.w, mapCanvas.height, 0, 0, c.width, c.height);
+  }, [world]);
+  // Phones: the map is tall and scrolls sideways; start centred on your pet.
+  const scroller = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const sc = scroller.current, p = myPos();
+    if (!sc || !p || !world) return;
+    sc.scrollLeft = (p[0] / (AREA_BOUNDS.glade[0] * TILE)) * sc.scrollWidth - sc.clientWidth / 2;
   }, [world]);
   if (!world) return null;
   const pos = myPos();
-  const pct = (x: number, y: number) => ({ left: `${(x / (world.w * TILE)) * 100}%`, top: `${(y / (world.h * TILE)) * 100}%` });
+  const playW = AREA_BOUNDS.glade[0];
+  const pct = (x: number, y: number) => ({ left: `${(x / (playW * TILE)) * 100}%`, top: `${(y / (world.h * TILE)) * 100}%` });
   const close = () => store.set({ screen: "world" });
   return (
     <div className="mapscreen" onClick={close}>
       <div className="col" style={{ alignItems: "center", width: "100%" }} onClick={(e) => e.stopPropagation()}>
+        <div className="mapscroll" ref={scroller}>
         <div className="mapwrap">
-          <canvas ref={ref} width={world.w * 6} height={world.h * 6}
+          <canvas ref={ref} width={playW * 6} height={world.h * 6}
             onClick={(e) => {
               const r = (e.target as HTMLCanvasElement).getBoundingClientRect();
-              const x = ((e.clientX - r.left) / r.width) * world.w * TILE, y = ((e.clientY - r.top) / r.height) * world.h * TILE;
+              const x = ((e.clientX - r.left) / r.width) * playW * TILE, y = ((e.clientY - r.top) / r.height) * world.h * TILE;
               send({ t: "goto", x, y });
               window.dispatchEvent(new CustomEvent("catchami:focus", { detail: { x, y } }));
               close();
             }} />
-          {AREAS.map((a) => <span key={a.id} className="maplabel" style={pct(AREA_CENTERS[a.id]![0] * TILE, AREA_CENTERS[a.id]![1] * TILE)}>{a.name}</span>)}
+          {AREAS.filter((a) => a.id !== "glade").map((a) => <span key={a.id} className="maplabel" style={pct(AREA_CENTERS[a.id]![0] * TILE, AREA_CENTERS[a.id]![1] * TILE)}>{a.name}</span>)}
           {merchants.map((m) => <span key={m.id} className="mapdot" style={{ ...pct(m.x, m.y), background: "#ffd166" }} title={m.name} />)}
           {own.filter((p) => p.id !== store.get().controlled).map((p) => <span key={p.id} className="mapdot" style={{ ...pct(p.x, p.y), background: "#7ccd5a" }} title={p.name} />)}
-          {pos && <span className="mapdot" style={{ ...pct(pos[0], pos[1]), background: "#ff7a59", width: 16, height: 16, margin: -8 }} />}
+          {pos && pos[0] < playW * TILE && <span className="mapdot me" style={{ ...pct(pos[0], pos[1]), background: "#ff7a59", width: 18, height: 18, margin: -9 }} />}
+        </div>
         </div>
         <div className="row" style={{ marginTop: 10 }}>
           <span className="area-chip">Tap anywhere to walk there · <span style={{ color: "#ffd166" }}>●</span> merchants · <span style={{ color: "#7ccd5a" }}>●</span> your pets</span>
