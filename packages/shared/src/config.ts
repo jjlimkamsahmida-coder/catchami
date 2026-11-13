@@ -29,7 +29,7 @@ export type EquipmentKind = (typeof EQUIPMENT_KINDS)[number];
 export const PPM = 1_000_000;
 
 export const ECONOMY = {
-  version: "2026-11-13.1",
+  version: "2026-11-14.1",
 
   allocation: {
     hqWhole: 40_000_000_000_000n,
@@ -99,7 +99,7 @@ export const ECONOMY = {
   },
 
   food: {
-    price: tokens(12_000),
+    price: tokens(7_000),
     hungerRestore: 350,
     energyRestore: 220,
     fishPerMeal: 10,
@@ -108,7 +108,7 @@ export const ECONOMY = {
     split: { hq: 9_000, team: 1_000 },
   },
   medicine: {
-    price: tokens(60_000),
+    price: tokens(35_000),
     herbsPerDose: 20,
     importMultBps: 20_000,
     /** Heals this share of max HP (bps). Also required to revive after the KO cooldown. */
@@ -117,15 +117,15 @@ export const ECONOMY = {
   },
 
   /**
-   * Every resource is worth the same per bag slot (100 per weight) and costs
+   * Every resource is worth the same per bag slot (50 per weight — kept low so earning takes effort) and costs
    * energy/hunger in proportion to its weight (energy 1.5×, hunger 0.75×), so
    * no resource is a "best" grind: pick by price/demand, merchant and species.
    */
   resources: {
-    fish: { basePrice: tokens(200), weight: 2, energy: 3, hunger: 1.5, gatherMs: 5_000, regenMs: 70_000 },
-    herbs: { basePrice: tokens(100), weight: 1, energy: 1.5, hunger: 0.75, gatherMs: 4_200, regenMs: 80_000 },
-    wood: { basePrice: tokens(300), weight: 3, energy: 4.5, hunger: 2.25, gatherMs: 5_500, regenMs: 60_000 },
-    minerals: { basePrice: tokens(400), weight: 4, energy: 6, hunger: 3, gatherMs: 7_000, regenMs: 110_000 },
+    fish: { basePrice: tokens(100), weight: 2, energy: 3, hunger: 1.5, gatherMs: 5_000, regenMs: 70_000 },
+    herbs: { basePrice: tokens(50), weight: 1, energy: 1.5, hunger: 0.75, gatherMs: 4_200, regenMs: 80_000 },
+    wood: { basePrice: tokens(150), weight: 3, energy: 4.5, hunger: 2.25, gatherMs: 5_500, regenMs: 60_000 },
+    minerals: { basePrice: tokens(200), weight: 4, energy: 6, hunger: 3, gatherMs: 7_000, regenMs: 110_000 },
   } satisfies Record<Resource, { basePrice: bigint; weight: number; energy: number; hunger: number; gatherMs: number; regenMs: number }>,
 
   gather: {

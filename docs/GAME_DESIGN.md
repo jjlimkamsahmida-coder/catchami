@@ -225,7 +225,7 @@ capture checks).
 | HP | Max about 1,000. Only Bubble Roulette lowers it |
 | 0 HP | The pet can still **walk (slowly), sell and buy medicine**, but **can't gather or battle** until healed. Medicine works straight away, no cooldown |
 
-Upkeep: an idle pet needs about **14 meals a day (≈ 165K)** to stay fed. A
+Upkeep: an idle pet needs about **14 meals a day (≈ 96K)** to stay fed. A
 working pet needs more because gathering adds hunger. This upkeep is the
 game's biggest coin sink and why every pet has to work.
 
@@ -240,18 +240,18 @@ and hunger:
 
 | Resource | Base price per unit | Weight | Energy per unit | Hunger per unit | Value per bag slot | Seconds per hit (gather 100) | Minigame |
 |---|---:|---:|---:|---:|---:|---:|---|
-| Herbs | 100 | 1 | 1.5 | 0.75 | 100 | 4.2 | Pull (release at the right tension) |
-| Fish | 200 | 2 | 3 | 1.5 | 100 | 5.0 | Fishing (stop the fish in the zone) |
-| Wood | 300 | 3 | 4.5 | 2.25 | 100 | 5.5 | Chop (hit the marker in the zone) |
-| Stone | 400 | 4 | 6 | 3 | 100 | 7.0 | Mine (stop the spinning marker in the zone) |
+| Herbs | 50 | 1 | 1.5 | 0.75 | 50 | 4.2 | Pull (release at the right tension) |
+| Fish | 100 | 2 | 3 | 1.5 | 50 | 5.0 | Fishing (stop the fish in the zone) |
+| Wood | 150 | 3 | 4.5 | 2.25 | 50 | 5.5 | Chop (hit the marker in the zone) |
+| Stone | 200 | 4 | 6 | 3 | 50 | 7.0 | Mine (stop the spinning marker in the zone) |
 
 Design intent: **every resource is worth the same per bag slot and costs the
 same per bag slot**, so there's no single best grind. What you gather depends on
 demand (§10), which merchant is nearby (§9), your pet's species and traits, and
 what you want to craft.
 
-- **A full bag** is worth about 56K (cat) or 66K (dog) at normal demand. Filling it costs about 840 / 990 energy and 420 / 495 hunger.
-- **A meal** (+220 energy) pays for about 147 weight of gathering ≈ 14.7K of goods, a small profit on 12K. Buying meals is a way to go faster, not a money printer. Napping is free but slow.
+- **A full bag** is worth about 28K (cat) or 33K (dog) at normal demand (halved in config 2026-11-14 to make earning harder). Filling it costs about 840 / 990 energy and 420 / 495 hunger.
+- **A meal** (+220 energy) pays for about 147 weight of gathering ≈ 7.3K of goods, about break-even on 7K. Buying meals is a way to go faster, not a money printer. Resting is free but slow.
 - **The minigame is skill:** perfect taps double the yield per attempt.
 - **Server rules:** the server grades every tap, caps the yield by spot stock and bag space, and rejects replays and impossibly fast taps.
 
@@ -308,8 +308,8 @@ doesn't count.
 
 | Item | Price | Effect | Uses from HQ stock | If HQ is out of stock |
 |---|---:|---|---|---|
-| Meal | **12K** | −350 hunger, +220 energy | 10 fish | **Imported meal 24K** (2×) |
-| Medicine | **60K** | Heals 40% of max HP; brings a 0-HP pet back to work | 20 herbs | **Imported 120K** (2×) |
+| Meal | **7K** | −350 hunger, +220 energy | 10 fish | **Imported meal 14K** (2×) |
+| Medicine | **35K** | Heals 40% of max HP; brings a 0-HP pet back to work | 20 herbs | **Imported 70K** (2×) |
 
 - Coins split **90% HQ / 10% team**.
 - **Meals are the only food;** pets cannot eat fish from their own bag.
@@ -370,7 +370,7 @@ Mining Valley: 5 in the Forest, 4 in the Valley. They walk up to your pet when i
 |---|---|
 | Both pets | **80 energy + 60 hunger** when the match starts |
 | Both pets | HP lost to splashes (it never heals during a match) |
-| Loser | Ends at **0 HP**: can't gather or battle until it buys **60K medicine** (it can still walk and trade) |
+| Loser | Ends at **0 HP**: can't gather or battle until it buys **35K medicine** (it can still walk and trade) |
 
 ### Spoils (what the winner takes)
 
@@ -489,8 +489,8 @@ Daily budget = min( 0.01% × spendable + 60% × 7-day average daily revenue ,
 |---|---:|---:|---|
 | Successful catch (the 60% not kept by the pet) | 50% of cost | 10% of cost | |
 | Failed catch | 100% | — | |
-| Meals 12K (imported 24K) | 90% | 10% | Main recurring sink |
-| Medicine 60K (imported 120K) | 90% | 10% | |
+| Meals 7K (imported 14K) | 90% | 10% | Main recurring sink |
+| Medicine 35K (imported 70K) | 90% | 10% | |
 | Crafting fee + bought materials | 90% | 10% | |
 | Marketplace sale | 2.5% of price | 2.5% of price | The other 95% goes to the seller |
 | Bubble Roulette fee | 9% of coins taken | 1% of coins taken | The rest moves loser → winner |
@@ -532,19 +532,19 @@ Example: one fed pet sends about **16K a day** to the team from meals alone.
 
 **A cat's full bag of herbs**
 
-- 560 herbs × 100 = **56K** at normal demand.
+- 560 herbs × 50 = **28K** at normal demand.
 - At Sage Marigold (+12%) with high herb demand (130%): about **81.5K**.
 - Cost to gather: 840 energy (≈ 4 meals = 48K, or about 23 min of napping, free) and 420 hunger (≈ 1.2 meals).
 
 **A day of idle upkeep**
 
-- Hunger 4,800 → about 14 meals = **≈ 165K** (imported: about 330K).
+- Hunger 4,800 → about 14 meals = **≈ 96K** (imported: about 192K).
 
 **A Bubble Roulette loss**
 
 - The loser holds 1M, so 950K is at stake. The share rolls 10%, so **95K is taken**.
 - Fee 9.5K (HQ 8.55K, team 0.95K). The winner receives **85.5K**.
-- The loser also loses 10% of each resource in its bag and drops to 0 HP, so it pays **60K for medicine** before it can gather again.
+- The loser also loses 10% of each resource in its bag and drops to 0 HP, so it pays **35K for medicine** before it can gather again.
 - Both pets paid 80 energy and 60 hunger.
 
 **Selling a pet**
@@ -555,6 +555,8 @@ Example: one fed pet sends about **16K a day** to the team from meals alone.
 ---
 
 ## 21. Simulation results
+
+> Latest run (config 2026-11-14.1, halved resource prices, 7K meals): typical working pet earns ≈ 105K/day (was ≈ 210K), 87–98% of pets stay active in 250-pet worlds, median pet balance after 30 days ≈ 0.5–1.0M from a 0.4M start; a basic pet pays back in roughly 3 months. Full tables in docs/ECONOMY_SIMULATION.md. The table below is the earlier run.
 
 `pnpm sim` runs an agent-based 30-day model on the live config, with an exact
 ledger and daily invariant checks. Full tables: `docs/ECONOMY_SIMULATION.md`.
@@ -636,7 +638,7 @@ All in `packages/shared/src/config.ts` → `ECONOMY`:
 | Gathering cost | `resources.*.energy` / `.hunger` | 1.5w / 0.75w | more food needed per bag |
 | Units per hit | `gather.unitsPerHit` | 10 | faster bag filling |
 | Hunger speed | `stats.hungerPerSec` | full→starving 5 h | higher upkeep (biggest sink) |
-| Meal / medicine | `food`, `medicine` | 12K / 60K | stronger sink |
+| Meal / medicine | `food`, `medicine` | 7K / 35K | stronger sink |
 | Import premium | `*.importMultBps` | 2× | harsher stockouts |
 | Demand range | `demand.minIndexBps` / `maxIndexBps` | 60%–175% | bigger price swings |
 | Merchant cart / purse | `merchants.inventoryCapacity`, `tripMin/MaxBudget` | 4,000 / 0.2M–2M | more throughput per world |
