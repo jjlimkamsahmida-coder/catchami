@@ -37,11 +37,11 @@ describe("minigame rules (shared)", () => {
     expect(gradeRound(p, p.looseMs * 0.4)).toMatchObject({ grade: "miss", detail: "too early" });
     expect(gradeRound(p, p.looseMs * 1.6)).toMatchObject({ grade: "miss", detail: "too late" });
   });
-  it("chambers always hold 2 splashes in 6 slots and are deterministic", () => {
+  it("chambers hold the configured splashes in 6 slots and are deterministic", () => {
     for (let i = 0; i < 50; i++) {
       const c = makeChamber(seed, "m", i);
-      expect(c.length).toBe(6);
-      expect(c.filter(Boolean).length).toBe(2);
+      expect(c.length).toBe(BUBBLE.slots);
+      expect(c.filter(Boolean).length).toBe(BUBBLE.loaded);
       expect(makeChamber(seed, "m", i)).toEqual(c);
     }
   });
@@ -150,19 +150,19 @@ describe("Bubble Roulette", () => {
       // Acting out of turn or with a stale turn number fails.
       expect(() => game.arena.action(waitClient, m.id, "opponent", m.turnNo)).toThrow();
       expect(() => game.arena.action(turnClient, m.id, "opponent", m.turnNo - 1)).toThrow();
-      const slotsBefore = m.chamber.length - m.pos;
       const hpBefore = { ...m.hp };
       const loaded = m.chamber[m.pos]!;
+      const rest = m.chamber.slice(m.pos + 1);
+      const expectLeft = rest.length && rest.some(Boolean) ? rest.length : BUBBLE.slots; // reload only when no loaded bubbles remain
       game.arena.action(turnClient, m.id, "opponent", m.turnNo);
       if (loaded) {
         splashes++;
         const target = m.last!.target;
         expect(hpBefore[target] - m.hp[target]).toBe(Math.min(BUBBLE.splashHp, hpBefore[target]));
-        if (m.state === "active") expect(m.chamber.length - m.pos).toBe(6); // reloaded
       } else {
         expect(m.hp).toEqual(hpBefore);
-        expect(m.chamber.length - m.pos).toBe(slotsBefore - 1);
       }
+      if (m.state === "active") expect(m.chamber.length - m.pos).toBe(expectLeft);
     }
     expect(m.state).toBe("finished");
     expect(splashes).toBeGreaterThanOrEqual(1);
@@ -203,11 +203,17 @@ describe("Bubble Roulette", () => {
     game.arena.respond(cb, invite.matchId, true);
     const m = game.arena.get(invite.matchId)!;
     const first = m.turn;
-    advance(BUBBLE.turnMs + 200);
+    advance(BUBBLE.turnMs + BUBBLE.firstTurnGraceMs + 200); // the first turn has extra reading time
     expect(m.state).toBe("active");
     expect(m.turn).not.toBe(first);
+    // A self-splash that comes up empty keeps the turn.
+    m.chamber = [false, true, true, true, false, false]; m.pos = 0;
+    const me = m.turn;
+    game.arena.action(me === "a" ? ca : cb, m.id, "self", m.turnNo);
+    expect(m.turn).toBe(me);
+    expect(m.last).toMatchObject({ again: true, loaded: false });
     // The other side acts, then the first side times out again → forfeit.
-    game.arena.action(m.turn === "a" ? ca : cb, m.id, "self", m.turnNo);
+    game.arena.action(m.turn === "a" ? ca : cb, m.id, "opponent", m.turnNo);
     if (m.state === "active") {
       advance(BUBBLE.turnMs + 200);
       expect(m.state).toBe("finished");
@@ -218,8 +224,38 @@ describe("Bubble Roulette", () => {
 });
 
 describe("rivals", () => {
-  it("there are no wild rivals — only the tutorial's practice coach", () => {
-    expect(game.bandits.list.map((b) => b.id)).toEqual(["bandit-practice"]);
-    expect(game.bandits.list[0]!.practice).toBe(true);
-  });
+  it("demo rivals walk up to an idle pet in the wild and invite it to Bubble Roulette; gathering pets are left alone", async () => {
+    const u = await createGuest(db);
+    const forest = game.world.pois.find((q) => q.id === "forest")!;
+    const p = await spawn(u.userId, forest.tx, forest.ty);
+    p.s.energy = 1000; p.s.hunger = 0; p.s.lastBattleAt = 0;
+    const c = client(u.userId);
+    game.join(c);
+    const b = game.bandits.list.find((x) => x.home === "forest")!;
+    expect(game.bandits.list.some((x) => x.id === "bandit-practice")).toBe(true);
+    // Gathering: the rival hangs around but doesn't challenge.
+    p.task = { kind: "gather", nodeId: "wood-1", endsAt: null, repeat: true };
+    b.x = p.s.x + 20; b.y = p.s.y; b.state = "wander"; b.calmUntil = 0; b.nextThink = 0; b.path = [];
+    for (let i = 0; i < 10; i++) { t += 100; game.bandits.step(0.1, t); }
+    expect(c.inbox.some((m) => m.t === "br_invite")).toBe(false);
+    // Idle: it challenges.
+    p.task = null;
+    for (let i = 0; i < 20 && !c.inbox.some((m) => m.t === "br_invite"); i++) { t += 100; game.bandits.step(0.1, t); }
+    const inv = c.inbox.find((m) => m.t === "br_invite");
+    if (inv?.t !== "br_invite") throw new Error("no rival invite");
+    expect(b.state).toBe("duel");
+    game.arena.respond(c, inv.matchId, true);
+    const m = game.arena.get(inv.matchId)!;
+    expect(m.state).toBe("active");
+    expect(m.turn).toBe("b"); // the player goes first
+    expect(game.arena.get(inv.matchId)!.bot?.practice).toBe(false);
+    // Play it out: the rival takes its own turns.
+    for (let i = 0; i < 400 && m.state === "active"; i++) {
+      if (m.turn === "b") game.arena.action(c, m.id, "opponent", m.turnNo);
+      t += 1000; game.arena.tick(t);
+    }
+    expect(m.state).toBe("finished");
+    expect(m.loot?.coins).toBe("0"); // demo rivals only put bags at stake
+    expect(b.state).toBe("flee");
+  }, 30_000);
 });

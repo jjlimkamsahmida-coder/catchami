@@ -212,12 +212,14 @@ export interface BubbleMatchView {
   chamberNo: number;
   slotsLeft: number;
   splashesLeft: number;
-  last: { by: "a" | "b"; target: "a" | "b"; loaded: boolean; reloaded: boolean; turnNo: number } | null;
+  /** again: the shooter splashed themself with an empty bubble and keeps the turn. */
+  last: { by: "a" | "b"; target: "a" | "b"; loaded: boolean; reloaded: boolean; again: boolean; turnNo: number } | null;
   winner: "a" | "b" | null;
   reason: string;
   epoch: number;
   commitment: string;
-  mode: "stakes" | "practice";
+  /** stakes: real players (coins + bag) · demo: a demo rival (bags only) · practice: Coach Kiki (nothing). */
+  mode: "stakes" | "demo" | "practice";
   /** What the winner took from the loser (set once the match is settled). */
   loot: { coins: Amount; fee: Amount; items: Inventory; shareBps: number } | null;
 }

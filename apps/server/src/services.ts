@@ -117,6 +117,9 @@ export async function craft(db: Db, game: Game, userId: string, petId: string, k
   if (!EQUIPMENT_KINDS.includes(kind)) throw new ServiceError("kind", "Unknown equipment");
   if (game.flags.pauseTrades) throw new ServiceError("paused", "Crafting is paused by operations", 503);
   const p = ownedPet(game, userId, petId);
+  // Gear is crafted at a merchant's workbench: the pet must be standing at an open merchant.
+  const atMerchant = game.merchants.some((m) => m.state !== "at_hq" && m.state !== "unavailable" && Math.hypot(m.x - p.s.x, m.y - p.s.y) <= ECONOMY.merchants.interactRangePx);
+  if (!atMerchant) throw new ServiceError("no_merchant", "Gear is crafted at a merchant — walk up to one and open their shop");
   const def = EQUIPMENT[kind];
   const q = craftQuote(game, kind);
   return game.withPet(p, async () => {

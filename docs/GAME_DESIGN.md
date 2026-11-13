@@ -93,16 +93,17 @@ Stages: `intro → wallet → catch → name → world → tutorial → done`.
 2. **Wallet** — sign in with NEAR (testnet today) or as a guest, then pick a starter pouch.
 3. **Catch** — your first catch always succeeds (rarity is still a fair roll). On a PC the game shows a QR code that opens the camera on your phone.
 4. **Name** your pet.
-5. **Tutorial in the Keeper's Glade** — six walled-off arenas, one lesson each, with a pointing hand on every button:
+5. **Tutorial in the Keeper's Glade** — seven short tutorials ("Tutorial 1…7"), each in its own walled-off arena or screen, with a pointing hand and a glowing highlight on every button to tap:
 
-| Stage | Arena | Goal |
+| Tutorial | Where | Goal |
 |---|---|---|
-| 1 First Steps | Empty meadow with a flag and a glowing ground ring | Walk to the flag (joystick / tap / WASD) |
+| 1 First Steps | Empty meadow with a flag and a glowing ground ring | Walk to the flag (joystick on phones, arrow keys / WASD on PC) |
 | 2 Gathering | One spot each of wood, herbs, stone, fish | Gather all four. Then an info popup explains bags and selling |
-| 3 Trading | Merchant Mari's stall | Open shop → **Sell everything** → **Buy meal** |
-| 4 Battles | Coach Kiki, a practice partner | Win a practice Bubble Roulette match (she challenges you automatically, no HP or loot at stake) |
-| 5 Marketplace | Market stall | Open the marketplace |
-| 6 Graduation | Portal | Step into the portal to Paw Village |
+| 3 Trading | Merchant Mari's stall | Open shop → **Sell everything** → **Buy meal** → **Buy medicine** (allowed at full HP in the Glade) |
+| 4 Battles | Coach Kiki, a practice partner | Read How to Play, then win a practice Bubble Roulette match (she challenges you automatically; no HP or loot at stake). The hand points at both splash buttons |
+| 5 Marketplace | Bottom menu appears | Tap **Market** in the bottom menu, look around, come back |
+| 6 Profile | Pet Profile page | Tap **Profile** → learn the Bag (bag space bar at the bottom) → open **Autopilot** (on by default, explained) → open **Piggy bank** (explained) |
+| 7 Graduation | Portal | Step into the portal to Paw Village |
 
 Tutorial rules: tutorial spots hold only 10 units and refill 15 s after
 emptying (the bag can never fill up and block you). Meals in the Glade don't
@@ -316,7 +317,7 @@ doesn't count.
 
 ## 12. Crafting & gear
 
-Each pet has 2 gear slots. Crafting uses wood and stone from the pet's bag
+Each pet has 2 gear slots. **Gear is crafted at a merchant** (Open shop → 🛠️ Craft gear; the server checks the pet is standing at an open merchant). The Profile's Gear tab only equips and unequips. Crafting uses wood and stone from the pet's bag
 first; missing materials can be bought from HQ's real stock at **125% of the
 current merchant price**. The coin fee splits 90% HQ / 10% team.
 
@@ -338,22 +339,25 @@ current merchant price**. The coin fee splits 90% HQ / 10% team.
 
 ## 13. Battles: Bubble Roulette
 
-The one battle game. Live, turn-based, **PvP only** (both owners online). There
-are no wild NPC rivals. Coach Kiki in the tutorial is practice only.
+The one battle game. Live, turn-based PvP between online players. For the demo,
+**demo rivals** (pets of simulated Keepers, e.g. "Sid's Mochi") roam the Forest and
+Mining Valley: 5 in the Forest, 4 in the Valley. They walk up to your pet when it's idle out in the wild and send a Bubble Roulette invite (accept or "Not now"). The same pet is challenged at most once every 45 s. Demo rivals only put **bags** at stake (they carry a small bag of their own); coins never move in demo matches. Coach Kiki in the tutorial is practice only. A ⚔️ **Battle** button appears whenever another Keeper's pet or a rival is within range.
 
 ### Rules
 
-- **The launcher** holds **6 bubbles, 2 of them loaded**, in a hidden order from the fair seed.
+- **How to play** is shown at the start of every match (and from the "?" button); the first turn gets 10 s extra.
+- **The launcher** holds **6 bubbles, 3 of them loaded**, in a hidden order from the fair seed.
 - **On your turn** (15 s), splash yourself or splash your opponent.
-  - A loaded bubble soaks the target for **20 battle HP**, and the launcher reloads.
-  - An empty one does nothing. Splashing yourself with an empty bubble is the safe "risky" move.
+  - A loaded bubble soaks the target for **50 battle HP**, so two soaks end a full-HP pet.
+  - Splash **yourself** and it's empty: **you get another turn**.
+  - The launcher does **not** reload after a hit. It only reloads when no loaded bubbles are left.
 - **Battle HP** is your pet's real HP shown as 0–100. The match ends when one pet reaches 0.
 - **Missed turns:** a missed turn passes. Two missed turns in a row forfeit, and leaving counts as a loss.
 
 ### Who can battle
 
 - Both pets are in the Forest or Mining Valley (never in Paw Village or the Glade).
-- Each has at least **120 energy**, hunger below **900**, at least **20 battle HP**, and is not listed for sale.
+- Each has at least **120 energy**, hunger below **900**, at least **20 battle HP**, is not listed for sale, and is **not gathering** (accepting a challenge stops gathering).
 - The challenged owner accepts within 25 s. "Avoid battles" in autopilot auto-declines.
 - Cooldowns: **90 s** per pet, **30 min** before the same two pets meet again.
 
@@ -406,6 +410,8 @@ Every pet can run on its own while you're away:
 | Resource | a specific one, or "follow demand" |
 | Sell | immediately / when full / best price / nearest merchant / hold |
 | Battles | Accept challenges / Avoid battles (autopilot never starts a battle) |
+
+Autopilot is **on by default**; steering your pet pauses it and it resumes when you stop.
 | Eat when hunger is above | 600 by default |
 | Nap when energy is below | 150 by default |
 | Buy medicine automatically | yes / no |

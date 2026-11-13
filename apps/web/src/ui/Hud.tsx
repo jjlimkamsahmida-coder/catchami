@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { carryCapacity, ECONOMY, inventoryWeight, RESOURCES, type OwnPet, shopPrice } from "@catchami/shared";
+import { AREA_BOUNDS, carryCapacity, ECONOMY, formatTokens, inventoryWeight, RESOURCES, type OwnPet, shopPrice } from "@catchami/shared";
+import { centerOf, flyIcons, floatLabel, screenCenter } from "./fx.ts";
 import { controlledPet, entities, store, useStore } from "../net/store.ts";
 import { api, forgetDevice, refreshWallet, send, rid } from "../net/api.ts";
 import { toast } from "../net/store.ts";
@@ -75,8 +76,67 @@ function WalletButton() {
   );
 }
 
+const ONE = 10n ** 18n;
+const COIN_HTML = `<img src="${genUrl("ui-coin")}" alt="" />`;
+const BOLT_HTML = `<svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" /></svg>`;
+
+/** Tween a number toward its new value (coins counting up / down). */
+function useTween(target: number, ms = 800) {
+  const [v, setV] = useState(target);
+  const cur = useRef(target);
+  useEffect(() => {
+    const a = cur.current, b = target;
+    if (a === b) return;
+    const t0 = performance.now();
+    let raf = 0;
+    const step = (t: number) => {
+      const k = Math.min(1, (t - t0) / ms), e = 1 - Math.pow(1 - k, 3);
+      cur.current = a + (b - a) * e;
+      setV(cur.current);
+      if (k < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target]);
+  return v;
+}
+
+/** Coins fly between the shop and the pet's piggy bank; energy bolts fly from the badge to the gather button. */
+function usePetFx(p: OwnPet | null) {
+  const prev = useRef<{ id: string; bal: bigint; en: number } | null>(null);
+  const [flash, setFlash] = useState<"up" | "down" | null>(null);
+  useEffect(() => {
+    if (!p) return;
+    const bal = BigInt(p.balance), was = prev.current;
+    prev.current = { id: p.id, bal, en: p.energy };
+    if (!was || was.id !== p.id) return;
+    const d = bal - was.bal;
+    if (d >= ONE || d <= -ONE) {
+      const wallet = centerOf(".pc-coins") ?? screenCenter();
+      const shop = centerOf(".sheet .btn.leaf.block") ?? centerOf(".sheet") ?? screenCenter();
+      const n = Math.min(8, 3 + Math.floor(Math.log10(Number((d < 0n ? -d : d) / ONE) + 1)));
+      if (d > 0n) { flyIcons({ from: shop, to: wallet, html: COIN_HTML, count: n, cls: "coin" }); setTimeout(() => floatLabel(wallet, `+${formatTokens(d)}`, "gain"), 650); }
+      else { flyIcons({ from: wallet, to: centerOf(".sheet") ?? screenCenter(), html: COIN_HTML, count: n, cls: "coin" }); floatLabel(wallet, `−${formatTokens(-d)}`, "spend"); }
+      setFlash(d > 0n ? "up" : "down");
+      const t = setTimeout(() => setFlash(null), 900);
+      void t;
+    }
+    const spent = was.en - p.energy;
+    const gathering = !!store.get().mgSession || p.activity.startsWith("Gathering");
+    if (spent >= 3 && gathering) {
+      const from = centerOf(".pc-stat.en") ?? screenCenter();
+      const to = centerOf(".mg-tap") ?? centerOf(".actions .big-action") ?? screenCenter();
+      flyIcons({ from, to, html: BOLT_HTML, count: Math.min(6, 2 + Math.floor(spent / 20)), cls: "bolt", spread: 18 });
+      floatLabel({ x: from.x + 40, y: from.y }, `−${Math.round(spent)} ⚡`, "energy");
+    }
+  }, [p?.id, p?.balance, p?.energy]);
+  return flash;
+}
+
 export function PetCard() {
   const p = useStore(controlledPet);
+  const flash = usePetFx(p);
+  const coins = useTween(p ? Number(BigInt(p.balance) / ONE) : 0);
   if (!p) return null;
   const hp = p.hp / p.stats.maxHp, en = p.energy / p.stats.maxEnergy, fed = 1 - p.hunger / ECONOMY.stats.hungerMax;
   const w = inventoryWeight(p.carried), cap = carryCapacity(p.stats);
@@ -102,7 +162,7 @@ export function PetCard() {
           <span className="pc-fill" title={`Bag ${fmtQty(w)}/${fmtQty(cap)}`}><i style={{ width: `${Math.min(100, (w / cap) * 100)}%` }} /></span>
         </span>
       </span>
-      <span className="pc-coins"><img src={genUrl("ui-coin")} alt="" />{fmt(p.balance)}</span>
+      <span className={`pc-coins ${flash ?? ""}`}><img src={genUrl("ui-coin")} alt="" />{fmt(BigInt(Math.max(0, Math.round(coins))) * ONE)}</span>
     </button>
   );
 }
@@ -231,6 +291,14 @@ export function ActionBar() {
   if (touch && node && !ko && !store.get().mgSession) btns.push(<button key="gather" className="btn big-action" disabled={(nodes[node.id] ?? 1) <= 0 || full} onClick={() => send({ t: "gather", petId: p.id, nodeId: node.id })}>{full ? "Bag full" : (nodes[node.id] ?? 1) <= 0 ? "Regrowing…" : "Gather!"}</button>);
   // The tutorial teaches one thing per stage: only selling and gathering show up there.
   if (tut) return btns.length ? <div className="actions">{btns}</div> : null;
+  const foe = !ko ? nearbyFoe(px, py) : null;
+  if (foe) {
+    const gathering = !!store.get().mgSession || p.activity.startsWith("Gathering");
+    btns.unshift(<button key="battle" className="btn big-action battle" disabled={gathering} title={gathering ? "Stop gathering to battle" : ""}
+      onClick={() => send(foe.kind === "pet" ? { t: "br_challenge", petId: p.id, targetId: foe.id } : { t: "fight_bandit", petId: p.id, banditId: foe.id })}>
+      {gathering ? "Busy gathering" : `⚔️ Battle ${foe.name}`}
+    </button>);
+  }
   if (p.hunger > 300 && !ko) {
     { const sp = shopPrice("food", ticker?.hqStock.fish ?? 0); btns.push(<button key="food" className="btn paper" title={sp.imported ? "HQ kitchen is out of local fish — imported meals cost more" : ""} onClick={() => send({ t: "buy", petId: p.id, item: "food", rid: rid() })}>{sp.imported ? "Imported meal" : "Buy meal"} · {fmt(sp.price)}</button>); }
   }
@@ -238,6 +306,28 @@ export function ActionBar() {
   if (ko && !koReady && p.koUntil) btns.push(<div key="ko" className="panel small" style={{ padding: "6px 10px" }}>Recovering · {Math.ceil((p.koUntil - Date.now()) / 60000)} min</div>);
   if (!ko && p.energy < p.stats.maxEnergy * 0.5 && p.status !== "sleeping") btns.push(<button key="rest" className="btn paper" onClick={() => send({ t: "rest", petId: p.id })}>Nap</button>);
   return btns.length ? <div className="actions">{btns.slice(0, 3)}</div> : null;
+}
+
+/** The nearest other Keeper's pet or demo rival in battle range, out in the wild. */
+function nearbyFoe(px: number, py: number): { kind: "pet" | "rival"; id: string; name: string } | null {
+  const tx = px / 32, ty = py / 32;
+  const wild = (["forest", "mines"] as const).some((a) => { const [x0, y0, x1, y1] = AREA_BOUNDS[a]; return tx >= x0 && tx <= x1 && ty >= y0 && ty <= y1; });
+  if (!wild) return null;
+  const s = store.get(), range: number = ECONOMY.battle.challengeRangePx;
+  let best: { kind: "pet" | "rival"; id: string; name: string } | null = null, bd: number = range;
+  for (const e of entities.values()) {
+    if (!e.meta || e.meta.ownerId === s.userId || e.meta.status !== "active") continue;
+    const q = e.samples.at(-1);
+    if (!q) continue;
+    const d = Math.hypot(q[1] - px, q[2] - py);
+    if (d <= bd) { bd = d; best = { kind: "pet", id: e.id, name: e.meta.name }; }
+  }
+  for (const [id, bx, by, st, , name] of s.bandits) {
+    if (id === "bandit-practice" || st === 2) continue;
+    const d = Math.hypot(bx - px, by - py);
+    if (d <= bd) { bd = d; best = { kind: "rival", id, name }; }
+  }
+  return best;
 }
 
 /** Shown until the player owns a pet: movement and play need one. */
@@ -280,7 +370,7 @@ export function BottomNav() {
   return (
     <nav className="gamebar" aria-label="Game menu">
       {btn("map", "Map", "ui-map", screen === "map", () => go({ screen: screen === "map" ? "world" : "map" }))}
-      {btn("bag", "Bag", "ui-backpack", screen === "pets" && !!petScreen, () => go({ screen: "pets", petScreen: store.get().controlled }))}
+      {btn("bag", "Profile", "ui-backpack", screen === "pets" && !!petScreen, () => go({ screen: "pets", petScreen: store.get().controlled }))}
       {btn("pets", "Collection", "ui-heart", screen === "pets" && !petScreen, () => go({ screen: "pets", petScreen: null }))}
       {btn("market", "Market", "prop-stall-0", screen === "market", () => go({ screen: "market", petScreen: null }))}
       {btn("ranks", "Ranks", "ui-trophy", screen === "ranks", () => go({ screen: "ranks", petScreen: null }))}

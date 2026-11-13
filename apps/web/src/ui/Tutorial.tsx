@@ -17,7 +17,8 @@ import { TutorialHand } from "./TutorialHand.tsx";
 
 const TILE = 32;
 type Target = { x: number; y: number; label: string } | null;
-type Goal = "flag" | "gather4" | "sell" | "meal" | "fight" | "market" | "portal";
+type Goal = "flag" | "gather4" | "sell" | "meal" | "medicine" | "fight" | "market" | "profile" | "autopilot" | "piggy" | "portal";
+const TOUCH = typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
 interface Step {
   title: string;
   text: (pet: string) => string;
@@ -63,7 +64,7 @@ const STAGES: Stage[] = [
   {
     name: "First Steps", icon: "👣", learn: ["Moving around"],
     steps: [
-      { title: "Welcome to my glade!", pose: "wave", text: (n) => `This is the Keeper's Glade — a safe place to practise with ${n}. Let's start with a little walk: use the joystick (or tap the ground) to reach the flag!`, goal: "flag", goalText: "Walk to the flag", target: () => poi("glade_goal") },
+      { title: "Welcome to my glade!", pose: "wave", text: (n) => `This is the Keeper's Glade — a safe place to practise with ${n}. Let's start with a little walk: ${TOUCH ? "use the joystick (or tap the ground)" : "use the arrow keys or W A S D (or click the ground)"} to reach the flag!`, goal: "flag", goalText: "Walk to the flag", target: () => poi("glade_goal") },
     ],
   },
   {
@@ -81,17 +82,18 @@ const STAGES: Stage[] = [
     ],
   },
   {
-    name: "Trading", icon: "🪙", learn: ["Selling to merchants", "Buying food"],
+    name: "Trading", icon: "🪙", learn: ["Selling to merchants", "Buying food", "Buying medicine"],
     steps: [
       { title: "Sell to a merchant", pose: "point", text: () => "Merchants buy what you gather. Meet Merchant Mari! Walk over to her, tap “Open shop”, then sell your haul for coins.", goal: "sell", goalText: "Sell your resources to Mari", target: () => poi("glade_stall") },
       { title: "Time for a snack", pose: "wave", text: (n) => `Merchants sell food too! Open Mari's shop again and buy a meal — it fills ${n} up and restores energy. Meals cost ${fmt(ECONOMY.food.price)}.`, goal: "meal", goalText: "Buy a meal from Mari", target: () => poi("glade_stall") },
+      { title: "Medicine", pose: "point", text: (n) => `Battles cost HP. Medicine heals 40% of ${n}'s HP and wakes up a knocked-out pet. Buy one from Mari so you know where to find it (${fmt(ECONOMY.medicine.price)}).`, goal: "medicine", goalText: "Buy medicine from Mari", target: () => poi("glade_stall") },
     ],
   },
   {
     name: "Battles", icon: "⚔️", learn: ["Battling other Keepers", "Bubble Roulette"],
     steps: [
       {
-        title: "Battle time!", pose: "point", text: (n) => `Out in the wild, other Keepers' pets challenge you to Bubble Roulette — the winner takes the loser's bag! The launcher holds 6 bubbles and 2 of them are loaded. Take turns: splash your rival, or risk splashing yourself. A loaded bubble soaks for 20 HP. Coach Kiki is here to practise — show her what ${n} can do!`,
+        title: "Battle time!", pose: "point", text: (n) => `Out in the wild, other Keepers' pets challenge you to Bubble Roulette. The launcher holds 6 bubbles and 3 are loaded. Splash your rival — or splash yourself: if it's empty you get an extra turn! A loaded bubble soaks for 50 HP, so two soaks and you're out. Coach Kiki is here to practise — show her what ${n} can do!`,
         goal: "fight", goalText: "Win the practice battle", target: trainingBandit,
         extra: () => <div className="tut-bandit"><b>⚔️ PvP battle</b></div>,
       },
@@ -101,9 +103,19 @@ const STAGES: Stage[] = [
     name: "Marketplace", icon: "🛒", learn: ["Buying & selling pets"],
     steps: [
       {
-        title: "The marketplace", pose: "idle", text: () => "Want a rarer friend? Other Keepers sell their pets in the Marketplace — and you can sell yours too. Walk up to the market stall to take a peek, then come back!", goal: "market", goalText: "Visit the market stall", target: () => poi("glade_market"),
-        extra: () => <button className="btn sky sm" onClick={() => { marketOpened = true; store.set({ screen: "market", sheet: null }); }}>🛒 Open the marketplace</button>,
+        title: "The marketplace", pose: "idle", text: () => "Want a rarer friend? Other Keepers sell their pets in the Marketplace — and you can sell yours too. Tap Market at the bottom to take a peek, then come back!", goal: "market", goalText: "Open the Market",
       },
+    ],
+  },
+  {
+    name: "Profile", icon: "🎒", learn: ["Your pet's profile", "Autopilot", "Piggy bank"],
+    steps: [
+      { title: "Your pet's profile", pose: "point", text: (n) => `Everything about ${n} lives in the Profile. Tap Profile at the bottom.`, goal: "profile", goalText: "Open the Profile" },
+      { title: "The bag", pose: "idle", text: (n) => `The 🎒 Bag tab shows ${n}'s HP, energy and food, and what ${n} is carrying. The bar at the bottom shows how full the bag is — a full bag can't gather more, so sell to a merchant!` },
+      { title: "Autopilot", pose: "point", text: () => "Now tap the 🤖 Autopilot tab.", goal: "autopilot", goalText: "Open Autopilot" },
+      { title: "Autopilot is on", pose: "wave", text: (n) => `Autopilot is ON by default. Whenever you're not steering, ${n} gathers, sells to merchants, eats and naps all by itself — even while you're offline. Move ${n} yourself any time; autopilot picks up again when you stop. The settings here are optional.` },
+      { title: "Piggy bank", pose: "point", text: () => "Next, tap the 🪙 Piggy bank tab.", goal: "piggy", goalText: "Open the Piggy bank" },
+      { title: "Your pet's piggy bank", pose: "wave", text: (n) => `Every pet has its own piggy bank. Coins from selling go in here, and meals, medicine and gear are paid from it. You can add coins from your wallet or move them back. If you ever sell ${n} on the Market, the piggy bank goes with them!` },
     ],
   },
   {
@@ -113,6 +125,12 @@ const STAGES: Stage[] = [
     ],
   },
 ];
+/** The bottom menu appears once the tutorial reaches the Marketplace lesson. */
+export function tutorialShowsNav(step: number | undefined) {
+  const s = STEPS[Math.min(STEPS.length - 1, step ?? 0)];
+  return !!s && s.stage >= STAGES.findIndex((x) => x.name === "Marketplace");
+}
+
 const STEPS = STAGES.flatMap((st, si) => st.steps.map((s, k) => ({ ...s, stage: si, k, first: k === 0, last: k === st.steps.length - 1 })));
 
 // Survives the coach unmounting while the marketplace page is open.
@@ -126,6 +144,7 @@ export function TutorialCoach() {
   const own = useStore((s) => s.own);
   const controlled = useStore((s) => s.controlled);
   const fight = useStore((s) => s.banditFight);
+  const screen = useStore((s) => s.screen);
   const step = onboarding?.stage === "tutorial" ? Math.min(STEPS.length - 1, onboarding.tutorial ?? 0) : -1;
   const cur = step >= 0 ? STEPS[step]! : null;
   const [phase, setPhaseRaw] = useState<"intro" | "play" | "clear">(() =>
@@ -134,7 +153,7 @@ export function TutorialCoach() {
   const [met, setMet] = useState(false);
   const [got, setGot] = useState<Resource[]>([]);
   const [min, setMin] = useState(false);
-  const base = useRef<{ x: number; y: number; carried: number; hunger: number; byRes: Record<Resource, number> } | null>(null);
+  const base = useRef<{ x: number; y: number; carried: number; hunger: number; byRes: Record<Resource, number>; balance: bigint } | null>(null);
   const readyAt = useRef(0);
   const stepStart = useRef(Date.now());
   const arrow = useRef<HTMLDivElement>(null);
@@ -171,7 +190,7 @@ export function TutorialCoach() {
   const startStage = () => {
     if (!cur) return;
     if (pet) send({ t: "tutorial", petId: pet.id, action: "stage", stage: cur.stage + 1 });
-    store.set({ minigame: null, mgSession: null, sheet: null }); // leave the last stage behind
+    store.set({ minigame: null, mgSession: null, sheet: null, screen: "world", petScreen: null, profileTab: "bag" }); // leave the last stage behind
     base.current = null; readyAt.current = Date.now() + 900; stepStart.current = Date.now();
     setPhase("play"); sfx.whoosh();
   };
@@ -192,12 +211,13 @@ export function TutorialCoach() {
     return () => clearTimeout(t);
   }, [step, pet?.id]);
 
-  // Coming back from the marketplace completes stage 5.
+  // Opening the Market (bottom bar) and coming back completes the marketplace tutorial.
   useEffect(() => {
-    if (cur?.goal === "market" && phase === "play" && marketOpened && !met) {
+    if (cur?.goal === "market" && phase === "play" && screen === "market") marketOpened = true;
+    if (cur?.goal === "market" && phase === "play" && marketOpened && screen !== "market" && !met) {
       marketOpened = false; setMet(true); sfx.perfect(); setTimeout(complete, 900);
     }
-  }, [step, phase]);
+  }, [step, phase, screen]);
 
   // Winning the practice fight.
   useEffect(() => {
@@ -215,17 +235,18 @@ export function TutorialCoach() {
       if (Date.now() < readyAt.current) return; // wait for the stage teleport to land
       const p = petPos(), me = controlledPet(store.get());
       if (!p || !me) return;
-      base.current ??= { x: p.x, y: p.y, carried: inventoryWeight(me.carried), hunger: me.hunger, byRes: { ...me.carried } };
+      base.current ??= { x: p.x, y: p.y, carried: inventoryWeight(me.carried), hunger: me.hunger, byRes: { ...me.carried }, balance: BigInt(me.balance) };
+      const st = store.get();
+      if (cur.goal === "profile" && st.screen === "pets" && st.petScreen) done();
+      if (cur.goal === "autopilot" && st.screen === "pets" && st.profileTab === "strategy") done();
+      if (cur.goal === "piggy" && st.screen === "pets" && st.profileTab === "wallet") done();
       const b = base.current;
+      if (cur.goal === "medicine" && BigInt(me.balance) <= b.balance - ECONOMY.medicine.price) done();
       if (cur.goal === "flag") { const g = poi("glade_goal"); if (g && Math.hypot(p.x - g.x, p.y - g.y) < TILE * 1.6) done(); }
       if (cur.goal === "gather4") {
         const have = RESOURCES.filter((r) => me.carried[r] > b.byRes[r]);
         if (have.length !== gatheredKinds.size) { gatheredKinds = new Set(have); setGot(have); if (have.length < 4) sfx.pop(); }
         if (have.length >= 4) done();
-      }
-      if (cur.goal === "market" && !marketOpened && !marketAutoOpened) {
-        const m = poi("glade_market");
-        if (m && Math.hypot(p.x - m.x, p.y - m.y) < TILE * 2) { marketOpened = true; marketAutoOpened = true; store.set({ screen: "market", sheet: null }); }
       }
       if (cur.goal === "sell") { const w = inventoryWeight(me.carried); if (b.carried > 0 && w === 0) done(); if (w > b.carried) b.carried = w; }
       if (cur.goal === "meal" && (me.hunger < b.hunger - 50 || b.hunger < 60)) done(); // already full: nothing to buy
@@ -252,6 +273,8 @@ export function TutorialCoach() {
   }, [step, met, phase]);
 
   if (!cur) return null;
+  // On the Market page: just point at the back button so they know how to return.
+  if (screen === "market") return cur.goal === "market" ? <TutorialHand goal="marketBack" active /> : null;
   const hand = <TutorialHand key="hand" goal={phase === "play" ? cur.goal : undefined} active={phase !== "play" || !met} />;
   const stage = STAGES[cur.stage]!;
   const n = cur.stage + 1, total = STAGES.length;
@@ -261,7 +284,7 @@ export function TutorialCoach() {
     <div key="stage-intro" className="stage-card-wrap">
       <div className="stage-card panel">
         <div className="stage-pips">{STAGES.map((_, i) => <i key={i} className={i < cur.stage ? "done" : i === cur.stage ? "now" : ""} />)}</div>
-        <span className="stage-kicker">Stage {n} of {total}</span>
+        <span className="stage-kicker">Tutorial {n} of {total}</span>
         <div className="stage-icon">{stage.icon}</div>
         <h2 className="stage-name">{stage.name}</h2>
         <div className="stage-learn">
@@ -279,10 +302,10 @@ export function TutorialCoach() {
       <div className="confetti-burst" style={{ left: "50%", top: "38%" }}>{Array.from({ length: 30 }, (_, k) => <i key={k} style={{ "--a": `${k * 12}deg`, "--d": `${110 + (k % 5) * 36}px`, "--c": ["#ff7a59", "#ffd166", "#6cc04a", "#5ab8ff", "#a66bf2", "#f0569c"][k % 6], animationDelay: `${(k % 4) * 40}ms` } as React.CSSProperties} />)}</div>
       <div className="stage-card panel">
         <div className="stage-stars">{[0, 1, 2].map((i) => <span key={i} style={{ animationDelay: `${150 + i * 180}ms` }}>★</span>)}</div>
-        <h2 className="stage-clear-title">{lastStage ? "Tutorial Complete!" : "Stage Clear!"}</h2>
-        <span className="stage-kicker">Stage {n} · {stage.name}</span>
+        <h2 className="stage-clear-title">{lastStage ? "Tutorial Complete!" : `Tutorial ${n} Clear!`}</h2>
+        <span className="stage-kicker">Tutorial {n} · {stage.name}</span>
         <p className="stage-clear-msg">{lastStage ? `${name} is ready for the big wide world!` : `Nice work! Next up: ${STAGES[n]!.icon} ${STAGES[n]!.name}`}</p>
-        <button className="btn sun stage-go" onClick={() => goTo(step + 1)}>{lastStage ? "Enter Paw Village" : "Next stage ›"}</button>
+        <button className="btn sun stage-go" onClick={() => goTo(step + 1)}>{lastStage ? "Enter Paw Village" : "Next tutorial ›"}</button>
       </div>
     </div>
   </>);
@@ -290,7 +313,7 @@ export function TutorialCoach() {
   if (!cur.goal) return (<>{hand}
     <div key="stage-info" className="stage-card-wrap">
       <div className="stage-card panel tut-info">
-        <span className="stage-kicker">Stage {n} · {stage.name}</span>
+        <span className="stage-kicker">Tutorial {n} · {stage.name}</span>
         <h2 className="tut-info-title">{cur.title}</h2>
         <p className="tut-info-text">{cur.text(name)}</p>
         {cur.extra?.(name)}
@@ -306,7 +329,7 @@ export function TutorialCoach() {
       <div key="card" ref={card} className={`tut-card sticky panel ${min ? "min" : ""}`}>
         <button className="tut-min" onClick={() => setMin((v) => !v)} aria-label={min ? "Expand" : "Minimise"}>{min ? "▴" : "▾"}</button>
         <div className="tut-body">
-          <span className="tut-step">Stage {n} · {stage.name}{stage.steps.length > 1 ? ` · ${cur.k + 1}/${stage.steps.length}` : ""}</span>
+          <span className="tut-step">Tutorial {n} · {stage.name}{stage.steps.length > 1 ? ` · ${cur.k + 1}/${stage.steps.length}` : ""}</span>
           <b>{cur.title}</b>
           {!min && <p>{cur.text(name)}</p>}
           {!min && cur.extra?.(name)}

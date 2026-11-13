@@ -1,4 +1,6 @@
-import { AREA_BOUNDS, ECONOMY, nodeStock, RESOURCE_LABEL, RESOURCES, inventoryWeight, type Resource, toWire } from "@catchami/shared";
+import { AREA_BOUNDS, ECONOMY, nodeStock, RESOURCE_LABEL, RESOURCES, inventoryWeight, shopPrice, type Resource, toWire } from "@catchami/shared";
+import { useState } from "react";
+import { CraftPanel } from "./Pets.tsx";
 import { controlledPet, entities, store, useStore } from "../net/store.ts";
 import { rid, send } from "../net/api.ts";
 import { fmt, fmtQty, PetArt, RarityTag, ResIcon, Sheet } from "./common.tsx";
@@ -42,7 +44,11 @@ function MerchantSheet({ id }: { id: string }) {
   const m = useStore((s) => s.merchants.find((x) => x.id === id));
   const det = useStore((s) => s.merchantDetail[id]);
   const p = useStore(controlledPet);
+  const tut = useStore((s) => s.onboarding?.stage === "tutorial");
+  const ticker = useStore((s) => s.ticker);
+  const [crafting, setCrafting] = useState(false);
   if (!m) return null;
+  const meal = shopPrice("food", ticker?.hqStock.fish ?? 0), med = shopPrice("medicine", ticker?.hqStock.herbs ?? 0);
   const fresh = det && Date.now() - det.at < 2500;
   const open = m.state !== "at_hq" && m.state !== "unavailable";
   const sell = (items: Partial<Record<Resource, number>>) => p && send({ t: "sell", petId: p.id, merchantId: id, items });
@@ -76,9 +82,15 @@ function MerchantSheet({ id }: { id: string }) {
             </div>
             <button className="btn leaf block" disabled={!p || inventoryWeight(p.carried) === 0} onClick={() => sell(p!.carried)}>Sell everything</button>
             <div className="row" style={{ gap: 8 }}>
-              <button className="btn sun grow" disabled={!p || p.hunger < 50} onClick={() => p && send({ t: "buy", petId: p.id, item: "food", rid: rid() })}>🍖 Buy meal · {fmt(ECONOMY.food.price)}</button>
-              <button className="btn coral grow" disabled={!p || (p.status !== "knocked_out" && p.hp >= p.stats.maxHp)} onClick={() => p && send({ t: "buy", petId: p.id, item: "medicine", rid: rid() })}>💊 Medicine · {fmt(ECONOMY.medicine.price)}</button>
+              <button className="btn sun grow" disabled={!p || p.hunger < 50} onClick={() => p && send({ t: "buy", petId: p.id, item: "food", rid: rid() })}>🍖 Buy meal · {fmt(tut ? ECONOMY.food.price : meal.price)}</button>
+              <button className="btn coral grow" disabled={!p || (!tut && p.status !== "knocked_out" && p.hp >= p.stats.maxHp)} onClick={() => p && send({ t: "buy", petId: p.id, item: "medicine", rid: rid() })}>💊 Medicine · {fmt(tut ? ECONOMY.medicine.price : med.price)}</button>
             </div>
+            {!tut && p && (
+              <div className="card col" style={{ gap: 6 }}>
+                <button className="btn sky block" onClick={() => setCrafting((v) => !v)}>🛠️ Craft gear {crafting ? "▴" : "▾"}</button>
+                {crafting && <CraftPanel p={p} />}
+              </div>
+            )}
             <p className="small muted" style={{ margin: 0 }}>Prices follow live demand and HQ's treasury health. The merchant pays from its own HQ-funded budget and stops buying when cash or cart space runs out.</p>
           </>
         )}

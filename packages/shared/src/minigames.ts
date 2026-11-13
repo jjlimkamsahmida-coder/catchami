@@ -109,9 +109,11 @@ export function gradeRound(p: RoundParams, ms: number): { grade: Grade; detail: 
 
 export const BUBBLE = {
   slots: 6,
-  loaded: 2,
-  /** Battle HP is the pet's HP as a 0–100 score; a splash costs this much. */
-  splashHp: 20,
+  loaded: 3,
+  /** Battle HP is the pet's HP as a 0–100 score; a splash costs this much (two hits end a full-HP pet). */
+  splashHp: 50,
+  /** Extra time on the very first turn so players can read the how-to-play card. */
+  firstTurnGraceMs: 10_000,
   /** Minimum battle HP to enter a match. */
   minHp: 20,
   turnMs: 15_000,

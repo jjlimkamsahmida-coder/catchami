@@ -52,7 +52,9 @@ export interface State {
   mgSession: { petId: string; kind: string; ended: string | null } | null;
   mgResult: { roundId: string; grade: Grade; gained: number; resource: Resource; detail: string; note?: string; at: number } | null;
   bubble: BubbleMatchView | null;
-  bubbleInvite: { matchId: string; fromName: string; ownerName: string; sticker: string | null; species: "cat" | "dog"; look: OwnPet["look"]; toPetId: string; expiresAt: number } | null;
+  /** Which tab of the pet Profile page is open (the tutorial watches it). */
+  profileTab: "bag" | "strategy" | "wallet" | "gear";
+  bubbleInvite: { matchId: string; demo: boolean; fromName: string; ownerName: string; sticker: string | null; species: "cat" | "dog"; look: OwnPet["look"]; toPetId: string; expiresAt: number } | null;
 }
 
 export const entities = new Map<string, PetEntity>();
@@ -61,7 +63,7 @@ let state: State = {
   token: null, onboarding: null, nearAccount: null, userId: null, displayName: "", network: "", connected: false,
   map: null, nodesDef: [], pois: [], hq: null, nodes: {}, merchants: [], bandits: [], merchantDetail: {},
   own: [], controlled: null, wallet: null, ticker: null, toasts: [], sheet: null, screen: "world", petScreen: null,
-  minigame: null, mgSession: null, mgResult: null, bubble: null, bubbleInvite: null, banditFight: null, banditDuel: null,
+  minigame: null, mgSession: null, mgResult: null, bubble: null, profileTab: "bag", bubbleInvite: null, banditFight: null, banditDuel: null,
 };
 const subs = new Set<() => void>();
 

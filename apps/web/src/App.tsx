@@ -11,7 +11,7 @@ import { EconomyGuide } from "./ui/EconomyGuide.tsx";
 import { MinigameLayer } from "./ui/Minigame.tsx";
 import { BubbleInvite, BubbleScreen } from "./ui/Bubble.tsx";
 import { isDesktop, Journey, PhoneCatch, WelcomeBack } from "./ui/Journey.tsx";
-import { TutorialCoach } from "./ui/Tutorial.tsx";
+import { TutorialCoach, tutorialShowsNav } from "./ui/Tutorial.tsx";
 import { MusicToggle } from "./ui/MusicToggle.tsx";
 import { music } from "./ui/music.ts";
 
@@ -163,6 +163,7 @@ function Shell() {
   const screen = useStore((s) => s.screen);
   const bubble = useStore((s) => s.bubble);
   const tutorial = useStore((s) => s.onboarding?.stage === "tutorial");
+  const tutStep = useStore((s) => s.onboarding?.tutorial);
   useEffect(() => {
     let cancelled = false;
     void Promise.all([import("./game/GameScene.ts"), document.fonts.load("600 14px Fredoka")]).then(async ([m]) => {
@@ -186,14 +187,14 @@ function Shell() {
         <BubbleInvite />
         {bubble && <BubbleScreen />}
         {screen === "world" && <KeyHint />}
-        {(screen === "world" || screen === "map") && <TutorialCoach />}
         {screen === "pets" && <PetsPage />}
         {screen === "market" && <MarketScreen />}
         {screen === "ranks" && <RanksScreen />}
         {screen === "wallet" && <WalletScreen />}
         {screen === "fairness" && <FairnessScreen />}
         {screen === "catch" && (isDesktop() ? <DesktopCatchScreen /> : <Suspense fallback={<div className="catch" />}><CatchScreen /></Suspense>)}
-        {(screen === "world" || screen === "map") && !tutorial && <BottomNav />}
+        {(screen === "world" || screen === "map") && (!tutorial || tutorialShowsNav(tutStep)) && <BottomNav />}
+        {(screen === "world" || screen === "map" || screen === "pets" || screen === "market") && <TutorialCoach />}
         <Toasts />
       </div>
     </div>

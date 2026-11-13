@@ -183,37 +183,13 @@ export function WalletTab({ p }: { p: OwnPet }) {
         </div>
         {p.listed && <p className="small muted" style={{ margin: 0 }}>Withdrawals are locked while {p.name} is listed — buyers rely on the shown balance.</p>}
       </div>
-      <div className="card col">
-        <h3>Marketplace</h3>
-        {myListing ? (
-          <>
-            <p style={{ margin: 0 }}>Listed for <b>{fmt(myListing.price)}</b>. The attached balance transfers to the buyer.</p>
-            <button className="btn paper" onClick={async () => { try { await api(`/api/market/${myListing.id}/cancel`, {}); toast("good", "Listing cancelled"); listing.reload(); } catch (e) { toast("bad", (e as Error).message); } }}>Cancel listing</button>
-          </>
-        ) : (
-          <>
-            <label className="field">Sale price (whole $CATCHAMI)<input type="text" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value.replace(/[^\d.]/g, ""))} /></label>
-            {price && <p className="small muted" style={{ margin: 0 }}>You receive {formatTokens(parseTokens(price || "0") - (parseTokens(price || "0") * 200n) / 10000n)} after the 2% marketplace fee. {p.name}'s attached balance ({fmt(p.balance)}) goes with the sale.</p>}
-            <button className="btn" disabled={!price} onClick={async () => { try { await api(`/api/market/list`, { petId: p.id, price }); toast("good", `${p.name} listed`); listing.reload(); } catch (e) { toast("bad", (e as Error).message); } }}>List {p.name} for sale</button>
-          </>
-        )}
-      </div>
+      <p className="small muted" style={{ margin: 0 }}>Want to sell {p.name}? Use the 🛒 Market — the piggy bank goes with the pet.</p>
     </div>
   );
 }
 
 export function GearTab({ p }: { p: OwnPet }) {
   const gear = useAsync(() => api(`/api/equipment`), []);
-  const recipes = useAsync(() => api(`/api/craft`), []);
-  const [busy, setBusy] = useState(false);
-  const craft = async (kind: EquipmentKind, buyMissing: boolean) => {
-    setBusy(true);
-    try {
-      const r = await api(`/api/pets/${p.id}/craft`, { kind, buyMissing, rid: rid() });
-      toast("good", `Crafted ${r.rarity} ${EQUIPMENT[kind].label} for ${fmt(r.fee)}`);
-      gear.reload(); recipes.reload();
-    } catch (e) { toast("bad", (e as Error).message); } finally { setBusy(false); }
-  };
   const equip = async (id: string, petId: string | null) => {
     try { await api(`/api/equipment/${id}/equip`, { petId }); gear.reload(); } catch (e) { toast("bad", (e as Error).message); }
   };
@@ -221,7 +197,7 @@ export function GearTab({ p }: { p: OwnPet }) {
     <div className="col" style={{ gap: 12 }}>
       <div className="card col">
         <h3>Equipment ({p.equipment.length}/{ECONOMY.equipment.slots} slots)</h3>
-        {gear.data?.items?.length === 0 && <p className="muted small" style={{ margin: 0 }}>No equipment yet — craft some below.</p>}
+        {gear.data?.items?.length === 0 && <p className="muted small" style={{ margin: 0 }}>No equipment yet.</p>}
         {gear.data?.items?.map((it: { id: string; kind: EquipmentKind; rarity: string; pet_id: string | null; equipped: boolean }) => (
           <div key={it.id} className="row">
             <span className={`tag rarity ${it.rarity}`}>{it.rarity}</span>
@@ -232,27 +208,43 @@ export function GearTab({ p }: { p: OwnPet }) {
           </div>
         ))}
       </div>
-      <div className="card col">
-        <h3>Craft</h3>
-        <p className="small muted" style={{ margin: 0 }}>Crafting consumes real wood and minerals — from {p.name}'s bag first, then HQ's delivered stock if you choose to buy the rest. The token fee goes 90% HQ / 10% team. Bonuses are capped; some gear has trade-offs.</p>
-        {recipes.data?.recipes?.map((r: { kind: EquipmentKind; label: string; fee: string; wood: number; minerals: number; bonusBps: Record<string, number>; hqStock: { wood: number; minerals: number }; hqUnitPrice: { wood: string; minerals: string } }) => {
-          const needW = Math.max(0, r.wood - p.carried.wood), needM = Math.max(0, r.minerals - p.carried.minerals);
-          const canBuy = needW <= r.hqStock.wood && needM <= r.hqStock.minerals;
-          const extra = BigInt(r.hqUnitPrice.wood) * BigInt(needW) + BigInt(r.hqUnitPrice.minerals) * BigInt(needM);
-          return (
-            <div key={r.kind} className="col" style={{ gap: 4, borderTop: "2px dashed var(--paper-3)", paddingTop: 8 }}>
-              <div className="row"><b className="grow">{r.label}</b><span className="small">{Object.entries(r.bonusBps).map(([k, v]) => `${v > 0 ? "+" : ""}${v / 100}% ${k}`).join(", ")}</span></div>
-              <div className="row small"><ResIcon r="wood" size={16} /> {r.wood} <ResIcon r="minerals" size={16} /> {r.minerals} <span className="muted">+ {fmt(r.fee)} fee</span></div>
-              <div className="row">
-                <button className="btn sm grow" disabled={busy || needW > 0 || needM > 0} onClick={() => craft(r.kind, false)}>Craft from bag</button>
-                <button className="btn sm paper grow" disabled={busy || (!needW && !needM) || !canBuy} title={!canBuy ? "HQ doesn't have enough real stock" : ""} onClick={() => craft(r.kind, true)}>
-                  {needW || needM ? (canBuy ? `Buy missing · ${fmt(extra)}` : "HQ stock too low") : "Have materials"}
-                </button>
-              </div>
+      <div className="notice">🛠️ Gear is crafted at merchants: walk up to any merchant, tap <b>Open shop</b> and pick <b>Craft gear</b>.</div>
+    </div>
+  );
+}
+
+/** Crafting bench, shown inside a merchant's shop. */
+export function CraftPanel({ p }: { p: OwnPet }) {
+  const recipes = useAsync(() => api(`/api/craft`), []);
+  const [busy, setBusy] = useState(false);
+  const craft = async (kind: EquipmentKind, buyMissing: boolean) => {
+    setBusy(true);
+    try {
+      const r = await api(`/api/pets/${p.id}/craft`, { kind, buyMissing, rid: rid() });
+      toast("good", `Crafted ${r.rarity} ${EQUIPMENT[kind].label} for ${fmt(r.fee)}`);
+      recipes.reload();
+    } catch (e) { toast("bad", (e as Error).message); } finally { setBusy(false); }
+  };
+  return (
+    <div className="col" style={{ gap: 8 }}>
+      <p className="small muted" style={{ margin: 0 }}>Uses wood and stone from {p.name}'s bag first; missing materials can be bought from HQ's stock. The fee is paid from {p.name}'s piggy bank.</p>
+      {recipes.data?.recipes?.map((r: { kind: EquipmentKind; label: string; fee: string; wood: number; minerals: number; bonusBps: Record<string, number>; hqStock: { wood: number; minerals: number }; hqUnitPrice: { wood: string; minerals: string } }) => {
+        const needW = Math.max(0, r.wood - p.carried.wood), needM = Math.max(0, r.minerals - p.carried.minerals);
+        const canBuy = needW <= r.hqStock.wood && needM <= r.hqStock.minerals;
+        const extra = BigInt(r.hqUnitPrice.wood) * BigInt(needW) + BigInt(r.hqUnitPrice.minerals) * BigInt(needM);
+        return (
+          <div key={r.kind} className="col" style={{ gap: 4, borderTop: "2px dashed var(--paper-3)", paddingTop: 8 }}>
+            <div className="row"><b className="grow">{r.label}</b><span className="small">{Object.entries(r.bonusBps).map(([k, v]) => `${v > 0 ? "+" : ""}${v / 100}% ${k}`).join(", ")}</span></div>
+            <div className="row small"><ResIcon r="wood" size={16} /> {r.wood} <ResIcon r="minerals" size={16} /> {r.minerals} <span className="muted">+ {fmt(r.fee)} fee</span></div>
+            <div className="row">
+              <button className="btn sm grow" disabled={busy || needW > 0 || needM > 0} onClick={() => craft(r.kind, false)}>Craft from bag</button>
+              <button className="btn sm paper grow" disabled={busy || (!needW && !needM) || !canBuy} title={!canBuy ? "HQ doesn't have enough real stock" : ""} onClick={() => craft(r.kind, true)}>
+                {needW || needM ? (canBuy ? `Buy missing · ${fmt(extra)}` : "HQ stock too low") : "Have materials"}
+              </button>
             </div>
-          );
-        })}
-      </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -35,9 +35,9 @@ function PageFrame({ title, icon, theme, onBack = backToGame, right, children }:
 // ------------------------------------------------------------ Bag
 
 export function BagScreen({ p }: { p: OwnPet }) {
-  const [tab, setTab] = useState<"bag" | "strategy" | "wallet" | "gear">("bag");
+  const tab = useStore((s) => s.profileTab);
+  const setTab = (t: typeof tab) => store.set({ profileTab: t });
   const controlled = useStore((s) => s.controlled);
-  const ticker = useStore((s) => s.ticker);
   const w = inventoryWeight(p.carried), cap = carryCapacity(p.stats);
   const hp = p.hp / p.stats.maxHp, en = p.energy / p.stats.maxEnergy, fed = 1 - p.hunger / ECONOMY.stats.hungerMax;
   const fromCollection = store.get().screen === "pets" && controlled !== p.id;
@@ -45,7 +45,7 @@ export function BagScreen({ p }: { p: OwnPet }) {
     <div className={`bag-need ${k}`}><span>{label}</span><i><b style={{ width: `${Math.max(3, v * 100)}%` }} /></i><em>{text}</em></div>
   );
   return (
-    <PageFrame title="Bag" icon="ui-backpack" theme="t-bag" onBack={fromCollection ? () => store.set({ petScreen: null }) : backToGame}
+    <PageFrame title="Profile" icon="ui-backpack" theme="t-bag" onBack={fromCollection ? () => store.set({ petScreen: null }) : backToGame}
       right={<span className="gpage-coins"><img src={genUrl("ui-coin")} alt="" />{fmt(p.balance)}</span>}>
       <div className="bag-hero">
         <div className={`bag-avatar r-${p.rarity}`}><PetArt sticker={p.sticker} species={p.species} look={p.look} /></div>
@@ -75,13 +75,8 @@ export function BagScreen({ p }: { p: OwnPet }) {
               </div>
             ))}
           </div>
-          <div className="bag-cap"><span>Bag space</span><i><b style={{ width: `${Math.min(100, (w / cap) * 100)}%` }} /></i><em>{fmtQty(w)} / {fmtQty(cap)}</em></div>
-          <div className="bag-actions">
-            <button className="gbig sun" disabled={p.hunger < 50} onClick={() => send({ t: "buy", petId: p.id, item: "food", rid: rid() })}>🍖 {shopPrice("food", ticker?.hqStock.fish ?? 0).imported ? "Imported meal" : "Buy meal"} · {fmt(shopPrice("food", ticker?.hqStock.fish ?? 0).price)}</button>
-            <button className="gbig coral" disabled={p.status !== "knocked_out" && p.hp >= p.stats.maxHp} onClick={() => send({ t: "buy", petId: p.id, item: "medicine", rid: rid() })}>💊 Medicine · {fmt(shopPrice("medicine", ticker?.hqStock.herbs ?? 0).price)}</button>
-            <button className="gbig sky" disabled={p.status === "knocked_out"} onClick={() => send({ t: "rest", petId: p.id })}>💤 Take a nap</button>
-          </div>
-          <p className="gpage-tip">Tip: sell your loot to travelling merchants — and watch out for other Keepers challenging you in the wild!</p>
+          <p className="gpage-tip">Tip: meals, medicine and gear are sold by merchants — sell your loot there too, and watch out for other Keepers challenging you in the wild!</p>
+          <div className={`bag-cap bottom ${w >= cap * 0.98 ? "full" : ""}`}><span>🎒 Bag space</span><i><b style={{ width: `${Math.min(100, (w / cap) * 100)}%` }} /></i><em>{fmtQty(w)} / {fmtQty(cap)}</em></div>
         </>
       )}
       {tab === "strategy" && <div className="gpage-card"><StrategyTab p={p} /></div>}

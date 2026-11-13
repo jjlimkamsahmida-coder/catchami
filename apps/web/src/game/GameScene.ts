@@ -168,8 +168,14 @@ export class GameScene extends Phaser.Scene {
       pulse.lineStyle(3, 0xffffff, 1).strokeEllipse(0, 0, 92, 40);
       this.tweens.add({ targets: pulse, scale: { from: 0.6, to: 1.6 }, alpha: { from: 0.9, to: 0 }, duration: 1300, repeat: -1, ease: "Cubic.easeOut" });
     }
+    const HALO: Record<Resource, number> = { fish: 0x5ab8ff, herbs: 0x6cc04a, wood: 0xe0a458, minerals: 0xb9a3e8 };
     for (const n of s.nodesDef) {
       const x = n.tx * TILE + 16, y = n.ty * TILE + 30;
+      // Soft glowing ring on the ground so spots are easy to find.
+      const halo = this.add.graphics({ x, y: y + 2 }).setDepth(-40);
+      halo.fillStyle(HALO[n.resource], 0.22).fillEllipse(0, 0, 84, 32);
+      halo.lineStyle(2.5, HALO[n.resource], 0.8).strokeEllipse(0, 0, 84, 32);
+      this.tweens.add({ targets: halo, alpha: { from: 1, to: 0.45 }, scale: { from: 1, to: 1.06 }, duration: 1200, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
       const img = this.add.image(x, y + 4, `node-${n.resource}`).setOrigin(0.5, 1).setDepth(y).setInteractive({ useHandCursor: true });
       this.fitNode(img);
       // Tap a spot: the pet walks over and starts gathering right away (no sheet).
@@ -444,6 +450,12 @@ export class GameScene extends Phaser.Scene {
       img.y = Math.abs(Math.sin(time / 180)) * -3;
       const glow = c.list[0] as Phaser.GameObjects.Graphics;
       glow.clear();
+      // Ground shadow + a subtle golden ring so merchants stand out.
+      glow.fillStyle(0x2b1d3a, 0.28).fillEllipse(0, 1, 54, 16);
+      if (visible) {
+        glow.fillStyle(0xffd166, 0.12).fillEllipse(0, 2, 86, 30);
+        glow.lineStyle(2, 0xffd166, 0.35 + 0.15 * Math.sin(time / 400)).strokeEllipse(0, 2, 86, 30);
+      }
       const near = !!cpos && visible && Math.hypot(cpos[0] - m.x, cpos[1] - m.y) <= ECONOMY.merchants.interactRangePx;
       if (near) glow.lineStyle(3, 0xffd166, 0.9 - 0.3 * Math.sin(time / 200)).strokeEllipse(0, 0, 70, 24);
       const mb = this.merchantBtns.get(m.id);

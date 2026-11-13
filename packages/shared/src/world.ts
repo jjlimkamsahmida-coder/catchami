@@ -192,7 +192,7 @@ export function generateWorld(seed = WORLD_SEED): WorldDef {
   for (let y = 2; y < 36; y++) { const sx = 24 + Math.round((n1(30, y) - 0.5) * 8); set(sx, y, T.water); set(sx + 1, y, T.shallow); set(sx - 1, y, T.shallow); }
   blob(52, 10, 5, 3);
   blob(96, 47, 4, 2, false);
-  blob(GLADE_X0 + 34, 54, 3, 2, false); // Gathering arena pond (practice fishing)
+  blob(GLADE_X0 + 34, 50, 3, 2, false); // Gathering arena pond (practice fishing), kept high so the tutorial card never covers it
 
   // Village plaza (cobblestone); HQ castle on its north side.
   const hq = { tx: 96, ty: 20 };
@@ -404,7 +404,7 @@ export function generateWorld(seed = WORLD_SEED): WorldDef {
   addNodes("fish", 8, A.forest, (x, y, t) => ground(t) && nextToWater(x, y));
   addNodes("minerals", 15, A.mines, (_x, _y, t) => t === T.highland);
   // Gathering arena: one spot of each resource.
-  for (const [resource, x, y] of [["wood", GLADE_X0 + 27, 44], ["herbs", GLADE_X0 + 33, 45], ["minerals", GLADE_X0 + 27, 53], ["fish", GLADE_X0 + 31, 53]] as const) {
+  for (const [resource, x, y] of [["wood", GLADE_X0 + 27, 44], ["herbs", GLADE_X0 + 33, 45], ["minerals", GLADE_X0 + 27, 49], ["fish", GLADE_X0 + 30, 49]] as const) {
     // Clear the tile and its neighbours so the spot is always reachable.
     for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) if (get(x + i, y + j) !== T.water && get(x + i, y + j) !== T.shallow) { set(x + i, y + j, T.grass); blocked[idx(x + i, y + j)] = 0; }
     for (let k = props.length - 1; k >= 0; k--) { const q = props[k]!; if (Math.abs(q.tx - x) <= 1 && Math.abs(q.ty - y) <= 1 && PROP_SIZE[q.kind].w === 1) props.splice(k, 1); }

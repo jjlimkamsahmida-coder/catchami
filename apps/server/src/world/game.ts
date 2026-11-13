@@ -646,11 +646,12 @@ export class Game {
       throw new GameError("cooldown", `${p.name} is still recovering — medicine works after the cooldown`);
     }
     if (item === "food" && p.s.hunger < 50) throw new GameError("full", `${p.name} isn't hungry`);
-    if (item === "medicine" && p.s.status !== "knocked_out" && p.s.hp >= p.stats.maxHp) throw new GameError("healthy", `${p.name} is already healthy`);
+    const inGlade = areaAt(this.world, p.s.x, p.s.y).id === "glade";
+    // (The tutorial glade lets you practise buying medicine even when healthy.)
+    if (item === "medicine" && !inGlade && p.s.status !== "knocked_out" && p.s.hp >= p.stats.maxHp) throw new GameError("healthy", `${p.name} is already healthy`);
     const cfg = item === "food" ? ECONOMY.food : ECONOMY.medicine;
     const resource: Resource = item === "food" ? "fish" : "herbs";
     const qty = item === "food" ? ECONOMY.food.fishPerMeal : ECONOMY.medicine.herbsPerDose;
-    const inGlade = areaAt(this.world, p.s.x, p.s.y).id === "glade";
     return this.withPet(p, async () => {
       const next = { ...p.s };
       if (item === "food") {

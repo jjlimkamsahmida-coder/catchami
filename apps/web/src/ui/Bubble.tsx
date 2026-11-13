@@ -26,7 +26,7 @@ export function BubbleInvite() {
       <div style={{ width: 64, height: 64, flex: "none" }}><PetArt sticker={inv.sticker} species={inv.species} look={inv.look} /></div>
       <div className="col grow" style={{ gap: 6 }}>
         <b>{inv.fromName} challenges you to Bubble Roulette!</b>
-        <span className="small muted">from {inv.ownerName} · winner takes {ECONOMY.battle.stake.minShareBps / 100}–{ECONOMY.battle.stake.maxShareBps / 100}% of the loser's coins and bag · {left}s</span>
+        <span className="small muted">from {inv.ownerName} · {inv.demo ? "demo rival · winner takes part of the loser's bag" : `winner takes ${ECONOMY.battle.stake.minShareBps / 100}–${ECONOMY.battle.stake.maxShareBps / 100}% of the loser's coins and bag`} · {left}s</span>
         <div className="row">
           <button className="btn sm paper grow" onClick={() => answer(false)}>Not now</button>
           <button className="btn sm leaf grow" onClick={() => answer(true)}>Play!</button>
@@ -45,6 +45,12 @@ export function BubbleScreen() {
   const [, tick] = useState(0);
   const lastTurn = useRef(0);
   const acted = useRef(0);
+  const [rulesFor, setRulesFor] = useState<string | null>(null);
+  const [rulesOpen, setRulesOpen] = useState(false);
+  // Explain the rules at the start of every match (the first turn has extra time for this).
+  useEffect(() => {
+    if (m && m.state === "active" && m.turnNo <= 1 && rulesFor !== m.id) { setRulesFor(m.id); setRulesOpen(true); }
+  }, [m?.id, m?.state]);
   useEffect(() => { const id = setInterval(() => tick((n) => n + 1), 250); return () => clearInterval(id); }, []);
 
   // Play the animation for each newly resolved action, then reveal the new HP.
@@ -85,12 +91,13 @@ export function BubbleScreen() {
       <div className="br-bubbles" aria-hidden>{Array.from({ length: 12 }, (_, i) => <i key={i} style={{ left: `${(i * 8.7) % 100}%`, animationDelay: `${(i % 6) * 0.7}s`, width: 14 + (i % 4) * 8, height: 14 + (i % 4) * 8 }} />)}</div>
       <div className="br-top">
         <span className="br-title">Bubble Roulette</span>
+        {!finished && <button className="btn sm paper br-help" onClick={() => setRulesOpen(true)} aria-label="How to play">?</button>}
         {!finished && <button className="btn sm paper" onClick={() => { if (confirm(m.state === "invited" ? "Withdraw the challenge?" : "Leave the match? Leaving counts as a loss.")) send({ t: "br_forfeit", matchId: m.id }); }}>{m.state === "invited" ? "Cancel" : "Leave"}</button>}
       </div>
 
       {m.state === "active" && (
         <div key={m.turnNo} className={`br-banner ${myTurn ? "mine" : ""}`}>
-          <b>{myTurn ? "YOUR TURN!" : `${theirs.name}'s turn`}</b>
+          <b>{myTurn ? (m.last?.again && m.last.by === me ? "EXTRA TURN!" : "YOUR TURN!") : `${theirs.name}'s turn`}</b>
           <span className="br-secs"><img className="br-clock" src={art("br-timer")} alt="" />{secs}s</span>
         </div>
       )}
@@ -121,7 +128,7 @@ export function BubbleScreen() {
 
       {m.state === "active" && (
         <div className="br-actions">
-          <button className="br-btn me" disabled={!myTurn || busy} onClick={() => act("self")}><b>🎲 Splash myself</b><small>Risky! Safe if it's empty</small></button>
+          <button className="br-btn me" disabled={!myTurn || busy} onClick={() => act("self")}><b>🎲 Splash myself</b><small>Empty = extra turn!</small></button>
           <button className="br-btn them" disabled={!myTurn || busy} onClick={() => act("opponent")}><b>💦 Splash {theirs.name}!</b><small>{m.splashesLeft} loaded of {m.slotsLeft} left</small></button>
         </div>
       )}
@@ -132,12 +139,13 @@ export function BubbleScreen() {
             ? <Ribbon className="br-ribbon" tone={won ? "gold" : "purple"} crown={won} text={won ? "You win!" : `${m[m.winner ?? them].name} wins`} />
             : <b style={{ fontSize: 20 }}>No match</b>}
           <span className="small">{m.reason}</span>
-          {m.state === "finished" && m.mode === "stakes" && (m.loot ? <Loot m={m} won={won} /> : <span className="small muted">Counting the spoils…</span>)}
+          {m.state === "finished" && m.mode !== "practice" && (m.loot ? <Loot m={m} won={won} /> : <span className="small muted">Counting the spoils…</span>)}
           {m.state === "finished" && <span className="small muted">{theirs.ownerId === "bot:bandit-practice" ? (won ? "Great job! Practice complete." : "Practice match — no HP lost. Coach Kiki will challenge you again in a moment!") : `Battle HP carries back to your pet. Match #${m.id.slice(3, 9)}`}</span>}
           <button className="br-btn them" onClick={close}><b>Back to the world</b></button>
         </div>
       )}
-      <p className="br-rules small">6 bubbles, 2 loaded, order hidden. A loaded bubble soaks for {BUBBLE.splashHp} HP. The winner takes {ECONOMY.battle.stake.minShareBps / 100}–{ECONOMY.battle.stake.maxShareBps / 100}% of the loser's coins and bag (luck helps). Each match costs {ECONOMY.battle.matchEnergy} energy and {ECONOMY.battle.matchHunger} hunger.</p>
+      <p className="br-rules small">{BUBBLE.slots} bubbles, {BUBBLE.loaded} loaded, order hidden · a soak costs {BUBBLE.splashHp} HP · an empty self-splash gives an extra turn</p>
+      {rulesOpen && m.state !== "invited" && <RulesCard m={m} onClose={() => setRulesOpen(false)} />}
     </div>
   );
 }
@@ -168,6 +176,29 @@ function Loot({ m, won }: { m: BubbleMatchView; won: boolean }) {
       <b>{nothing ? "Nothing to take this time" : won ? "Spoils!" : "They took…"}</b>
       {!nothing && <span>{l.coins !== "0" && <em>🪙 {fmt(l.coins)}</em>}{items.map((r) => <em key={r}>{l.items[r]} {RESOURCE_LABEL[r].toLowerCase()}</em>)}</span>}
       <small>{(l.shareBps / 100).toFixed(1)}% share{l.fee !== "0" ? ` · ${fmt(l.fee)} fee to HQ` : ""}</small>
+    </div>
+  );
+}
+
+/** How to play — shown at the start of every match (and from the "?" button). */
+function RulesCard({ m, onClose }: { m: BubbleMatchView; onClose: () => void }) {
+  const s = ECONOMY.battle.stake;
+  const stakes = m.mode === "practice" ? "Practice match — nothing is at stake."
+    : m.mode === "demo" ? "Demo rival: the winner takes part of the loser's bag (luck helps)."
+    : `The winner takes ${s.minShareBps / 100}–${s.maxShareBps / 100}% of the loser's coins and bag — luck decides how much.`;
+  return (
+    <div className="br-rules-wrap" onClick={onClose}>
+      <div className="br-rules-card panel" onClick={(e) => e.stopPropagation()}>
+        <h3>How to play</h3>
+        <ol>
+          <li><span>🫧</span><p>The launcher holds <b>{BUBBLE.slots} bubbles</b> — <b>{BUBBLE.loaded} are loaded</b>. Nobody knows which.</p></li>
+          <li><span>💦</span><p>On your turn, splash your rival <i>or</i> yourself. A loaded bubble soaks for <b>{BUBBLE.splashHp} HP</b> — two soaks and you're out!</p></li>
+          <li><span>🎲</span><p>Splash yourself and it's empty? <b>You get another turn!</b></p></li>
+          <li><span>🔄</span><p>The launcher only reloads when its loaded bubbles run out.</p></li>
+          <li><span>🏆</span><p>{stakes}</p></li>
+        </ol>
+        <button className="br-btn them" onClick={onClose}><b>Let's play!</b></button>
+      </div>
     </div>
   );
 }

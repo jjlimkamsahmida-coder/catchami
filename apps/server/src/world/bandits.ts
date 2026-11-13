@@ -1,11 +1,11 @@
 /**
- * Bandits: NPC thieves that roam the Forest and Mining Valley. When a player's
- * pet carrying resources comes close, a bandit gives chase; if it catches the
- * pet it snatches everything in the bag and runs off. Pets in Paw Village and
- * the Keeper's Glade are safe. Bandits are a little slower than pets, so a
- * watchful player can always dodge them.
+ * Demo rivals: pets of simulated Keepers that roam the Forest and Mining
+ * Valley. When your pet is out in the wild and not busy gathering, a rival
+ * walks up and challenges it to Bubble Roulette (an invite you can accept or
+ * decline). Demo rivals only put bags at stake. Paw Village and the Keeper's
+ * Glade are safe. Coach Kiki in the tutorial is the practice partner.
  */
-import { AREA_BOUNDS, areaAt, findPath, gladeArenaAt, inventoryWeight, RESOURCES, tileCenter, toTile, walkable, emptyInventory, Rng, type AreaId } from "@catchami/shared";
+import { ECONOMY, AREA_BOUNDS, areaAt, findPath, gladeArenaAt, inventoryWeight, RESOURCES, tileCenter, toTile, walkable, emptyInventory, Rng, type AreaId } from "@catchami/shared";
 import type { Game } from "./game.ts";
 import { GameError } from "./game.ts";
 import type { PetRt } from "./types.ts";
@@ -22,11 +22,12 @@ export interface BanditRt {
 /** Demo rivals: pets of other (simulated) Keepers that roam the wild and challenge you. */
 const NAMES = ["Sid's Mochi", "Gus's Biscuit", "Pip's Tofu", "Sue's Noodle", "Ned's Pumpkin", "Lou's Waffles", "Sam's Clover", "Flo's Bean"];
 const SPEED = { wander: 70, chase: 150, flee: 165 }; // px/s — pets walk ~170 px/s
-const SIGHT = 230;      // px: notices loaded pets this close
+const SIGHT = 420;      // px: notices pets this close
 const GIVE_UP = 460;    // px: stops chasing beyond this
-const CATCH = 30;       // px: close enough to steal
-const CALM_MS = 22_000; // after a theft, ignores pets for a while
-const PER_AREA: Partial<Record<AreaId, number>> = { forest: 4, mines: 3 };
+const CATCH = 44;       // px: close enough to challenge
+const PET_COOLDOWN_MS = 45_000; // a pet isn't challenged again by any rival for this long
+const CALM_MS = 14_000; // after a battle/invite, a rival wanders for a while
+const PER_AREA: Partial<Record<AreaId, number>> = { forest: 5, mines: 4 };
 const DUEL_ROUNDS = 3;
 /** Same sticker choice as the client (apps/web/src/game/assets.ts banditArt). */
 const BANDIT_ART = ["bandit-1", "bandit-2", "bandit-3"];
@@ -41,11 +42,20 @@ export class Bandits {
   /** When each pet entered the training arena (the Training Bandit lets them settle in first). */
   private arrived = new Map<string, number>();
   private duelSeq = 0;
+  /** When each player pet was last challenged by a rival. */
+  private challengedAt = new Map<string, number>();
 
   private game: Game;
   constructor(game: Game) {
     this.game = game;
-    // There are no wild rivals: battles are PvP. Only the tutorial's Coach Kiki lives here.
+    let n = 0;
+    for (const [area, count] of Object.entries(PER_AREA) as Array<[AreaId, number]>) {
+      for (let i = 0; i < count; i++) {
+        const [x, y] = this.randomSpot(area);
+        this.list.push({ id: `bandit-${n}`, name: NAMES[n % NAMES.length]!, home: area, x, y, facing: 1, path: [], state: "wander", target: null, nextThink: 0, calmUntil: 0 });
+        n++;
+      }
+    }
     const g = this.game.world.pois.find((p) => p.id === "glade_bandit");
     if (g) {
       const x = tileCenter(g.tx), y = tileCenter(g.ty);
@@ -70,11 +80,19 @@ export class Bandits {
     b.path = findPath(this.game.world, toTile(b.x), toTile(b.y), toTile(x), toTile(y), 8000) ?? [];
   }
 
-  /** Pets worth robbing: active, carrying something, in this bandit's area. */
-  private victimNear(b: BanditRt): PetRt | null {
+  /** A player pet this rival could challenge: owner online, out in this rival's area, ready to battle. */
+  private canChallenge(p: PetRt, now: number) {
+    if (p.s.status !== "active" || p.matchId || p.busy) return false;
+    if (p.s.energy < ECONOMY.battle.minEnergy || p.s.hunger >= ECONOMY.battle.maxHunger || p.listed) return false;
+    if (now - (this.challengedAt.get(p.id) ?? 0) < PET_COOLDOWN_MS) return false;
+    if (now - p.s.lastBattleAt < ECONOMY.battle.petCooldownSec * 1000) return false;
+    return [...this.game.clients].some((c) => c.userId === p.ownerId);
+  }
+
+  private victimNear(b: BanditRt, now: number): PetRt | null {
     let best: PetRt | null = null, bd = SIGHT;
     for (const p of this.game.pets.values()) {
-      if (p.s.status !== "active" || inventoryWeight(p.s.inventory) <= 0) continue;
+      if (!this.canChallenge(p, now)) continue;
       if (areaAt(this.game.world, p.s.x, p.s.y).id !== b.home) continue;
       const d = Math.hypot(p.s.x - b.x, p.s.y - b.y);
       if (d < bd) { bd = d; best = p; }
@@ -93,13 +111,13 @@ export class Bandits {
         const target = b.target ? this.game.pets.get(b.target) : null;
         if (b.state === "flee" && now >= b.calmUntil - CALM_MS + 4_000) { b.state = "wander"; b.path = []; }
         if (b.state === "chase") {
-          const lost = !target || target.s.status !== "active" || inventoryWeight(target.s.inventory) <= 0
+          const lost = !target || !this.canChallenge(target, now)
             || areaAt(this.game.world, target.s.x, target.s.y).id !== b.home || Math.hypot(target.s.x - b.x, target.s.y - b.y) > GIVE_UP;
           if (lost) { b.state = "wander"; b.target = null; b.path = []; }
           else this.pathTo(b, target!.s.x, target!.s.y);
         }
         if (b.state === "wander") {
-          const v = now >= b.calmUntil ? this.victimNear(b) : null;
+          const v = now >= b.calmUntil ? this.victimNear(b, now) : null;
           if (v) { b.state = "chase"; b.target = v.id; this.pathTo(b, v.s.x, v.s.y); }
           else if (!b.path.length) { const [x, y] = this.randomSpot(b.home, b, 12); this.pathTo(b, x, y); }
         }
@@ -113,10 +131,11 @@ export class Bandits {
         if (Math.abs(gx - b.x) > 1) b.facing = gx > b.x ? 1 : -1;
         if (d <= budget) { b.x = gx; b.y = gy; b.path.shift(); budget -= d; } else { b.x += ((gx - b.x) / d) * budget; b.y += ((gy - b.y) / d) * budget; budget = 0; }
       }
-      // Catch!
+      // Close enough: challenge — unless the pet is busy gathering (then just hang around).
       if (b.state === "chase" && b.target) {
         const p = this.game.pets.get(b.target);
-        if (p && Math.hypot(p.s.x - b.x, p.s.y - b.y) < CATCH) this.startDuel(b, p, now, false);
+        const gathering = !!p && (p.task?.kind === "gather" || !!p.round);
+        if (p && !gathering && Math.hypot(p.s.x - b.x, p.s.y - b.y) < CATCH) this.invite(b, p, now);
       }
     }
   }
@@ -146,6 +165,25 @@ export class Bandits {
     }
   }
 
+  /** Send a Bubble Roulette invite from this rival. */
+  private invite(b: BanditRt, p: PetRt, now: number) {
+    this.challengedAt.set(p.id, now);
+    const art = BANDIT_ART[hashId(b.id) % BANDIT_ART.length]!;
+    if (this.game.arena.inviteBot(p, { banditId: b.id, name: b.name, ownerName: b.name.split("'")[0]!, art, practice: false })) {
+      b.state = "duel"; b.path = []; b.target = p.id;
+    } else { b.state = "wander"; b.target = null; b.calmUntil = now + 5_000; }
+  }
+
+  /** The invite was declined or expired: wander off for a bit. */
+  botInviteDone(banditId: string) {
+    const b = this.list.find((x) => x.id === banditId);
+    if (!b || b.practice || b.state !== "duel") return;
+    const now = this.game.now();
+    b.state = "flee"; b.target = null; b.calmUntil = now + CALM_MS;
+    const [x, y] = this.randomSpot(b.home, b, 16);
+    this.pathTo(b, x, y);
+  }
+
   private duelFor(petId: string) { for (const d of this.duels.values()) if (d.petId === petId) return d; return null; }
 
   /** Freeze both fighters and ask the owner to play the attack minigame. */
@@ -159,6 +197,8 @@ export class Bandits {
       return;
     }
     if (b.practice) return; // couldn't start (busy / offline): try again later
+    if (brave) throw new GameError("not_eligible", `${p.name} can't battle right now (needs ${ECONOMY.battle.minEnergy}+ energy, not too hungry, not gathering)`);
+    return;
 
     const id = `duel_${++this.duelSeq}_${now}`;
     this.duels.set(id, { id, banditId: b.id, petId: p.id, ownerId: p.ownerId, brave, deadline: now + DUEL_MS });
@@ -173,7 +213,13 @@ export class Bandits {
     const p = this.game.pets.get(petId);
     if (!b) return;
     if (!p) { b.state = "wander"; b.target = null; return; }
-    this.fight(b, p, this.game.now(), !!b.brave, 0, playerWon);
+    if (b.practice) { this.fight(b, p, this.game.now(), !!b.brave, 0, playerWon); return; }
+    // Demo rival: spoils were settled by the match. Walk away for a while.
+    const now = this.game.now();
+    this.challengedAt.set(p.id, now);
+    b.state = "flee"; b.target = null; b.calmUntil = now + CALM_MS;
+    const [x, y] = this.randomSpot(b.home, b, 20);
+    this.pathTo(b, x, y);
   }
 
   /** The owner finished the minigame. */

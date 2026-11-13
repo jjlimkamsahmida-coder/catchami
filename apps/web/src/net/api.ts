@@ -169,7 +169,7 @@ function onMessage(m: ServerMsg) {
       toast("info", m.reason);
       break;
     case "br_invite":
-      store.set({ bubbleInvite: { matchId: m.matchId, fromName: m.from.name, ownerName: m.from.ownerName, sticker: m.from.sticker, species: m.from.species, look: m.from.look, toPetId: m.toPetId, expiresAt: m.expiresAt } });
+      store.set({ bubbleInvite: { matchId: m.matchId, demo: m.from.petId.startsWith("bot-"), fromName: m.from.name, ownerName: m.from.ownerName, sticker: m.from.sticker, species: m.from.species, look: m.from.look, toPetId: m.toPetId, expiresAt: m.expiresAt } });
       break;
     case "br_state":
       store.set((s) => ({
