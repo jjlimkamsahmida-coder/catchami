@@ -224,6 +224,8 @@ export interface BubbleMatchView {
   mode: "stakes" | "demo" | "practice";
   /** What the winner took from the loser (set once the match is settled). */
   loot: { coins: Amount; fee: Amount; items: Inventory; shareBps: number } | null;
+  /** Shots left in the current turn (an empty self-splash gives 2 extra). */
+  actionsLeft: number;
 }
 
 export interface CatchQuote {

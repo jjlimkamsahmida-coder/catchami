@@ -624,11 +624,22 @@ export function createGame(parent: HTMLElement) {
     // windowEvents off: Phaser must not track touches that start on HTML buttons (minigame TAP, joystick...).
     // Those buttons can vanish mid-tap, the finger-up never reaches Phaser, and its touch pointers stay
     // stuck "down" — after two minigames the map ignored every tap. Map touches still end on the canvas.
-    input: { activePointers: 2, windowEvents: false },
+    input: { activePointers: 4, windowEvents: false },
     loader: { maxParallelDownloads: 96 },
     scene: [GameScene],
   });
   if (import.meta.env.DEV) (window as unknown as { __catchami: Phaser.Game }).__catchami = game; // debugging hook, dev builds only
+  // Phones can lose a "finger lifted" signal (a button vanishing mid-tap, the browser cancelling a touch...).
+  // Phaser then keeps that touch pointer "down" forever, and once all are stuck the map ignores taps.
+  // On every new touch, free any pointer whose finger the browser says isn't on the screen any more.
+  const unjam = (e: TouchEvent) => {
+    const live = new Set(Array.from(e.touches, (t) => t.identifier));
+    for (const p of game.input?.pointers ?? []) {
+      if (p.id === 0 || !p.active || live.has(p.identifier)) continue;
+      p.active = false; p.isDown = false; p.primaryDown = false; p.identifier = 0;
+    }
+  };
+  game.events.once(Phaser.Core.Events.READY, () => game.canvas.addEventListener("touchstart", unjam, { capture: true, passive: true }));
   return game;
 }
 

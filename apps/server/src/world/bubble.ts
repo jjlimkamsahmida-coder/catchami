@@ -55,6 +55,8 @@ interface Match {
   doneAt: number;
   /** Demo rival / tutorial coach: takes its own turns; the result goes back to the rival logic. */
   bot?: { banditId: string; practice: boolean; side: SideKey; actAt: number; firstAt?: number };
+  /** Shots left this turn (1; an empty self-splash adds 2). */
+  actionsLeft: number;
   loot?: BubbleMatchView["loot"];
 }
 
@@ -98,7 +100,7 @@ export class BubbleArena {
       id: m.id, state: m.state, a: side("a"), b: side("b"), you: userId ? this.sideOf(m, userId) : null,
       turn: m.turn, turnNo: m.turnNo, turnEndsAt: m.turnEndsAt, chamberNo: m.chamberNo,
       slotsLeft: m.chamber.length - m.pos, splashesLeft: m.chamber.slice(m.pos).filter(Boolean).length,
-      last: m.last, winner: m.winner, reason: m.reason, epoch: m.epoch.id, commitment: m.epoch.commitment, mode: m.bot ? (m.bot.practice ? "practice" : "demo") : "stakes", loot: m.loot ?? null,
+      last: m.last, winner: m.winner, reason: m.reason, epoch: m.epoch.id, commitment: m.epoch.commitment, mode: m.bot ? (m.bot.practice ? "practice" : "demo") : "stakes", loot: m.loot ?? null, actionsLeft: m.actionsLeft,
     };
   }
 
@@ -152,7 +154,7 @@ export class BubbleArena {
       id, state: "invited", pets: { a, b }, hp: { a: toBattleHp(a.s.hp, a.stats.maxHp), b: toBattleHp(b.s.hp, b.stats.maxHp) },
       startHp: { a: 0, b: 0 }, turn: "a", turnNo: 0, turnEndsAt: 0, chamberNo: 0, chamber: [], pos: 0, missed: { a: 0, b: 0 },
       last: null, winner: null, reason: "Waiting for the opponent to accept", epoch: { id: epoch.id, seed: epoch.seed, commitment: epoch.commitment },
-      inviteExpiresAt: now + BUBBLE.inviteMs, log: [], settled: false, doneAt: 0,
+      inviteExpiresAt: now + BUBBLE.inviteMs, log: [], settled: false, doneAt: 0, actionsLeft: 1,
     };
     m.startHp = { ...m.hp };
     this.matches.set(id, m);
@@ -202,6 +204,7 @@ export class BubbleArena {
     m.pos = 0;
     m.state = "active";
     m.turnNo = 1;
+    m.actionsLeft = 1;
     m.turnEndsAt = now + BUBBLE.turnMs + BUBBLE.firstTurnGraceMs;
     m.reason = "";
     this.push(m);
@@ -233,10 +236,11 @@ export class BubbleArena {
       reloaded = true;
     }
     m.log.push({ turnNo: m.turnNo, by, target, chamberNo: reloaded ? m.chamberNo - 1 : m.chamberNo, slot, loaded, hp: { ...m.hp } });
-    const again = target === by && !loaded; // brave self-splash that came up empty: go again
+    const again = target === by && !loaded; // brave self-splash that came up empty: 2 extra shots
+    m.actionsLeft = m.actionsLeft - 1 + (again ? 2 : 0);
     m.last = { by, target, loaded, reloaded, again, turnNo: m.turnNo };
     if (m.hp[target] <= 0) return this.finish(m, other(target), `${m.pets[target].name} got soaked!`);
-    if (!again) m.turn = other(m.turn);
+    if (m.actionsLeft <= 0) { m.turn = other(m.turn); m.actionsLeft = 1; }
     m.turnNo++;
     m.turnEndsAt = this.game.now() + BUBBLE.turnMs;
     this.push(m);
@@ -275,6 +279,7 @@ export class BubbleArena {
         m.last = null;
         m.reason = `${m.pets[late].name} missed a turn`;
         m.turn = other(late);
+        m.actionsLeft = 1;
         m.turnNo++;
         m.turnEndsAt = now + BUBBLE.turnMs;
         this.push(m);
@@ -409,7 +414,7 @@ export class BubbleArena {
       id, state: "active", pets: { a: p, b: fake }, hp: { a: playerHp, b: 100 }, startHp: { a: playerHp, b: 100 },
       turn: "a", turnNo: 1, turnEndsAt: now + BUBBLE.turnMs + BUBBLE.firstTurnGraceMs, chamberNo: 0, chamber: makeChamber(epoch.seed, id, 0), pos: 0,
       missed: { a: 0, b: 0 }, last: null, winner: null, reason: "", epoch: { id: epoch.id, seed: epoch.seed, commitment: epoch.commitment },
-      inviteExpiresAt: now, log: [], settled: false, doneAt: 0, bot: { banditId: bot.banditId, practice: bot.practice, side: "b", actAt: 0 },
+      inviteExpiresAt: now, log: [], settled: false, doneAt: 0, actionsLeft: 1, bot: { banditId: bot.banditId, practice: bot.practice, side: "b", actAt: 0 },
     };
     this.matches.set(id, m);
     p.matchId = id; p.busy = true; p.path = []; p.moveDir = null; p.task = null; p.round = null; p.activity = `Bubble Roulette vs ${bot.name}`;
@@ -434,7 +439,7 @@ export class BubbleArena {
       id, state: "invited", pets: { a: fake, b: p }, hp: { a: 100, b: toBattleHp(p.s.hp, p.stats.maxHp) },
       startHp: { a: 100, b: toBattleHp(p.s.hp, p.stats.maxHp) }, turn: "b", turnNo: 0, turnEndsAt: 0, chamberNo: 0, chamber: [], pos: 0, missed: { a: 0, b: 0 },
       last: null, winner: null, reason: "Waiting for you to accept", epoch: { id: epoch.id, seed: epoch.seed, commitment: epoch.commitment },
-      inviteExpiresAt: now + BUBBLE.inviteMs, log: [], settled: false, doneAt: 0, bot: { banditId: bot.banditId, practice: false, side: "a", actAt: 0 },
+      inviteExpiresAt: now + BUBBLE.inviteMs, log: [], settled: false, doneAt: 0, actionsLeft: 1, bot: { banditId: bot.banditId, practice: false, side: "a", actAt: 0 },
     };
     this.matches.set(id, m);
     p.matchId = id; fake.matchId = id;

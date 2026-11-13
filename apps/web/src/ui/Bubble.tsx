@@ -46,7 +46,7 @@ export function BubbleScreen() {
   const lastTurn = useRef(0);
   const acted = useRef(0);
   const root = useRef<HTMLDivElement>(null);
-  const land = useLandLayout(root);
+  const land = useStageLayout(root);
   const [rulesFor, setRulesFor] = useState<string | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
   // Explain the rules at the start of every match (the first turn has extra time for this).
@@ -89,7 +89,7 @@ export function BubbleScreen() {
   const won = m.state === "finished" && m.winner === me;
 
   return (
-    <div ref={root} className={`br ${myTurn ? "my-turn" : ""} ${land ? "land" : ""}`} style={land ? ({ "--stk": `${land.stk}px`, "--gun": `${land.gunW}px` } as React.CSSProperties) : undefined}>
+    <div ref={root} className={`br ${myTurn ? "my-turn" : ""} ${land ? "staged" : ""}`} style={land ? ({ "--stk": `${land.stk}px`, "--gun": `${land.gunW}px` } as React.CSSProperties) : undefined}>
       <div className="br-bubbles" aria-hidden>{Array.from({ length: 12 }, (_, i) => <i key={i} style={{ left: `${(i * 8.7) % 100}%`, animationDelay: `${(i % 6) * 0.7}s`, width: 14 + (i % 4) * 8, height: 14 + (i % 4) * 8 }} />)}</div>
       <div className="br-top">
         <span className="br-title">Bubble Roulette</span>
@@ -99,7 +99,7 @@ export function BubbleScreen() {
 
       {m.state === "active" && (
         <div key={m.turnNo} className={`br-banner ${myTurn ? "mine" : ""}`}>
-          <b>{myTurn ? (m.last?.again && m.last.by === me ? "EXTRA TURN!" : "YOUR TURN!") : `${theirs.name}'s turn`}</b>
+          <b>{myTurn ? (m.actionsLeft > 1 ? `EXTRA SHOTS ×${m.actionsLeft}!` : "YOUR TURN!") : `${theirs.name}'s turn`}</b>
           <span className="br-secs"><img className="br-clock" src={art("br-timer")} alt="" />{secs}s</span>
         </div>
       )}
@@ -113,7 +113,6 @@ export function BubbleScreen() {
           return (
             <div key={who} className={`br-pet ${who} ${m.turn === side && m.state === "active" ? "active" : ""}`} style={land ? { left: (who === "mine" ? land.l : land.r)[0], top: (who === "mine" ? land.l : land.r)[1] } : undefined}>
               <div className="br-hp"><b>{s.name}</b><span>❤ {hp[side]}</span><i><em style={{ width: `${hp[side]}%` }} /></i>{!s.connected && m.state === "active" && <small>reconnecting…</small>}</div>
-              {m.state === "active" && m.turn === side && side === them && !fx && <span className="br-think">🤔 thinking…</span>}
               <div className={`br-sticker ${hit && fx?.kind === "splash" ? "soaked" : ""} ${hit && fx?.kind === "puff" ? "giggle" : ""} ${winner ? "cheer" : ""}`}>
                 <PetArt sticker={s.sticker} species={s.species} look={s.look} />
                 {hit && fx?.kind === "splash" && <img key={fx.id} className="br-fx pop" src={art("br-pop")} alt="" />}
@@ -125,12 +124,19 @@ export function BubbleScreen() {
         })}
 
         <Launcher m={m} fx={fx} at={land?.g} />
+        {land && fx && (() => {
+          // The bubble flies from the launcher's mouth to the pet it was aimed at.
+          const to = fx.target === me ? land.l : land.r;
+          const from: [number, number] = [land.g[0], land.g[1] - land.gunW * 0.72];
+          const style = { left: from[0], top: from[1], "--tx": `${to[0] - from[0]}px`, "--ty": `${to[1] - land.stk * 0.55 - from[1]}px` } as React.CSSProperties;
+          return <img key={`s${fx.id}`} className={`shot2 ${fx.kind}`} style={style} src={art(fx.kind === "splash" ? "br-bubble" : "br-puff")} alt="" />;
+        })()}
         {won && <div className="confetti">{Array.from({ length: 14 }, (_, i) => <i key={i} style={{ left: `${(i * 7.3) % 100}%`, animationDelay: `${(i % 7) * 120}ms` }} />)}</div>}
       </div>
 
       {m.state === "active" && (
         <div className="br-actions">
-          <button className="br-btn me" disabled={!myTurn || busy} onClick={() => act("self")}><b>🎲 Splash myself</b><small>Empty = extra turn!</small></button>
+          <button className="br-btn me" disabled={!myTurn || busy} onClick={() => act("self")}><b>🎲 Splash myself</b><small>Empty = 2 extra shots!</small></button>
           <button className="br-btn them" disabled={!myTurn || busy} onClick={() => act("opponent")}><b>💦 Splash {theirs.name}!</b><small>{m.splashesLeft} loaded of {m.slotsLeft} left</small></button>
         </div>
       )}
@@ -146,7 +152,7 @@ export function BubbleScreen() {
           <button className="br-btn them" onClick={close}><b>Back to the world</b></button>
         </div>
       )}
-      <p className="br-rules small">{BUBBLE.slots} bubbles, {BUBBLE.loaded} loaded, order hidden · a soak costs {BUBBLE.splashHp} HP · an empty self-splash gives an extra turn</p>
+      <p className="br-rules small">{BUBBLE.slots} bubbles, {BUBBLE.loaded} loaded, order hidden · a soak costs {BUBBLE.splashHp} HP · an empty self-splash gives 2 extra shots</p>
       {rulesOpen && m.state !== "invited" && <RulesCard m={m} onClose={() => setRulesOpen(false)} />}
     </div>
   );
@@ -195,7 +201,7 @@ function RulesCard({ m, onClose }: { m: BubbleMatchView; onClose: () => void }) 
         <ol>
           <li><span>🫧</span><p>The launcher holds <b>{BUBBLE.slots} bubbles</b> — <b>{BUBBLE.loaded} are loaded</b>. Nobody knows which.</p></li>
           <li><span>💦</span><p>On your turn, splash your rival <i>or</i> yourself. A loaded bubble soaks for <b>{BUBBLE.splashHp} HP</b> — two soaks and you're out!</p></li>
-          <li><span>🎲</span><p>Splash yourself and it's empty? <b>You get another turn!</b></p></li>
+          <li><span>🎲</span><p>Splash yourself and it's empty? <b>You get 2 extra shots!</b></p></li>
           <li><span>🔄</span><p>The launcher only reloads when its loaded bubbles run out.</p></li>
           <li><span>🏆</span><p>{stakes}</p></li>
         </ol>
@@ -206,24 +212,30 @@ function RulesCard({ m, onClose }: { m: BubbleMatchView; onClose: () => void }) 
 }
 
 /**
- * PC / landscape: the arena picture (1600×900, drawn with background-size: cover) has two
- * pedestals and a paw circle in the middle. Map those picture points to screen pixels so the
- * pets stand on the pedestals and the launcher sits on the paw circle at any window size.
+ * The arena pictures (landscape 1600×900 for PC, portrait 900×1600 for phones, drawn with
+ * background-size: cover) each have two pedestals and a paw circle in the middle. Map those
+ * picture points to screen pixels so the pets stand on the pedestals and the launcher sits on
+ * the paw circle at any screen size.
  */
-const LAND = { w: 1600, h: 900, left: [267, 522], right: [1351, 522], gun: [800, 700] } as const;
-function useLandLayout(ref: React.RefObject<HTMLDivElement | null>) {
+const STAGES = {
+  land: { w: 1600, h: 900, left: [267, 522], right: [1351, 522], gun: [800, 700] },
+  port: { w: 900, h: 1600, left: [128, 762], right: [772, 762], gun: [450, 1040] },
+} as const;
+function useStageLayout(ref: React.RefObject<HTMLDivElement | null>) {
   const [lay, setLay] = useState<{ l: [number, number]; r: [number, number]; g: [number, number]; stk: number; gunW: number } | null>(null);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     const calc = () => {
       const W = el.clientWidth, H = el.clientHeight;
-      if (W < H || W < 640) { setLay(null); return; }
-      const s = Math.max(W / LAND.w, H / LAND.h), ox = (W - LAND.w * s) / 2, oy = (H - LAND.h * s) / 2;
-      const stk = Math.round(Math.min(220, 190 * s)), gunW = Math.round(Math.min(260, 210 * s));
+      if (!W || !H) return;
+      const st = W >= H ? STAGES.land : STAGES.port;
+      const s = Math.max(W / st.w, H / st.h), ox = (W - st.w * s) / 2, oy = (H - st.h * s) / 2;
+      const stk = Math.round(Math.max(84, Math.min(220, 190 * s))), gunW = Math.round(Math.max(110, Math.min(260, 210 * s)));
       const pt = (p: readonly [number, number]): [number, number] => [Math.round(ox + p[0] * s), Math.round(oy + p[1] * s)];
-      const clampX = (p: [number, number]): [number, number] => [Math.max(stk / 2 + 10, Math.min(W - stk / 2 - 10, p[0])), p[1]];
-      setLay({ l: clampX(pt(LAND.left)), r: clampX(pt(LAND.right)), g: pt(LAND.gun), stk, gunW });
+      const half = (stk + 20) / 2 + 6; // the pet card is a bit wider than the sticker
+      const clampX = (p: [number, number]): [number, number] => [Math.max(half, Math.min(W - half, p[0])), p[1]];
+      setLay({ l: clampX(pt(st.left)), r: clampX(pt(st.right)), g: pt(st.gun), stk, gunW });
     };
     calc();
     const ro = new ResizeObserver(calc);

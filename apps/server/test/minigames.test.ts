@@ -205,13 +205,12 @@ describe("Bubble Roulette", () => {
     game.arena.action(me === "a" ? ca : cb, m.id, "self", m.turnNo);
     expect(m.turn).toBe(me);
     expect(m.last).toMatchObject({ again: true, loaded: false });
-    // The other side acts, then the first side times out again → forfeit.
-    game.arena.action(m.turn === "a" ? ca : cb, m.id, "opponent", m.turnNo);
-    if (m.state === "active") {
-      advance(BUBBLE.turnMs + 200);
-      expect(m.state).toBe("finished");
-      expect(m.winner).not.toBe(first);
-    }
+    expect(m.actionsLeft).toBe(2); // 2 extra shots
+    // Use both extra shots on the rival (two loaded bubbles: the rival is soaked out).
+    for (let k = 0; k < 2 && m.state === "active"; k++) game.arena.action(me === "a" ? ca : cb, m.id, "opponent", m.turnNo);
+    if (m.state === "active") advance(BUBBLE.turnMs + 200); // otherwise the first side's second timeout forfeits
+    expect(m.state).toBe("finished");
+    expect(m.winner).not.toBe(first);
     expect(ECONOMY.battle.realTokenPvp.enabled).toBe(false);
   }, 30_000);
 });
