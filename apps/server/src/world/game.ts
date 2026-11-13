@@ -497,6 +497,7 @@ export class Game {
     else {
       const id = stage && stage >= 1 && stage <= 9 ? `glade_s${stage}` : "glade_spawn";
       // Scenes that set the pet up for the lesson.
+      if (stage === 2) { p.s.energy = p.stats.maxEnergy; p.s.hunger = Math.min(p.s.hunger, 300); } // Gathering: start rested
       if (stage === 4) { p.s.hunger = ECONOMY.stats.hungerMax; p.s.energy = Math.max(p.s.energy, 500); if (p.s.status === "inactive") p.s.status = "active"; } // Hungry: empty food bar
       if (stage === 5) { p.s.hp = 0; p.s.status = "knocked_out"; p.s.koUntil = null; p.task = null; p.round = null; } // Hurt: 0 HP
       if (stage === 6) { // Crafting: the Smith's starter materials for a pair of Trail Boots

@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { ECONOMY, GATE_Y, MINES_X0, VILLAGE_X0, AREA_BOUNDS, areaAt, decodeTiles, GLADE_ARENAS, gladeArenaAt, generateWorld, PROP_SIZE, RARITY_LABEL, T, type BattleEvent, type Prop, type Resource, type WorldDef } from "@catchami/shared";
+import { ECONOMY, inventoryWeight, carryCapacity, GATE_Y, MINES_X0, VILLAGE_X0, AREA_BOUNDS, areaAt, decodeTiles, GLADE_ARENAS, gladeArenaAt, generateWorld, PROP_SIZE, RARITY_LABEL, T, type BattleEvent, type Prop, type Resource, type WorldDef } from "@catchami/shared";
 import { entities, store, type PetEntity } from "../net/store.ts";
 import { send, serverNow } from "../net/api.ts";
 import * as art from "./art.ts";
@@ -510,7 +510,16 @@ export class GameScene extends Phaser.Scene {
       const dep = rem <= 0;
       if (dep !== n.depleted) { n.depleted = dep; n.img.setTexture(`node-${n.res}${dep ? "-empty" : ""}`); this.fitNode(n.img); }
       const near = cpos && Math.hypot(cpos[0] - n.img.x, cpos[1] - n.img.y) < 160;
-      n.btn.setVisible(!dep && !s.mgSession && !!cpos && Math.hypot(cpos[0] - n.img.x, cpos[1] - n.img.y) < 120);
+      const showBtn = !dep && !s.mgSession && !!cpos && Math.hypot(cpos[0] - n.img.x, cpos[1] - n.img.y) < 120;
+      n.btn.setVisible(showBtn);
+      if (showBtn) {
+        // Say why gathering can't start instead of looking tappable and doing nothing.
+        const me = s.own.find((o) => o.id === s.controlled);
+        const why = !me ? "" : me.status === "knocked_out" ? "Needs medicine" : me.energy < ECONOMY.stats.exhaustedEnergy ? "Too tired 😴" : inventoryWeight(me.carried) + ECONOMY.resources[n.res].weight > carryCapacity(me.stats) ? "Bag full" : "";
+        const label = n.btn.list[1] as Phaser.GameObjects.Text;
+        const txt = why || "Gather!";
+        if (label.text !== txt) { label.setText(txt).setFontSize(why ? 12 : 14); n.btn.setAlpha(why ? 0.75 : 1); }
+      }
       n.badge.setText(dep ? "regrowing" : `${rem >= 1000 ? `${Math.round(rem / 1000)}k` : rem} left`).setAlpha(near ? 1 : 0);
     }
   }
