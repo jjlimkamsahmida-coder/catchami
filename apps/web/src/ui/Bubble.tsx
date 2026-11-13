@@ -94,7 +94,8 @@ export function BubbleScreen() {
       <div className="br-top">
         <span className="br-title">Bubble Roulette</span>
         {!finished && <button className="btn sm paper br-help" onClick={() => setRulesOpen(true)} aria-label="How to play">?</button>}
-        {!finished && <button className="btn sm paper" onClick={() => { if (confirm(m.state === "invited" ? "Withdraw the challenge?" : "Leave the match? Leaving counts as a loss.")) send({ t: "br_forfeit", matchId: m.id }); }}>{m.state === "invited" ? "Cancel" : "Leave"}</button>}
+        {/* There is no leaving a battle: you can only give up, which counts as a loss. */}
+        {!finished && <button className="btn sm paper br-giveup" onClick={() => { if (confirm(m.mode === "practice" ? "Give up this practice match?" : "Give up? You lose this battle and the winner takes the spoils.")) send({ t: "br_forfeit", matchId: m.id }); }}>🏳️ Give up</button>}
       </div>
 
       {m.state === "active" && (
