@@ -118,7 +118,7 @@ function runScenario(sc: Scenario, seed: string) {
         for (let k = 0; k < 6 && p.hunger >= 500; k++) {
           const local = stock.fish >= fpm;
           const price = local ? ECONOMY.food.price : (ECONOMY.food.price * BigInt(ECONOMY.food.importMultBps)) / 10_000n;
-          if (L.split(acct, price, ECONOMY.food.split)) { if (local) { stock.fish -= fpm; consumed.fish += fpm; } else stockouts++; foodSold++; p.hunger -= ECONOMY.food.hungerRestore; p.energy = Math.min(p.stats.maxEnergy, p.energy + ECONOMY.food.energyRestore); }
+          if (L.split(acct, price, ECONOMY.food.split)) { consumed.fish += fpm; if (local) stock.fish -= fpm; else stockouts++; foodSold++; p.hunger -= ECONOMY.food.hungerRestore; p.energy = Math.min(p.stats.maxEnergy, p.energy + ECONOMY.food.energyRestore); }
           else break;
         }
         if (p.hunger >= 1000) p.energy = Math.max(0, p.energy - ECONOMY.stats.starvingEnergyDrainPerSec * STEP_S);

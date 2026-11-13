@@ -82,7 +82,7 @@ export const ECONOMY = {
     maxHp: 1000,
     maxEnergy: 1000,
     hungerMax: 1000,
-    /** Hunger gained per second (0 = full, 1000 = starving). 5 hours from full to starving: ~6 meals a day of upkeep (~40–50% of a working pet's income in the simulation). */
+    /** Hunger gained per second (0 = full, 1000 = starving). 5 hours from full to starving: ~14 meals (~165K) a day of idle upkeep, ~40–50% of a working pet's income in the simulation. */
     hungerPerSec: 1000 / (5 * 3600),
     starvingEnergyDrainPerSec: 0.6,
     walkEnergyPerSec: 1,

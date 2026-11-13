@@ -664,7 +664,7 @@ export class Game {
       try {
         await this.db.tx(async (tx) => {
           local = inGlade || (await consumeHqStock(tx, resource, qty, `${item}:${rid}`));
-          // No local stock: imported at a premium (no HQ stock used, so no local demand either).
+          // No local stock: imported at a premium (no HQ stock used).
           if (!local) price = (cfg.price * BigInt(cfg.importMultBps)) / 10_000n;
           await post(tx, { idem: `${item}:${rid}`, kind: item, postings: feePostings(acct.pet(p.id), price, cfg.split), meta: { petId: p.id, imported: !local } });
           await tx.query(`UPDATE pets SET state = $2, updated_at = now() WHERE id = $1`, [p.id, JSON.stringify(next)]);
@@ -675,9 +675,10 @@ export class Game {
       }
       p.s.hunger = next.hunger; p.s.energy = next.energy; p.s.hp = next.hp; p.s.status = next.status; p.s.koUntil = next.koUntil;
       p.balance -= price;
-      if (!inGlade && local) {
+      if (!inGlade) {
+        // Imported meals still count as demand: an empty kitchen raises what merchants pay for fish/herbs.
         this.pendingConsume[resource] += qty;
-        this.hqStockCache[resource] = Math.max(0, this.hqStockCache[resource] - qty);
+        if (local) this.hqStockCache[resource] = Math.max(0, this.hqStockCache[resource] - qty);
       }
       p.anim = "eat"; p.animUntil = now + 1500;
       p.activity = item === "food" ? (local ? "Had a meal" : "Had an imported meal") : "Took medicine";
