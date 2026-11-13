@@ -2,16 +2,20 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type Phaser from "phaser";
 import { store, useStore } from "./net/store.ts";
 import { boot } from "./net/api.ts";
-import { ActionBar, BottomNav, Joystick, PetCard, Toasts, TopBar } from "./ui/Hud.tsx";
+import { ActionBar, BanditFightPopup, BottomNav, Joystick, PetCard, Toasts, TopBar } from "./ui/Hud.tsx";
 import { Sheets } from "./ui/Sheets.tsx";
-import { PetsScreen } from "./ui/Pets.tsx";
-import { FairnessScreen, MarketScreen, RanksScreen, WalletScreen } from "./ui/Screens.tsx";
-import { AreaBanner, MapScreen, QuickButtons } from "./ui/WorldHud.tsx";
+import { FairnessScreen, WalletScreen } from "./ui/Screens.tsx";
+import { BagScreen, CollectionScreen, MarketScreen, RanksScreen } from "./ui/GamePages.tsx";
+import { AreaBanner, MapScreen, MiniMap } from "./ui/WorldHud.tsx";
 import { EconomyGuide } from "./ui/EconomyGuide.tsx";
 import { MinigameLayer } from "./ui/Minigame.tsx";
 import { BubbleInvite, BubbleScreen } from "./ui/Bubble.tsx";
 import { Journey, PhoneCatch, WelcomeBack } from "./ui/Journey.tsx";
 import { TutorialCoach } from "./ui/Tutorial.tsx";
+import { MusicToggle } from "./ui/MusicToggle.tsx";
+import { music } from "./ui/music.ts";
+
+music.arm();
 
 const CatchScreen = lazy(() => import("./ui/Catch.tsx").then((m) => ({ default: m.CatchScreen })));
 const AdminPage = lazy(() => import("./ui/Admin.tsx").then((m) => ({ default: m.AdminPage })));
@@ -61,23 +65,23 @@ function Welcome({ onStart, onNew }: { onStart: () => void; onNew: () => void })
   return (
     <div className="title-screen">
       <TitleLife />
+      <MusicToggle className="title-music" />
       <img className="title-logo" src="/assets/gen/logo.png" alt="Catchami" />
       <div className="title-menu">
-        <button className="game-btn start" onClick={start}>
+        <div className="enter e1"><button className="game-btn start" onClick={start}>
           <img className="gb-icon" src="/assets/gen/cube-happy.png" alt="" />
           <span className="gb-label">Start game</span>
           <span className="gb-shine" />
-        </button>
-        <button className="game-btn help" onClick={() => setHelp(true)}>
+        </button></div>
+        <div className="enter e2"><button className="game-btn help" onClick={() => setHelp(true)}>
           <span className="gb-badge">?</span>
           <span className="gb-label">How to play</span>
-        </button>
-        <button className="game-btn coins" onClick={() => setEcon(true)}>
+        </button></div>
+        <div className="enter e3"><button className="game-btn coins" onClick={() => setEcon(true)}>
           <img className="gb-coin" src="/assets/gen/ui-coin.png" alt="" />
           <span className="gb-label">How coins work</span>
-        </button>
+        </button></div>
       </div>
-      <p className="title-legal">Paid features use the $CATCHAMI token on NEAR. Token prices can fall; nothing in Catchami promises earnings.</p>
       {help && <HowToPlay onClose={() => setHelp(false)} />}
       {econ && <EconomyGuide onClose={() => setEcon(false)} />}
       {back && <WelcomeBack onContinue={onStart} onNew={onNew} onClose={() => setBack(false)} />}
@@ -116,7 +120,7 @@ function HowToPlay({ onClose }: { onClose: () => void }) {
   );
 }
 
-const KEY_HELP = "WASD/arrows move · click to walk · wheel or +/− zoom · C catch · M map · B backpack · Esc close";
+const KEY_HELP = "WASD/arrows move · click to walk · C catch · M map · B backpack · Esc close";
 
 function useShortcuts() {
   useEffect(() => {
@@ -134,8 +138,6 @@ function useShortcuts() {
         else if (k === "m") store.set({ screen: s.screen === "map" ? "world" : "map", sheet: null });
         else if (k === "b") store.set({ screen: "pets", petScreen: s.controlled, sheet: null });
         else if (k === "p") store.set({ screen: "pets", petScreen: null, sheet: null });
-        else if (k === "=" || k === "+") window.dispatchEvent(new CustomEvent("catchami:zoom", { detail: { factor: 1.15 } }));
-        else if (k === "-" || k === "_") window.dispatchEvent(new CustomEvent("catchami:zoom", { detail: { factor: 0.87 } }));
       }
     };
     window.addEventListener("keydown", onKey);
@@ -160,6 +162,7 @@ function Shell() {
   const game = useRef<Phaser.Game | null>(null);
   const screen = useStore((s) => s.screen);
   const bubble = useStore((s) => s.bubble);
+  const tutorial = useStore((s) => s.onboarding?.stage === "tutorial");
   useEffect(() => {
     let cancelled = false;
     void Promise.all([import("./game/GameScene.ts"), document.fonts.load("600 14px Fredoka")]).then(async ([m]) => {
@@ -176,21 +179,21 @@ function Shell() {
   return (
     <div className="shell">
       <div className="canvas-host" ref={host} />
-      <div className="hud">
-        {(screen === "world" || screen === "map") && (<><TopBar /><PetCard /><AreaBanner /><QuickButtons /><Joystick /><ActionBar /><Sheets /></>)}
+      <div className={`hud ${tutorial ? "tutorial-on" : ""}`}>
+        {(screen === "world" || screen === "map") && (<><TopBar /><MusicToggle className="hud-music" /><PetCard /><AreaBanner />{!tutorial && <MiniMap />}<Joystick /><ActionBar /><Sheets /><BanditFightPopup /></>)}
         {screen === "map" && <MapScreen />}
         {screen === "world" && <MinigameLayer />}
         <BubbleInvite />
         {bubble && <BubbleScreen />}
         {screen === "world" && <KeyHint />}
         {(screen === "world" || screen === "map") && <TutorialCoach />}
-        {screen === "pets" && <PetsScreen />}
+        {screen === "pets" && <PetsPage />}
         {screen === "market" && <MarketScreen />}
         {screen === "ranks" && <RanksScreen />}
         {screen === "wallet" && <WalletScreen />}
         {screen === "fairness" && <FairnessScreen />}
         {screen === "catch" && <Suspense fallback={<div className="catch" />}><CatchScreen /></Suspense>}
-        {screen !== "catch" && <BottomNav />}
+        {(screen === "world" || screen === "map") && !tutorial && <BottomNav />}
         <Toasts />
       </div>
     </div>
@@ -206,4 +209,12 @@ function TitleLife() {
       <span className="cloud c1" /><span className="cloud c2" /><span className="cloud c3" />
     </div>
   );
+}
+
+/** Bag (one pet) or Collection (all pets). */
+function PetsPage() {
+  const own = useStore((s) => s.own);
+  const petScreen = useStore((s) => s.petScreen);
+  const pet = own.find((p) => p.id === petScreen);
+  return pet ? <BagScreen p={pet} /> : <CollectionScreen />;
 }

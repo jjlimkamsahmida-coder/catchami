@@ -12,7 +12,7 @@ import { ECONOMY, formatTokens, tokens } from "@catchami/shared";
 import { store, useStore, type OnboardingStage } from "../net/store.ts";
 import { adoptSession, api, forgetDevice, refreshWallet, setOnboarding, startAsGuest } from "../net/api.ts";
 import { prepareNear, signInWithNear, WALLETS, type WalletId } from "../net/near.ts";
-import { CollectorCard } from "./CollectorCard.tsx";
+import { CollectorCard, cardFromPet } from "./CollectorCard.tsx";
 import { genUrl } from "../game/assets.ts";
 import { sfx } from "./sfx.ts";
 
@@ -74,7 +74,7 @@ function Dialogue({ lines, onDone, onCue }: { lines: Line[]; onDone: () => void;
   });
   return (
     <button className="dialogue" onClick={next}>
-      <span className="dialogue-name">{line.who}</span>
+      {line.who && <span className="dialogue-name">{line.who}</span>}
       <span className="dialogue-text">{line.text.slice(0, n)}<span className="dialogue-ghost">{line.text.slice(n)}</span></span>
       {full && <span className="dialogue-next">{i < lines.length - 1 ? "▼" : "▶"}</span>}
     </button>
@@ -122,12 +122,15 @@ function Intro({ onDone }: { onDone: () => void }) {
   const [revealed, setRevealed] = useState(false);
   const [tossed, setTossed] = useState(false);
   const lines: Line[] = [
-    { who: "???", text: "…psst. Over here, traveller." },
-    { who: "The Keeper", text: "Don't be shy! I'm the Keeper. I look after the CamiCubes.", cue: "reveal" },
-    { who: "The Keeper", text: "Every real animal out there carries a tiny spark. We call it a Cami." },
-    { who: "The Keeper", text: "Toss a CamiCube at a real cat or dog, and its spark hops inside. Then it lives on as your sticker pet in the world of Catchami." },
-    { who: "The Keeper", text: "Every new Keeper gets their first cube from me. Here — catch!", cue: "toss" },
-    { who: "The Keeper", text: "Now, before you head out… tell me who you are." },
+    { who: "", text: "Catchami used to be the brightest world you could imagine… glowing meadows, singing forests, a village that never slept." },
+    { who: "", text: "But lately, the lights have been going out." },
+    { who: "???", text: "…psst. You there. You can see me? Then you can still see the sparks." },
+    { who: "The Keeper", text: "Forgive the dramatic entrance. I'm the Keeper — guardian of the CamiCubes.", cue: "reveal" },
+    { who: "The Keeper", text: "Every real animal carries a tiny spark of personality. We call it a Cami. Those sparks are what keep our world bright." },
+    { who: "The Keeper", text: "But no one has brought a new friend to Catchami in a long, long time. The sparks are fading… and the world is going grey." },
+    { who: "The Keeper", text: "Toss a CamiCube at a real cat or dog, and its spark hops inside. It comes to life here as your sticker pet — and the world lights up a little more." },
+    { who: "The Keeper", text: "This is the last cube that still glows. I've been saving it for someone special. Here — catch!", cue: "toss" },
+    { who: "The Keeper", text: "Now, before you head out… tell me who you are, new Keeper." },
   ];
   return (
     <Scene night onSkip={onDone}>
@@ -150,14 +153,12 @@ function Join({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
   const [err, setErr] = useState<string | null>(null);
   const [wallets, setWallets] = useState(false);
   const [gift, setGift] = useState<string | null>(null);
+  const [shop, setShop] = useState(false);
 
   const afterJoin = async () => {
-    // Starter coins (test units on testnet/dev). Idempotent: one grant per account.
-    const g = await api<{ amount: string; already: boolean }>("/api/onboarding/starter", {}).catch(() => null);
     await setOnboarding("wallet");
     await refreshWallet().catch(() => {});
-    setGift(g && !g.already ? g.amount : "");
-    sfx.win();
+    setShop(true);
   };
   const guest = async () => {
     setBusy("guest"); setErr(null);
@@ -173,17 +174,25 @@ function Join({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
     } catch (e) { setErr((e as Error).message); void prepareNear().catch(() => {}); } finally { setBusy(null); }
   };
 
+  if (shop && gift === null) return <BuyCoins onBought={(amount) => { setGift(amount); sfx.win(); }} />;
   if (gift !== null) {
     return (
       <Scene>
-        <div className="scene-stage"><Keeper size={190} cube={false} pose="wave" /></div>
-        <div className="gift panel">
-          <div className="gift-burst">{Array.from({ length: 10 }, (_, k) => <img key={k} src={genUrl("ui-coin")} alt="" style={{ "--a": `${k * 36}deg` } as React.CSSProperties} />)}<img className="gift-cube" src={genUrl("gift")} alt="" /></div>
-          <h2>Starter gift!</h2>
-          <p className="gift-amount">{gift ? `+${formatTokens(BigInt(gift))}` : STARTER} <small>$CATCHAMI</small></p>
-          <p>Pocket money from the Keeper. A CamiCube costs <b>{CUBE_COST}</b> — and your first one <b>always holds</b>.</p>
-          <p className="small muted">Test network: these are play coins with no real value.</p>
-          <button className="game-btn start sm" onClick={onDone}><span className="gb-label">Let's catch!</span></button>
+        {/* Reward reveal: rays, bursting coins, ribbon title, big amount — no panel. */}
+        <div className="reward">
+          <div className="reward-amount">{gift ? `+${formatTokens(BigInt(gift))}` : STARTER}<small>$CATCHAMI</small></div>
+          <div className="reward-stage">
+            <div className="reward-rays" aria-hidden />
+            <div className="reward-coins" aria-hidden>{Array.from({ length: 12 }, (_, k) => <img key={k} src={genUrl("ui-coin")} alt="" style={{ "--a": `${k * 30}deg`, "--d": `${(k % 3) * 90}ms` } as React.CSSProperties} />)}</div>
+            {/* CamiCube on a heap of coins (the generated gift box art is cropped at its edges). */}
+            <div className="reward-gift">
+              <div className="coin-heap" aria-hidden>{[[-62, 0], [-30, -4], [2, 2], [34, -3], [64, 1], [-46, -26], [-14, -30], [18, -27], [48, -24], [-30, -52], [2, -56], [32, -50]].map(([x, y = 0], k) => <img key={k} src={genUrl("ui-coin")} alt="" style={{ left: `calc(50% + ${x}px)`, bottom: `${8 - y}px` }} />)}</div>
+              <img className="heap-cube" src={genUrl("cube-excited")} alt="" />
+            </div>
+            <Keeper size={120} cube={false} pose="wave" className="mini reward-keeper" />
+          </div>
+          <p className="reward-line">"Now you're ready, Keeper!" A CamiCube costs <b>{CUBE_COST}</b> — and the last glowing cube <b>always holds</b>.</p>
+          <div className="reward-btn"><button className="game-btn start sm" onClick={onDone}><span className="gb-label">Let's catch!</span></button></div>
         </div>
       </Scene>
     );
@@ -192,7 +201,7 @@ function Join({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
     <Scene onSkip={undefined}>
       <div className="scene-stage small"><Keeper size={170} pose="idle" /></div>
       <div className="join panel">
-        <h2>How do you want to play?</h2>
+        <h2>Who's the new Keeper?</h2>
         {token && <p className="small muted" style={{ margin: 0, textAlign: "center" }}>Playing on this device as <b>{name}</b></p>}
         <button className="join-opt" disabled={!!busy} onClick={guest}>
           <img src={genUrl("cube-happy")} alt="" />
@@ -200,7 +209,7 @@ function Join({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
         </button>
         <button className={`join-opt near ${wallets ? "open" : ""}`} disabled={!!busy} onClick={() => { if (!wallets) void prepareNear().catch(() => {}); setWallets((v) => !v); }}>
           <span className="near-logo">N</span>
-          <span><b>Connect NEAR testnet wallet</b><small>Keep your pets on any device. Testnet coins are play money.</small></span>
+          <span><b>Connect NEAR testnet wallet</b><small>Keep your pets on any device.</small></span>
         </button>
         {wallets && (
           <div className="wallet-list">
@@ -219,11 +228,62 @@ function Join({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
   );
 }
 
+/** First-time purchase of $CATCHAMI (simulated on test networks: no payment is taken). */
+function BuyCoins({ onBought }: { onBought: (amount: string) => void }) {
+  const near = useStore((s) => s.nearAccount);
+  const packs = ECONOMY.catch.starterPacks;
+  const [pick, setPick] = useState<string>(packs[1]!.id);
+  const [phase, setPhase] = useState<"choose" | "paying">("choose");
+  const [step, setStep] = useState(0);
+  const [err, setErr] = useState<string | null>(null);
+  const pack = packs.find((p) => p.id === pick)!;
+  const buy = async () => {
+    setPhase("paying"); setErr(null); setStep(0); sfx.pop();
+    try {
+      const res = api<{ amount: string; already: boolean }>("/api/onboarding/starter", { pack: pick });
+      for (let k = 1; k <= 3; k++) { await new Promise((r) => setTimeout(r, 650)); setStep(k); sfx.tick(); }
+      const r = await res;
+      await refreshWallet().catch(() => {});
+      onBought(r.amount);
+    } catch (e) { setErr((e as Error).message); setPhase("choose"); }
+  };
+  const STEPS = ["Opening wallet…", "Paying " + pack.near + " NEAR on testnet…", "Swapping for $CATCHAMI…", "Done!"];
+  return (
+    <Scene>
+      <div className="scene-stage small"><Keeper size={150} cube={false} pose="point" /></div>
+      <div className="buy panel">
+        <h2>Get your first $CATCHAMI</h2>
+        <p className="center small" style={{ margin: 0 }}>"Every Keeper needs coins for CamiCubes and snacks. Pick a pouch!"</p>
+        <div className="packs">
+          {packs.map((p, i) => (
+            <button key={p.id} className={`pack ${pick === p.id ? "on" : ""}`} disabled={phase === "paying"} onClick={() => setPick(p.id)}>
+              {p.tag && <span className="pack-tag">{p.tag}</span>}
+              <span className="pack-coins">{Array.from({ length: i + 1 }, (_, k) => <img key={k} src={genUrl("ui-coin")} alt="" />)}</span>
+              <b>{p.name}</b>
+              <span className="pack-amt">{formatTokens(tokens(p.whole))}</span>
+              <span className="pack-price">{p.near} NEAR</span>
+            </button>
+          ))}
+        </div>
+        {phase === "paying" ? (
+          <div className="pay-steps">{STEPS.map((t, k) => <span key={t} className={k < step ? "done" : k === step ? "now" : ""}><i>{k < step ? "✓" : k === step ? <span className="spinner sm" /> : ""}</i>{t}</span>)}</div>
+        ) : (
+          <button className="game-btn start sm" onClick={buy}><span className="gb-label">Buy · {pack.near} NEAR</span></button>
+        )}
+        <p className="small muted center" style={{ margin: 0 }}>{near ? `Paying from ${near}` : "Guest checkout"} · demo purchase on NEAR testnet</p>
+        {err && <p className="err small" style={{ margin: 0 }}>{err}</p>}
+      </div>
+    </Scene>
+  );
+}
+
 function FirstCatch({ onDone, onLater }: { onDone: () => void; onLater: () => void }) {
   const own = useStore((s) => s.own);
   const [camera, setCamera] = useState(false);
   const startCount = useRef<number | null>(null);
   const desktop = useMemo(isDesktop, []);
+  // Start downloading the animal finder now, so the camera is ready faster.
+  useEffect(() => { if (!desktop) void import("./Catch.tsx").then((m) => m.loadModel()).catch(() => {}); }, []);
   // While waiting on the phone hand-off, a pet caught there shows up here over
   // the live connection (the server's story stage is a backup). Not while this
   // device's own camera is open — that screen shows the catch reveal first.
@@ -247,25 +307,71 @@ function FirstCatch({ onDone, onLater }: { onDone: () => void; onLater: () => vo
   }
   return (
     <Scene>
-      <div className="scene-stage small"><Keeper size={170} pose="point" /></div>
-      <div className="catch-intro panel">
-        <h2>Catch your first pet</h2>
-        <ol className="steps">
-          <li><b>Find a real cat or dog</b> nearby — yours, a friend's, the neighbour's.</li>
-          <li><b>Point your camera</b> at it until the yellow box locks on.</li>
-          <li><b>Flick the CamiCube</b> at it (or tap the animal). Your first cube always holds!</li>
-        </ol>
-        {desktop ? <PhoneHandoff onWebcam={() => setCamera(true)} /> : (
-          <button className="game-btn start sm" onClick={() => setCamera(true)}><img className="gb-icon" src={genUrl("cube-happy")} alt="" /><span className="gb-label">Open camera</span></button>
+      <div className="mission">
+        <MissionDemo />
+        {desktop ? <PhoneHandoff /> : (
+          <div className="mission-go"><button className="game-btn start sm" onClick={() => setCamera(true)}><span className="gb-label">Let's go!</span></button></div>
         )}
-        <button className="link-btn" onClick={onLater}>No animal around? Come back later ›</button>
+        <button className="link-btn mission-later" onClick={onLater}>No animal around? Come back later ›</button>
       </div>
     </Scene>
   );
 }
 
+const MISSION_STEPS = [
+  { title: "Find a buddy", text: "Spot a real cat or dog nearby — yours, a friend's, the neighbour's!" },
+  { title: "Aim your camera", text: "Point at it until the yellow box turns green and locks on." },
+  { title: "Flick the cube!", text: "Swipe the CamiCube at it. The last glowing cube always holds!" },
+];
+
+/** Looping mini-demo of the three catch steps, Keeper as the coach. */
+function MissionDemo() {
+  const [step, setStep] = useState(0);
+  const [hold, setHold] = useState(false);
+  useEffect(() => {
+    if (hold) return;
+    const t = setTimeout(() => setStep((v) => (v + 1) % 3), 2600);
+    return () => clearTimeout(t);
+  }, [step, hold]);
+  const m = MISSION_STEPS[step]!;
+  const pills = (
+    <div className="mdemo-pills">
+      {MISSION_STEPS.map((x, k) => (
+        <button key={x.title} className={k === step ? "on" : k < step ? "done" : ""} onClick={() => { setStep(k); setHold(true); }} aria-label={x.title}>{k < step ? "✓" : k + 1}</button>
+      ))}
+    </div>
+  );
+  return (
+    <div className="mdemo">
+      <div className="mission-head">
+        <div className="mission-row">{pills}</div>
+        <h2>Bring back the first spark!</h2>
+      </div>
+      <div className="mdemo-stage">
+      <div className={`mdemo-window s${step}`} key={step}>
+        <img className="mdemo-pet" src={genUrl(["demo-cat-look", "demo-cat-face", "demo-cat-wow"][step]!)} alt="" draggable={false} />
+        {step === 0 && <img className="mdemo-glass" src={genUrl("demo-magnifier")} alt="" draggable={false} />}
+        {step >= 1 && <span className="mdemo-box" aria-hidden />}
+        {step === 2 && <img className="mdemo-cube" src={genUrl("cube-fly")} alt="" />}
+        {step === 2 && <span className="mdemo-spark" aria-hidden>{Array.from({ length: 8 }, (_, k) => <i key={k} style={{ "--a": `${k * 45}deg` } as React.CSSProperties} />)}</span>}
+        <span className="mdemo-phone" aria-hidden />
+      </div>
+      <div className="mdemo-coach">
+        <Keeper size={92} cube={false} pose={step === 2 ? "toss" : step === 1 ? "point" : "wave"} className="mini" />
+        <div className={`mdemo-bubble t${step}`} key={`t${step}`}>
+          <span className="mdemo-step">Step {step + 1}</span>
+          <b>{m.title}</b>
+          <span>{m.text}</span>
+          <i className="mdemo-star a" aria-hidden>★</i><i className="mdemo-star b" aria-hidden>✦</i>
+        </div>
+      </div>
+      </div>
+    </div>
+  );
+}
+
 /** Laptop: show a QR the phone scans to continue the same account on its camera. */
-function PhoneHandoff({ onWebcam }: { onWebcam: () => void }) {
+function PhoneHandoff() {
   const [qr, setQr] = useState<{ url: string; img: string; expiresAt: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const make = async () => {
@@ -292,10 +398,9 @@ function PhoneHandoff({ onWebcam }: { onWebcam: () => void }) {
       <div className="handoff-text">
         <img className="handoff-art" src={genUrl("handoff")} alt="" />
         <b>Scan with your phone</b>
-        <p className="small" style={{ margin: 0 }}>Catching uses your phone's camera. Scan this, catch the animal, and this screen continues by itself.</p>
+        <p className="small" style={{ margin: 0 }}>Catching happens on your phone. Scan this, catch the animal, and this screen continues by itself.</p>
         <p className="waiting small"><span className="dot" /> Waiting for your catch…</p>
         {err && <p className="err small" style={{ margin: 0 }}>{err}</p>}
-        <button className="link-btn" style={{ textAlign: "left", padding: 0 }} onClick={onWebcam}>Or use this computer's webcam</button>
       </div>
     </div>
   );
@@ -320,7 +425,7 @@ function NamePet({ onDone }: { onDone: () => void }) {
         {pet ? <CollectorCard flipIn width={Math.min(250, window.innerWidth - 80)} card={{ id: pet.id, name: name || pet.name, species: pet.species, rarity: pet.rarity, sticker: pet.sticker, look: pet.look, stats: pet.baseStats, traits: pet.traits }} /> : <span className="spinner" />}
         <div className="panel name-box">
           <Keeper size={70} className="mini" cube={false} pose="wave" />
-          <p style={{ margin: 0 }}><b>The Keeper:</b> What a wonderful friend! What will you call them?</p>
+          <p style={{ margin: 0 }}><b>The Keeper:</b> Look at that glow! The first spark in ages. What will you call your new friend?</p>
           <div className="row">
             <input className="input grow" value={name} maxLength={16} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void save(); }} aria-label="Pet name" />
             <button className="btn paper" onClick={roll} title="Suggest a name">🎲</button>
@@ -339,18 +444,22 @@ function WorldIntro({ onDone }: { onDone: () => void }) {
   const pet = [...own].sort((a, b) => b.createdAt - a.createdAt)[0];
   const n = pet?.name ?? "your pet";
   const lines: Line[] = [
-    { who: "The Keeper", text: `${n} looks happy already! Welcome to Catchami — a cozy, chill world where pets live, work and play.` },
-    { who: "The Keeper", text: "Home is Paw Village. It's peaceful there: no battles, just friends, shops and HQ." },
-    { who: "The Keeper", text: "West lies the Whispering Forest — wood, fish and herbs. East is Mining Valley, full of stone." },
-    { who: "The Keeper", text: `Pets get hungry and tired. Gather resources, sell them to travelling merchants, and buy meals to keep ${n} happy.` },
-    { who: "The Keeper", text: "Out in the wild, other pets may challenge yours to Bubble Roulette — a splashy game of nerves. No coins at stake, just bragging rights." },
-    { who: "The Keeper", text: "Alright, Keeper. Let's take your first steps together!" },
+    { who: "The Keeper", text: `Do you feel that? ${n}'s spark just lit up the whole sky. Catchami hasn't been this bright in years!` },
+    { who: "The Keeper", text: "Paw Village is waking up — lanterns flickering on, merchants dusting off their carts. It's a safe place: no battles, just friends, shops and HQ." },
+    { who: "The Keeper", text: "West lies the Whispering Forest — wood, fish and herbs. East is Mining Valley, full of stone. Both still need more light." },
+    { who: "The Keeper", text: `Sparks shine brightest when pets are happy. Gather, trade with travelling merchants, and keep ${n} well fed.` },
+    { who: "The Keeper", text: "Out in the wild, other pets may challenge yours to Bubble Roulette — a splashy game of nerves. Just bragging rights, no hard feelings." },
+    { who: "The Keeper", text: "And the roads north and south? Still too dark to travel. Bring enough friends home, and one day they'll light up too." },
+    { who: "The Keeper", text: "But first — follow me to my glade for a little practice. Then we'll go wake this world up, together!" },
   ];
   return (
     <Scene onSkip={onDone}>
       <div className="scene-stage">
-        <Keeper size={210} cube={false} pose="wave" />
-        {pet && <img className="scene-pet" src={pet.sticker ?? genUrl("cube-happy")} alt={n} />}
+        {/* The Keeper proudly holds up your new collector card. */}
+        <div className="keeper-holding">
+          <Keeper size={230} cube={false} />
+          {pet && <div className="held-card"><CollectorCard flipIn width={96} card={cardFromPet(pet)} /></div>}
+        </div>
       </div>
       <Dialogue lines={lines} onDone={onDone} />
     </Scene>
@@ -373,7 +482,7 @@ export function WelcomeBack({ onContinue, onNew, onClose }: { onContinue: () => 
         <h2>Welcome back!</h2>
         <p className="center" style={{ margin: 0 }}>{near ? <>Wallet <b>{near}</b></> : <>Guest <b>{name}</b> on this device</>}{own.length ? ` · ${own.length} pet${own.length > 1 ? "s" : ""}` : ""}</p>
         {own.length > 0 && <div className="wb-pets">{own.slice(0, 5).map((p) => <img key={p.id} src={p.sticker ?? genUrl("cube-happy")} alt={p.name} title={p.name} />)}</div>}
-        <button className="game-btn start sm" onClick={onContinue}><img className="gb-icon" src={genUrl("cube-happy")} alt="" /><span className="gb-label">{done ? "Continue" : "Continue story"}</span></button>
+        <button className="game-btn start sm" onClick={onContinue}><span className="gb-label">Continue</span></button>
         {!confirm
           ? <button className="game-btn help sm" onClick={() => setConfirm(true)}><span className="gb-label">New game</span></button>
           : (
@@ -407,7 +516,7 @@ export function PhoneCatch({ onGame }: { onGame: () => void }) {
         <div className="center-msg panel">
           <img src={genUrl("cube-excited")} alt="" style={{ width: 90 }} />
           <h2>Caught!</h2>
-          <p>Head back to your computer — your new pet is waiting there to be named.</p>
+          <p>The first spark is home! Head back to your computer — your new friend is waiting there to be named.</p>
           <button className="btn paper" onClick={onGame}>Or keep playing on this phone</button>
         </div>
       </Scene>

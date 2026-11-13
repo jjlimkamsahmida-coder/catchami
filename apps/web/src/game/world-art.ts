@@ -22,10 +22,11 @@ const hash = (x: number, y: number, k = 0) => { let h = (x * 374761393 + y * 668
 // Area palettes: [base, dark, light, alt] for walkable ground.
 const PAL = {
   village: { grass: "#89cf5d", dark: "#6bb846", light: "#ade277", alt: "#9fd86a" },
+  glade: { grass: "#8fd96a", dark: "#71c652", light: "#b6ec8c", alt: "#a5e27c" },
   forest: { grass: "#58b673", dark: "#3f9a5c", light: "#7ccd8c", alt: "#6cc27c" },
   mines: { grass: "#dcbd8b", dark: "#c29d69", light: "#ead3a6", alt: "#e3c697" },
 };
-const AREA_KEYS = ["village", "forest", "mines"] as const;
+const AREA_KEYS = ["village", "forest", "mines", "glade"] as const;
 const WATER = "#4cb3e6", DEEP = "#3a96d6", SHALLOW = "#82d8ea", SAND = "#f2d89a", SAND_DK = "#d7b26a";
 const EARTH = "#b07a4c", EARTH_DK = "#875735", ROCK = "#9d8ca2", ROCK_DK = "#6e5c78", ROCK_LT = "#c2b4c6";
 const PATH = "#e8cb8e", PATH_DK = "#c9a467", COBBLE = "#ddd2bf", COBBLE_DK = "#bfb19a";
@@ -92,9 +93,31 @@ export function paintChunk(world: WorldDef, x0: number, y0: number, cw: number, 
   } else each((t) => t === T.meadow, (x, y) => fillOrBlob(x, y, (t) => t === T.meadow, 0.7, pal(x, y).alt));
   // Mining ground & cliffs.
   each((t) => t === T.highland, (x, y) => fillOrBlob(x, y, (t) => t === T.highland || t === T.rock, 0.66, pats.dirt ?? pal(x, y).grass));
-  each((t) => t === T.rock, (x, y) => { circle(g, cx(x), cx(y) + 10, TS * 0.76, INK); circle(g, cx(x), cx(y) + 7, TS * 0.7, ROCK_DK); });
-  each((t) => t === T.rock, (x, y) => fillOrBlob(x, y, (t) => t === T.rock, 0.66, ROCK, -6));
-  each((t) => t === T.rock, (x, y) => { if (hash(x, y, 1) < 0.45) ell(g, cx(x) - 5, cx(y) - 13, 8, 4, ROCK_LT); if (hash(x, y, 2) < 0.25) ell(g, cx(x) + 6, cx(y) - 2, 6, 3, ROCK_LT); });
+  // Cliffs: a flat stone top with a darker front face where the cliff drops, crisp ink edges.
+  const isRock = (t: number) => t === T.rock;
+  each(isRock, (x, y) => {
+    const X = x * TS, Y = y * TS;
+    rect(g, X - 1, Y - 1, TS + 2, TS + 2, ROCK);
+    // Soft top highlight and tidy brick-like seams.
+    rect(g, X, Y + 2, TS, 5, ROCK_LT);
+    g.fillStyle = "rgba(43,29,58,0.12)";
+    if ((x + y) % 2 === 0) g.fillRect(X + 15, Y + 9, 2, 12); else g.fillRect(X + 4, Y + 16, 2, 10);
+  });
+  each(isRock, (x, y) => {
+    const X = x * TS, Y = y * TS;
+    g.fillStyle = INK;
+    if (!isRock(at(x, y - 1))) g.fillRect(X - 1, Y - 2, TS + 2, 3);
+    if (!isRock(at(x - 1, y))) g.fillRect(X - 2, Y - 1, 3, TS + 2);
+    if (!isRock(at(x + 1, y))) g.fillRect(X + TS - 1, Y - 1, 3, TS + 2);
+    if (!isRock(at(x, y + 1))) {
+      // Front face of the cliff.
+      rect(g, X - 1, Y + TS - 12, TS + 2, 12, ROCK_DK);
+      rect(g, X - 1, Y + TS - 13, TS + 2, 2, INK);
+      rect(g, X - 1, Y + TS - 1, TS + 2, 3, INK);
+      g.fillStyle = "rgba(255,255,255,0.18)";
+      g.fillRect(X + 6 + hash(x, y, 3) * 14, Y + TS - 9, 5, 2);
+    }
+  });
   // Grass blades, stones, pebbles.
   g.lineCap = "round";
   if (!textured) each((t) => t === T.grass || t === T.meadow || t === T.forest, (x, y) => {

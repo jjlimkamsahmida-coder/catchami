@@ -80,7 +80,7 @@ export function MiniMap() {
   }, [world]);
   if (!world) return null;
   return (
-    <div className="col" style={{ alignItems: "center", gap: 4 }}>
+    <div className="minimap-dock">
       <button className="minimap" onClick={() => store.set({ sheet: null, screen: "map" })} aria-label="Open map">
         <canvas ref={ref} width={92} height={92} />
         <span className="me" />
@@ -99,7 +99,7 @@ export function QuickButtons() {
   );
 }
 
-const AREA_CENTERS: Record<string, [number, number]> = { forest: [36, 8], village: [96, 8], mines: [156, 8] };
+const AREA_CENTERS: Record<string, [number, number]> = { forest: [36, 8], village: [96, 8], mines: [156, 8], glade: [212, 8] };
 
 export function MapScreen() {
   const world = useWorld();

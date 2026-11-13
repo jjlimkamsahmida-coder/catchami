@@ -45,9 +45,10 @@ export const ECONOMY = {
     } satisfies Record<CatchTier, { cost: bigint; successPpm: number }>,
     /** Rarity table after a successful catch, per tier, in ppm. Each row sums to 1e6. */
     rarityPpm: {
-      basic: { common: 700_000, uncommon: 220_000, rare: 70_000, epic: 9_000, legendary: 950, mythic: 50 },
-      enhanced: { common: 600_000, uncommon: 280_000, rare: 100_000, epic: 18_000, legendary: 1_900, mythic: 100 },
-      premium: { common: 480_000, uncommon: 320_000, rare: 160_000, epic: 35_000, legendary: 4_500, mythic: 500 },
+      // DEMO odds (hackathon build): rare pets are easy to find. Restore production odds before launch.
+      basic: { common: 300_000, uncommon: 250_000, rare: 200_000, epic: 120_000, legendary: 80_000, mythic: 50_000 },
+      enhanced: { common: 200_000, uncommon: 220_000, rare: 220_000, epic: 160_000, legendary: 120_000, mythic: 80_000 },
+      premium: { common: 100_000, uncommon: 150_000, rare: 250_000, epic: 200_000, legendary: 180_000, mythic: 120_000 },
     } satisfies Record<CatchTier, Record<Rarity, number>>,
     /** Successful catch split (bps). */
     successSplit: { pet: 8_000, hq: 1_800, team: 200 },
@@ -58,6 +59,15 @@ export const ECONOMY = {
     firstCatchGuaranteed: true,
     /** One-time starter grant on testnet/dev so a new player can afford their first CamiCube and meals. */
     starterGrantWhole: 10_000_000,
+    /**
+     * Starter packs for the first-time "buy $CATCHAMI" step. On test networks this is a
+     * simulated purchase (test NEAR price shown, coins credited as test units); one per account.
+     */
+    starterPacks: [
+      { id: "sprout", name: "Sprout Pouch", whole: 10_000_000, near: "1", tag: "" },
+      { id: "bloom", name: "Bloom Bag", whole: 25_000_000, near: "2", tag: "Popular" },
+      { id: "grove", name: "Grove Chest", whole: 60_000_000, near: "4", tag: "Best value" },
+    ],
     minDetectionScore: 0.6,
     duplicateHammingThreshold: 6,
   },
@@ -75,7 +85,11 @@ export const ECONOMY = {
     hungerPerSec: 1000 / (8 * 3600),
     starvingEnergyDrainPerSec: 0.25,
     walkEnergyPerSec: 0.35,
-    gatherEnergyPerUnit: 3,
+    gatherEnergyPerUnit: 1.2,
+    /** Hunger gained per unit gathered (hard work makes pets hungry). */
+    gatherHungerPerUnit: 0.6,
+    /** Bags hold this many times their base carry stat ("earn more": every hit gives 10× units). */
+    carryScale: 10,
     battleEnergyPerExchange: 12,
     restEnergyPerSec: 0.6,
     restMaxHunger: 700,
@@ -88,7 +102,7 @@ export const ECONOMY = {
     price: tokens(12_000),
     hungerRestore: 350,
     energyRestore: 220,
-    fishPerMeal: 1,
+    fishPerMeal: 10,
     /** Eating your own carried fish: no tokens, smaller effect. */
     ownFishHunger: 220,
     ownFishEnergy: 120,
@@ -96,18 +110,27 @@ export const ECONOMY = {
   },
   medicine: {
     price: tokens(60_000),
-    herbsPerDose: 2,
+    herbsPerDose: 20,
     /** Heals this share of max HP (bps). Also required to revive after the KO cooldown. */
     healBps: 4_000,
     split: { hq: 9_000, team: 1_000 },
   },
 
+  /** Per-unit prices are tiny on purpose: each hit yields many units (see gather.unitsPerHit). */
   resources: {
-    fish: { basePrice: tokens(2_000), weight: 2, gatherMs: 5_000, nodeCapacity: 14, regenMs: 70_000 },
-    herbs: { basePrice: tokens(2_600), weight: 1, gatherMs: 4_200, nodeCapacity: 12, regenMs: 80_000 },
-    wood: { basePrice: tokens(1_800), weight: 3, gatherMs: 5_500, nodeCapacity: 16, regenMs: 60_000 },
-    minerals: { basePrice: tokens(3_200), weight: 4, gatherMs: 7_000, nodeCapacity: 10, regenMs: 110_000 },
-  } satisfies Record<Resource, { basePrice: bigint; weight: number; gatherMs: number; nodeCapacity: number; regenMs: number }>,
+    fish: { basePrice: tokens(200), weight: 2, gatherMs: 5_000, regenMs: 70_000 },
+    herbs: { basePrice: tokens(260), weight: 1, gatherMs: 4_200, regenMs: 80_000 },
+    wood: { basePrice: tokens(180), weight: 3, gatherMs: 5_500, regenMs: 60_000 },
+    minerals: { basePrice: tokens(320), weight: 4, gatherMs: 7_000, regenMs: 110_000 },
+  } satisfies Record<Resource, { basePrice: bigint; weight: number; gatherMs: number; regenMs: number }>,
+
+  gather: {
+    /** Units per successful hit (autopilot gathering, and a "good" minigame tap). */
+    unitsPerHit: 10,
+    /** Each resource spot holds a fixed stock in this range (deterministic per spot). */
+    nodeStockMin: 100_000,
+    nodeStockMax: 500_000,
+  },
 
   demand: {
     /** Exponential smoothing half-life for consumption/supply rates. */
@@ -132,7 +155,7 @@ export const ECONOMY = {
 
   merchants: {
     count: 4,
-    inventoryCapacity: 400,
+    inventoryCapacity: 4_000,
     tripMinBudget: tokens(20_000_000),
     tripMaxBudget: tokens(2_000_000_000),
     speedPxPerSec: 52,
@@ -176,7 +199,7 @@ export const ECONOMY = {
     zeroOutcomePpm: 300_000,
     minReward: tokens(2_000),
     maxReward: tokens(40_000),
-    minGatheredToday: 5,
+    minGatheredToday: 50,
     minPetAgeSec: 24 * 3600,
     rarityMultiplierBps: { common: 10_000, uncommon: 10_100, rare: 10_200, epic: 10_300, legendary: 10_400, mythic: 10_500 } satisfies Record<Rarity, number>,
   },
@@ -194,12 +217,12 @@ export const EQUIPMENT: Record<
   EquipmentKind,
   { label: string; fee: bigint; wood: number; minerals: number; bonusBps: Partial<Record<StatKey, number>> }
 > = {
-  boots: { label: "Trail Boots", fee: tokens(40_000), wood: 6, minerals: 2, bonusBps: { speed: 600 } },
-  gloves: { label: "Picker Gloves", fee: tokens(40_000), wood: 4, minerals: 3, bonusBps: { gather: 500 } },
-  armor: { label: "Bark Armor", fee: tokens(70_000), wood: 8, minerals: 6, bonusBps: { defense: 700 } },
-  heavy_armor: { label: "Heavy Stone Armor", fee: tokens(90_000), wood: 4, minerals: 12, bonusBps: { defense: 1_100, speed: -600 } },
-  tool: { label: "Forager's Tool", fee: tokens(50_000), wood: 7, minerals: 4, bonusBps: { gather: 300, carry: 400 } },
-  weapon: { label: "Pebble Sling", fee: tokens(70_000), wood: 5, minerals: 8, bonusBps: { attack: 700 } },
+  boots: { label: "Trail Boots", fee: tokens(40_000), wood: 60, minerals: 20, bonusBps: { speed: 600 } },
+  gloves: { label: "Picker Gloves", fee: tokens(40_000), wood: 40, minerals: 30, bonusBps: { gather: 500 } },
+  armor: { label: "Bark Armor", fee: tokens(70_000), wood: 80, minerals: 60, bonusBps: { defense: 700 } },
+  heavy_armor: { label: "Heavy Stone Armor", fee: tokens(90_000), wood: 40, minerals: 120, bonusBps: { defense: 1_100, speed: -600 } },
+  tool: { label: "Forager's Tool", fee: tokens(50_000), wood: 70, minerals: 40, bonusBps: { gather: 300, carry: 400 } },
+  weapon: { label: "Pebble Sling", fee: tokens(70_000), wood: 50, minerals: 80, bonusBps: { attack: 700 } },
 };
 
 export const STAT_KEYS = ["maxHp", "maxEnergy", "attack", "defense", "gather", "speed", "luck", "carry"] as const;

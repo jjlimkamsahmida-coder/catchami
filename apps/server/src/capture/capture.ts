@@ -152,8 +152,8 @@ export async function resolveAttempt(db: Db, game: Game, userId: string, attempt
         const split = splitBps(cost, ECONOMY.catch.successSplit, "hq");
         await ensureAccount(tx, acct.pet(petId), "pet", { petId, userId });
         const genome = generateGenome(epoch.seed, label, row.species, roll.rarity!);
-        const hq = game.hq();
-        const state = freshPetState(hq.x + (Math.random() - 0.5) * 60, hq.y + 20 + Math.random() * 30, genome.stats);
+        const spot = game.spawnSpot();
+        const state = freshPetState(spot.x, spot.y, genome.stats);
         await tx.query(
           `INSERT INTO pets (id, owner_id, species, rarity, name, genome, sticker, mint_status, catch_attempt_id, state) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
           [petId, userId, genome.species, genome.rarity, genome.name, JSON.stringify(genome), `/media/stickers/${petId}.png`, chainConfigured() ? "pending" : "awaiting_chain", attemptId, JSON.stringify(state)],

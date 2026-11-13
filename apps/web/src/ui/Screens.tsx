@@ -82,16 +82,16 @@ export function WalletScreen() {
   const me = useAsync(() => api(`/api/me`), []);
   const econ = useAsync(() => api(`/api/economy`), []);
   const faucet = async () => {
-    try { const r = await api(`/api/dev/faucet`, {}); toast("good", `Added ${fmt(r.amount)} test units`); await refreshWallet(); me.reload(); }
+    try { const r = await api(`/api/dev/faucet`, {}); toast("good", `Added ${fmt(r.amount)} test coins`); await refreshWallet(); me.reload(); }
     catch (e) { toast("bad", (e as Error).message); }
   };
   return (
     <div className="screen">
-      <ScreenHead title="Wallet" right={<span className="tag">{name}</span>} />
+      <ScreenHead title="Wallet" onBack={() => store.set({ screen: "world" })} right={<span className="tag">{name}</span>} />
       {network === "dev" && (
         <div className="notice" style={{ marginBottom: 12 }}>
-          <b>Dev network.</b> Balances here are test units with no monetary value and no onchain backing, so the full game loop can be tested before the $CATCHAMI contracts are deployed.
-          <div style={{ marginTop: 8 }}><button className="btn sm" onClick={faucet}>Get today's test units</button></div>
+          <b>Test network.</b> Grab free test coins and try the whole game loop.
+          <div style={{ marginTop: 8 }}><button className="btn sm" onClick={faucet}>Get today's test coins</button></div>
         </div>
       )}
       <div className="card col" style={{ marginBottom: 12 }}>
@@ -102,7 +102,7 @@ export function WalletScreen() {
       <div className="card col" style={{ marginBottom: 12 }}>
         <h3>Add money</h3>
         <p className="small" style={{ margin: 0 }}>Deposits arrive by sending $CATCHAMI to the Catchami game contract on NEAR. Card/bank top-ups need an approved on-ramp provider that supports $CATCHAMI and your region.</p>
-        <div className="notice warn small">{network === "dev" ? "Not available on the dev network: no token or game contract is deployed yet." : "Contract deposits will appear here once the game contract address is configured."}</div>
+        <div className="notice warn small">Deposits and withdrawals open when the $CATCHAMI contracts go live.</div>
       </div>
       <div className="card col" style={{ marginBottom: 12 }}>
         <h3>Recent activity</h3>
@@ -124,7 +124,6 @@ export function WalletScreen() {
             <dt>Team fee revenue</dt><dd className="num">{fmt(econ.data.team.revenueBalance)}</dd>
             <dt>Config version</dt><dd>{econ.data.version}</dd>
           </dl>
-          <p className="small muted" style={{ margin: 0 }}>No fixed earnings or returns are promised. Budgets shrink automatically as HQ nears its reserve floor.</p>
         </div>
       )}
       <div className="row"><button className="btn paper sm" onClick={() => store.set({ screen: "fairness" })}>Verify fairness</button><button className="btn ghost sm right" onClick={signOut}>Sign out</button></div>

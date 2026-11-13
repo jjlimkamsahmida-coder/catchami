@@ -18,7 +18,7 @@ export const MINIGAME_FOR: Record<Resource, MinigameKind> = { wood: "chop", mine
 /** All tunables live here (versioned with ECONOMY via review). */
 export const MINIGAMES = {
   /** Units awarded per grade, before node supply / carry capacity caps. */
-  yield: { perfect: 2, good: 1, miss: 0 } as Record<Grade, number>,
+  yield: { perfect: 20, good: 10, miss: 0 } as Record<Grade, number>,
   /** Energy spent per attempt, whatever the result. */
   energyPerAttempt: 3,
   /** A round must be answered within this many ms of being sent. */

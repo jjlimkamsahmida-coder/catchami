@@ -31,13 +31,23 @@ type Pt = { x: number; y: number };
 
 interface Coco { detect(v: HTMLVideoElement, max?: number, min?: number): Promise<Array<{ class: string; score: number; bbox: Box }>> }
 let modelPromise: Promise<Coco> | null = null;
-async function loadModel(): Promise<Coco> {
+/**
+ * On-device animal finder for the live reticle. Optional: the server decides,
+ * so throwing works while this is still loading or if it fails. Exported so
+ * screens before the camera can start warming it up.
+ */
+export function loadModel(): Promise<Coco> {
   modelPromise ??= (async () => {
     const tf = await import("@tensorflow/tfjs");
-    await tf.ready();
-    const coco = await import("@tensorflow-models/coco-ssd");
+    // Some phones never finish WebGL setup; fall back to the CPU backend.
+    const ok = await Promise.race([tf.ready().then(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), 6000))]);
+    if (!ok) { await tf.setBackend("cpu"); await tf.ready(); }
+    const mod = await import("@tensorflow-models/coco-ssd");
+    // The package is CommonJS: depending on the bundler, load() is on the module or on its default export.
+    const coco = ((mod as unknown as { load?: unknown }).load ? mod : (mod as unknown as { default: typeof mod }).default) as typeof mod;
     return (await coco.load({ base: "lite_mobilenet_v2", modelUrl: "/models/ssdlite_mobilenet_v2/model.json" })) as unknown as Coco;
   })();
+  modelPromise.catch(() => { modelPromise = null; });
   return modelPromise;
 }
 
@@ -62,11 +72,13 @@ export function CatchScreen({ first = false, onClose, onCaught }: CatchProps = {
   const streamRef = useRef<MediaStream | null>(null);
   const [stage, setStage] = useState<Stage>({ k: "aim" });
   const [camError, setCamError] = useState<string | null>(null);
-  const [modelState, setModelState] = useState<"loading" | "ready" | "failed">("loading");
+  const [modelState, setModelState] = useState<"loading" | "slow" | "ready" | "failed">("loading");
   const [live, setLive] = useState<{ box: Box; cls: string; score: number; streak: number } | null>(null);
   const [quotes, setQuotes] = useState<CatchQuote[] | null>(null);
   const [tier, setTier] = useState<CatchTier>("basic");
   const [hint, setHint] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState<"win" | "fail" | null>(null);
+  const pendingResult = useRef<Stage | null>(null);
   const wallet = useStore((s) => s.wallet);
   const close = onClose ?? (() => store.set({ screen: "world" }));
   const devPhoto = useRef<Frame[] | null>(null);
@@ -82,7 +94,8 @@ export function CatchScreen({ first = false, onClose, onCaught }: CatchProps = {
       .then((s) => { if (stopped) { s.getTracks().forEach((t) => t.stop()); return; } streamRef.current = s; if (videoRef.current) { videoRef.current.srcObject = s; void videoRef.current.play(); } })
       .catch((e: DOMException) => setCamError(e.name === "NotAllowedError" ? "Camera permission was denied. Allow camera access to catch animals." : e.name === "NotFoundError" ? "No camera found on this device." : `Camera unavailable (${e.name}).`));
     loadModel().then(() => setModelState("ready")).catch(() => setModelState("failed"));
-    return () => { stopped = true; streamRef.current?.getTracks().forEach((t) => t.stop()); };
+    const slow = setTimeout(() => setModelState((m) => (m === "loading" ? "slow" : m)), 5000);
+    return () => { stopped = true; clearTimeout(slow); streamRef.current?.getTracks().forEach((t) => t.stop()); };
   }, []);
 
   // Live detection loop (reticle only — never decides anything).
@@ -145,16 +158,15 @@ export function CatchScreen({ first = false, onClose, onCaught }: CatchProps = {
       if (((to.x - cx) / rx) ** 2 + ((to.y - cy) / ry) ** 2 > 1) { setStage({ k: "bounced", at: to, message: "Missed! No charge — throw again." }); return; }
     }
     if (frames.length < 2) { setStage({ k: "bounced", at: to, message: "The camera isn't ready yet. Nothing was charged." }); return; }
+    setOutcome(null); pendingResult.current = null;
     setStage({ k: "working", at: to, phase: "checking", sticker: null });
     try {
       const v = await api("/api/catch/validate", { frames: frames.map((f) => f.b64) });
       if (!v.ok) { sfx.bad(); setStage({ k: "bounced", at: to, message: `${v.message} Nothing was charged.` }); return; }
       setStage({ k: "working", at: to, phase: "rolling", sticker: v.sticker ?? null });
-      const t0 = Date.now();
       const r = await submit(v.attemptId, first ? "basic" : tier, nonce());
-      await sleep(Math.max(0, 3200 - (Date.now() - t0)));
-      if (r.success) sfx.win(); else sfx.bad();
-      setStage({ k: "result", success: r.success, rarity: r.rarity, petId: r.petId, cost: r.cost, label: r.fairness?.label ?? "", epoch: r.fairness?.epoch ?? 0, sticker: v.sticker ?? null, species: v.species, first: Boolean(r.firstCatch) });
+      pendingResult.current = { k: "result", success: r.success, rarity: r.rarity, petId: r.petId, cost: r.cost, label: r.fairness?.label ?? "", epoch: r.fairness?.epoch ?? 0, sticker: v.sticker ?? null, species: v.species, first: Boolean(r.firstCatch) };
+      setOutcome(r.success ? "win" : "fail");
       void refreshWallet();
     } catch (e) {
       setStage({ k: "bounced", at: to, message: `${(e as Error).message} Nothing was charged.` });
@@ -198,7 +210,7 @@ export function CatchScreen({ first = false, onClose, onCaught }: CatchProps = {
       <div className="top">
         <button className="btn paper sm" onClick={close} aria-label="Close"><Icon name="close" /></button>
         <div className="grow" />
-        <div className="chip"><img src={genUrl("ui-coin")} alt="" style={{ width: 22, height: 22 }} /> {fmt(wallet?.available)}</div>
+        <div className="chip catch-wallet"><img src={genUrl("ui-coin")} alt="" style={{ width: 22, height: 22 }} /> {fmt(wallet?.available)}</div>
       </div>
 
       {stage.k === "aim" && (
@@ -207,7 +219,7 @@ export function CatchScreen({ first = false, onClose, onCaught }: CatchProps = {
           {/* Tap the photo to throw there (mouse friendly). */}
           <div style={{ position: "absolute", inset: 0, zIndex: 2, cursor: "crosshair" }} onClick={(e) => void throwAt({ x: e.clientX, y: e.clientY })} />
           <div className="status panel catch-status">
-            {camError ?? hint ?? (modelState === "loading" ? "Warming up the animal finder…" : locked ? "Got it! Flick or tap to throw" : live ? "Hold steady…" : "Point at a real cat or dog")}
+            {camError ?? hint ?? (modelState === "loading" ? "Warming up the animal finder…" : modelState === "slow" || modelState === "failed" ? "Point at a cat or dog and flick the cube!" : locked ? "Got it! Flick or tap to throw" : live ? "Hold steady…" : "Point at a real cat or dog")}
           </div>
           <ThrowCube start={start()} disabled={!!camError && !devPhoto.current} onThrow={(to) => void throwAt(to)} excited={locked} />
           <div className="bottom catch-bottom">
@@ -235,7 +247,7 @@ export function CatchScreen({ first = false, onClose, onCaught }: CatchProps = {
         </>
       )}
       {stage.k === "flying" && <FlyingCube from={stage.from} to={stage.to} />}
-      {stage.k === "working" && <CaptureSequence at={stage.at} sticker={stage.sticker} phase={stage.phase} />}
+      {stage.k === "working" && <CaptureSequence at={stage.at} sticker={stage.sticker} phase={stage.phase} outcome={outcome} onFinish={() => { if (pendingResult.current) setStage(pendingResult.current); }} />}
       {stage.k === "bounced" && (
         <>
           <Cube pose="dizzy" style={{ left: stage.at.x - 48, top: stage.at.y - 48, width: 96, height: 96, objectFit: "contain", animation: "cubebounce 0.7s ease-out forwards" }} />
@@ -246,7 +258,7 @@ export function CatchScreen({ first = false, onClose, onCaught }: CatchProps = {
           </div></div>
         </>
       )}
-      {stage.k === "result" && <Result stage={stage} first={first} onAgain={() => setStage({ k: "aim" })} onCaught={onCaught} />}
+      {stage.k === "result" && <Result stage={stage} onAgain={() => setStage({ k: "aim" })} onCaught={onCaught} onDone={close} />}
       <style>{`@keyframes wobble { 0%,100% { transform: rotate(0) } 25% { transform: rotate(-18deg) } 75% { transform: rotate(18deg) } } @keyframes cubebob { 50% { transform: translateY(-6px) } } @keyframes cubehop { 50% { transform: translateY(-14px) scale(1.06) } } @keyframes cubespin { to { transform: rotate(360deg) } } @keyframes cubepop { from { transform: scale(0.6) } to { transform: scale(1) } } @keyframes suckin { to { transform: translateY(150px) scale(0.05) rotate(25deg); opacity: 0.2 } } @keyframes pulse { to { transform: scale(1.15); opacity: 0.7 } } @keyframes cubebounce { 0% { transform: translate(0,0) rotate(0) } 40% { transform: translate(40px,-60px) rotate(120deg) } 100% { transform: translate(90px,140px) rotate(260deg); opacity: 0 } }`}</style>
     </div>
   );
@@ -314,62 +326,131 @@ async function submit(attemptId: string, tier: CatchTier, clientNonce: string) {
   }
 }
 
-/** Cube lands → opens → the animal is pulled in → it wobbles shut three times. */
-function CaptureSequence({ at, sticker, phase }: { at: Pt; sticker: string | null; phase: "checking" | "rolling" }) {
-  const [shut, setShut] = useState(false);
-  useEffect(() => { if (phase !== "rolling") return; const t = setTimeout(() => setShut(true), 1100); return () => clearTimeout(t); }, [phase]);
-  const open = phase === "rolling" && !shut;
+type Beat = "check" | "suck" | "grow" | "shake1" | "shake2" | "shake3" | "wait" | "win" | "fail";
+
+/**
+ * The catch moment: the animal is pulled into the cube, the cube grows to the
+ * centre and shakes three times, harder each time. The fair roll (already
+ * decided on the server) is only revealed after the third shake.
+ */
+function CaptureSequence({ at, sticker, phase, outcome, onFinish }: { at: Pt; sticker: string | null; phase: "checking" | "rolling"; outcome: "win" | "fail" | null; onFinish: () => void }) {
+  const [beat, setBeat] = useState<Beat>("check");
+  const out = useRef(outcome);
+  out.current = outcome;
+  useEffect(() => {
+    if (phase !== "rolling") return;
+    let alive = true;
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    (async () => {
+      setBeat("suck"); sfx.whirr();
+      await wait(950); if (!alive) return;
+      setBeat("grow"); sfx.pop();
+      await wait(700);
+      for (const b of ["shake1", "shake2", "shake3"] as const) {
+        if (!alive) return;
+        setBeat(b); sfx.shake(b === "shake1" ? 0 : b === "shake2" ? 1 : 2);
+        await wait(b === "shake3" ? 1150 : 1000);
+      }
+      // Still waiting on the server? Keep the suspense going.
+      while (alive && !out.current) { setBeat("wait"); sfx.shake(0); await wait(900); }
+      if (!alive) return;
+      if (out.current === "win") { setBeat("win"); sfx.click(); setTimeout(() => sfx.fanfare(), 180); await wait(2300); }
+      else { setBeat("fail"); sfx.escape(); await wait(1900); }
+      if (alive) onFinish();
+    })();
+    return () => { alive = false; };
+  }, [phase]);
+
+  const big = beat !== "check" && beat !== "suck";
+  const cx = window.innerWidth / 2, cy = window.innerHeight * 0.44;
+  const size = big ? Math.min(window.innerWidth * 0.62, 300) : 112;
+  const pos = big ? { left: cx - size / 2, top: cy - size / 2 } : { left: at.x - 56, top: at.y - 56 };
+  const pose = beat === "check" ? "excited" : beat === "suck" ? "open" : beat === "win" ? "excited" : beat === "fail" ? "dizzy" : "wobble";
+  const text = beat === "check" ? "Checking the animal…" : beat === "suck" ? "Cami spark found!" : beat === "win" ? "" : beat === "fail" ? "" : beat === "shake3" ? "Almost…!" : beat === "shake2" ? "Come on…" : "Wobble…";
   return (
-    <>
-      {open && sticker && <img src={sticker} alt="" style={{ position: "absolute", left: at.x - 70, top: at.y - 190, width: 140, height: 140, objectFit: "contain", zIndex: 4, animation: "suckin 1.05s cubic-bezier(.6,0,.9,.4) forwards" }} />}
-      {phase === "checking" && <div style={{ position: "absolute", left: at.x - 90, top: at.y - 90, width: 180, height: 180, borderRadius: "50%", background: "radial-gradient(circle, rgba(140,220,255,0.7), rgba(140,220,255,0) 70%)", zIndex: 3, animation: "pulse 0.5s ease-in-out infinite alternate" }} />}
-      {open && <div style={{ position: "absolute", left: at.x - 90, top: at.y - 110, width: 180, height: 180, borderRadius: "50%", background: "radial-gradient(circle, rgba(255,226,120,0.85), rgba(255,226,120,0) 70%)", zIndex: 3, animation: "pulse 0.5s ease-in-out infinite alternate" }} />}
-      <Cube pose={phase === "checking" ? "excited" : open ? "open" : "wobble"} style={{ left: at.x - 56, top: at.y - 56, width: 112, height: 112, objectFit: "contain", zIndex: 5, animation: shut ? "wobble 0.7s ease-in-out 3" : phase === "checking" ? "cubehop 0.45s ease-in-out infinite" : "cubepop 0.3s ease-out" }} />
-      <div className="status panel catch-status">{phase === "checking" ? "Checking the animal…" : shut ? "Wobble… wobble…" : "Cami spark found!"}</div>
-    </>
+    <div className={`capture ${big ? "big" : ""} ${beat}`}>
+      {big && <div className="capture-dim" />}
+      {beat === "suck" && sticker && <img src={sticker} alt="" className="capture-sticker" style={{ left: at.x - 70, top: at.y - 190 }} />}
+      {beat === "check" && <div className="capture-glow check" style={{ left: at.x - 90, top: at.y - 90 }} />}
+      {beat === "suck" && <div className="capture-glow" style={{ left: at.x - 90, top: at.y - 110 }} />}
+      {big && <div className="capture-ring" style={{ left: cx, top: cy }} key={beat} />}
+      {beat === "win" && <div className="capture-rays" style={{ left: cx, top: cy }} />}
+      {beat === "win" && <div className="capture-flash" />}
+      <div className="capture-cube" style={{ ...pos, width: size, height: size }}>
+        <Cube pose={pose} className="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+      </div>
+      {beat === "win" && <div className="confetti-burst" style={{ left: cx, top: cy }}>{Array.from({ length: 36 }, (_, k) => <i key={k} style={{ "--a": `${k * 10 + (k % 3) * 4}deg`, "--d": `${120 + (k % 5) * 40}px`, "--c": ["#ff7a59", "#ffd166", "#6cc04a", "#5ab8ff", "#a66bf2", "#f0569c"][k % 6], animationDelay: `${(k % 4) * 40}ms` } as React.CSSProperties} />)}</div>}
+      {beat === "win" && <div className="capture-stars" style={{ left: cx, top: cy }}>{Array.from({ length: 6 }, (_, k) => <span key={k} style={{ "--a": `${k * 60 + 30}deg` } as React.CSSProperties}>★</span>)}</div>}
+      {beat === "win" && <div className="capture-word win">Gotcha!</div>}
+      {beat === "fail" && <img className="capture-puff" src={genUrl("br-puff")} alt="" style={{ left: cx - 120, top: cy - 120 }} />}
+      {beat === "fail" && sticker && <img src={sticker} alt="" className="capture-escape" style={{ left: cx - 60, top: cy - 60 }} />}
+      {beat === "fail" && <div className="capture-word fail">It got away!</div>}
+      {text && <div className="status panel catch-status">{text}</div>}
+    </div>
   );
 }
 
-function Result({ stage, first, onAgain, onCaught }: { stage: Extract<Stage, { k: "result" }>; first: boolean; onAgain: () => void; onCaught?: (petId: string) => void }) {
+/**
+ * Catch result: the new trading card flips in, then coins fly from your wallet
+ * (top right) into the card's piggy bank — the pet's share of the cube cost.
+ * One playful button, no panels.
+ */
+function Result({ stage, onAgain, onCaught, onDone }: { stage: Extract<Stage, { k: "result" }>; onAgain: () => void; onCaught?: (petId: string) => void; onDone: () => void }) {
   const own = useStore((s) => s.own);
   const pet = own.find((p) => p.id === stage.petId);
+  const share = stage.success ? (BigInt(stage.cost) * BigInt(ECONOMY.catch.successSplit.pet)) / 10_000n : 0n;
+  const COINS = 10;
+  const [landed, setLanded] = useState(0);
+  const [flight, setFlight] = useState<{ from: Pt; to: Pt } | null>(null);
+  useEffect(() => {
+    if (!stage.success) return;
+    // Wait for the card to flip in, then measure where the coins fly from and to.
+    const t = setTimeout(() => {
+      const w = document.querySelector(".catch-wallet")?.getBoundingClientRect();
+      const bank = document.querySelector(".catch-result [data-bank]")?.getBoundingClientRect();
+      if (!w || !bank) { setLanded(COINS); return; }
+      setFlight({ from: { x: w.left + 18, y: w.top + w.height / 2 }, to: { x: bank.left + 22, y: bank.top + bank.height / 2 } });
+    }, 1000);
+    return () => clearTimeout(t);
+  }, [stage.success]);
+  useEffect(() => {
+    if (!flight) return;
+    const timers = Array.from({ length: COINS }, (_, i) => setTimeout(() => {
+      setLanded((n) => n + 1); sfx.clink();
+      const el = document.querySelector(".catch-result [data-bank]");
+      el?.classList.remove("bump"); void (el as HTMLElement | null)?.offsetWidth; el?.classList.add("bump");
+      if (i === COINS - 1) setTimeout(() => sfx.sparkle(), 120);
+    }, 620 + i * 110));
+    return () => timers.forEach(clearTimeout);
+  }, [flight]);
+  const bank = (share * BigInt(Math.min(landed, COINS))) / BigInt(COINS);
+  const go = () => { if (stage.petId && onCaught) onCaught(stage.petId); else onDone(); };
   return (
-    <div className="bottom full" style={{ top: 0, display: "flex", flexDirection: "column", justifyContent: "flex-end", overflow: "auto", background: "rgba(43,29,58,0.5)" }}>
-      <div className="col" style={{ alignItems: "center", gap: 10, padding: "16px 0" }}>
-        {stage.success ? (
-          <>
-            <div className="row" style={{ gap: 6 }}>
-              <Cube pose="excited" className="" style={{ width: 70, height: 70, objectFit: "contain", animation: "cubehop 0.6s ease-in-out 3" }} />
-              <h2 className="outline-title" style={{ fontSize: 30 }}>Caught!</h2>
-            </div>
-            <CollectorCard flipIn width={Math.min(300, window.innerWidth - 48)} card={{
-              id: stage.petId ?? "pet_new", name: pet?.name ?? "New friend", species: (pet?.species ?? stage.species) as "cat" | "dog", rarity: (stage.rarity ?? "common") as Rarity,
-              sticker: pet?.sticker ?? (stage.petId ? `/media/stickers/${stage.petId}.png` : stage.sticker), look: pet?.look ?? { hue: 30, outline: 0, pattern: 0, bounce: 100 },
-              stats: pet?.baseStats ?? null, traits: pet?.traits,
-            }} />
-            <span className="rarity-pill">{RARITY_LABEL[(stage.rarity ?? "common") as Rarity]}</span>
-          </>
-        ) : (
-          <>
-            <Cube pose="dizzy" className="" style={{ width: 130, height: 130, objectFit: "contain", animation: "wobble 0.5s ease-in-out 2" }} />
-            <h2 className="outline-title" style={{ fontSize: 28 }}>It slipped away…</h2>
-          </>
-        )}
-        <div className="panel col" style={{ padding: 14, width: "min(420px, calc(100vw - 28px))" }}>
-          {stage.success
-            ? <p className="small" style={{ margin: 0 }}>{stage.first ? "Your first cube held, as promised. " : ""}{pct(ECONOMY.catch.successSplit.pet * 100)} of the cube's cost is now in your pet's piggy bank.</p>
-            : <p style={{ margin: 0 }}>The cube's cost ({fmt(stage.cost)}) went to HQ, which pays it back out to players. No NFT was created.</p>}
-          <div className="row" style={{ width: "100%" }}>
-            {stage.success && onCaught && stage.petId
-              ? <button className="btn leaf grow" onClick={() => onCaught(stage.petId!)}>Continue</button>
-              : <>
-                <button className="btn paper grow" onClick={onAgain}>{stage.success ? "Catch another" : "Try again"}</button>
-                {stage.success && !first && <button className="btn leaf grow" onClick={() => store.set({ screen: "pets", petScreen: stage.petId })}>Meet your pet</button>}
-              </>}
-          </div>
-          {stage.label && <p className="small muted" style={{ margin: 0 }}>Verify later in Wallet → Fairness · epoch {stage.epoch} · label {stage.label}</p>}
-        </div>
-      </div>
+    <div className="catch-result">
+      {stage.success ? (
+        <>
+          <h2 className="result-title">Caught!</h2>
+          <CollectorCard flipIn width={Math.min(290, window.innerWidth - 56)} card={{
+            id: stage.petId ?? "pet_new", name: pet?.name ?? "New friend", species: (pet?.species ?? stage.species) as "cat" | "dog", rarity: (stage.rarity ?? "common") as Rarity,
+            sticker: pet?.sticker ?? (stage.petId ? `/media/stickers/${stage.petId}.png` : stage.sticker), look: pet?.look ?? { hue: 30, outline: 0, pattern: 0, bounce: 100 },
+            stats: pet?.baseStats ?? null, traits: pet?.traits, balance: bank.toString(),
+          }} />
+          {flight && Array.from({ length: COINS }, (_, i) => (
+            <img key={i} className="fly-coin" src={genUrl("ui-coin")} alt="" style={{
+              left: flight.from.x - 14, top: flight.from.y - 14,
+              "--dx": `${flight.to.x - flight.from.x}px`, "--dy": `${flight.to.y - flight.from.y}px`, "--arc": `${-60 - (i % 3) * 25}px`,
+              animationDelay: `${i * 110}ms`,
+            } as React.CSSProperties} />
+          ))}
+          <div className="result-go"><button className="game-btn start sm" onClick={go}><span className="gb-label">Continue</span></button></div>
+        </>
+      ) : (
+        <>
+          <Cube pose="dizzy" className="" style={{ width: 150, height: 150, objectFit: "contain", animation: "wobble 0.5s ease-in-out 2" }} />
+          <h2 className="result-title fail">It slipped away…</h2>
+          <div className="result-go"><button className="game-btn start sm" onClick={onAgain}><span className="gb-label">Try again!</span></button></div>
+        </>
+      )}
     </div>
   );
 }

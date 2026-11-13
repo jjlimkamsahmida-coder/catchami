@@ -87,6 +87,19 @@ export function simulateBattle(a: Combatant, b: Combatant, seedHex: string, labe
 export type Inventory = Record<Resource, number>;
 export const emptyInventory = (): Inventory => ({ fish: 0, herbs: 0, wood: 0, minerals: 0 });
 
+/** How much weight a pet's bag holds (base carry stat × carryScale). */
+export function carryCapacity(stats: { carry: number }): number {
+  return stats.carry * ECONOMY.stats.carryScale;
+}
+
+/** Fixed stock of a resource spot, 100k–500k, deterministic from its id. */
+export function nodeStock(id: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) { h ^= id.charCodeAt(i); h = Math.imul(h, 16777619); }
+  const { nodeStockMin: lo, nodeStockMax: hi } = ECONOMY.gather;
+  return lo + Math.round((((h >>> 0) % 10_000) / 10_000) * (hi - lo) / 1000) * 1000;
+}
+
 export function inventoryWeight(inv: Inventory): number {
   return RESOURCES.reduce((s, r) => s + inv[r] * ECONOMY.resources[r].weight, 0);
 }

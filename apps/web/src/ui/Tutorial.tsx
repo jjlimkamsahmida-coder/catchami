@@ -1,27 +1,32 @@
 /**
- * First-time in-game tutorial. The Keeper walks the player through moving,
- * leaving the village, what resources look like, gathering (with the
- * minigame), merchants and battles. Steps with an objective advance by
- * themselves; an arrow next to the pet points to where to go.
+ * Stage-by-stage tutorial in the Keeper's Glade, like a real game's training
+ * mode. Six stages — First Steps, Gathering, Trading, Danger!, Marketplace,
+ * Graduation — each opens with a big "STAGE N" card, moves the pet to that
+ * stage's spot in the glade, and ends with a "Stage Clear!" card.
+ * Objectives tick themselves off; "Skip tutorial" sends the pet straight to
+ * the village.
  */
 import { useEffect, useRef, useState } from "react";
-import { AREA_BOUNDS } from "@catchami/shared";
-import { store, useStore, entities } from "../net/store.ts";
-import { setOnboarding } from "../net/api.ts";
-import { genUrl } from "../game/assets.ts";
-import { Keeper } from "./Journey.tsx";
+import { AREA_BOUNDS, ECONOMY, inventoryWeight } from "@catchami/shared";
+import { controlledPet, entities, store, useStore } from "../net/store.ts";
+import { send, setOnboarding } from "../net/api.ts";
+import { fmt } from "./common.tsx";
+import { Keeper, type KeeperPose } from "./Journey.tsx";
 import { sfx } from "./sfx.ts";
 
 const TILE = 32;
 type Target = { x: number; y: number; label: string } | null;
+type Goal = "walk" | "gather" | "sell" | "meal" | "fight" | "market" | "portal";
 interface Step {
   title: string;
   text: (pet: string) => string;
-  /** Objective shown with a checkbox; the step advances when it's met. */
-  goal?: string;
+  pose: KeeperPose;
+  goal?: Goal;
+  goalText?: string;
   target?: () => Target;
-  extra?: () => React.ReactNode;
+  extra?: (pet: string) => React.ReactNode;
 }
+interface Stage { name: string; icon: string; learn: string[]; steps: Step[] }
 
 const poi = (id: string): Target => {
   const p = store.get().pois.find((q) => q.id === id);
@@ -33,6 +38,7 @@ const petPos = (): { x: number; y: number } | null => {
   const s = e?.samples[e.samples.length - 1];
   return s ? { x: s[1], y: s[2] } : null;
 };
+const inGlade = (p: { x: number } | null) => !!p && p.x / TILE >= AREA_BOUNDS.glade[0];
 const nearestNode = (): Target => {
   const p = petPos();
   const s = store.get();
@@ -41,76 +47,174 @@ const nearestNode = (): Target => {
   for (const n of s.nodesDef) {
     if ((s.nodes[n.id] ?? 1) <= 0) continue;
     const x = n.tx * TILE + 16, y = n.ty * TILE + 16, d = (x - p.x) ** 2 + (y - p.y) ** 2;
-    if (d < bd) { bd = d; best = { x, y, label: RES_NAME[n.resource] ?? n.resource }; }
+    if (d < bd) { bd = d; best = { x, y, label: "Glowing spot" }; }
   }
   return best;
 };
-const RES_NAME: Record<string, string> = { wood: "Wood", fish: "Fish", herbs: "Herbs", minerals: "Stone" };
+const trainingBandit = (): Target => {
+  const b = store.get().bandits.find((x) => x[0] === "bandit-practice");
+  return b ? { x: b[1], y: b[2], label: "Training Bandit" } : null;
+};
 
-const STEPS: Step[] = [
-  { title: "Welcome home!", text: (n) => `This is Paw Village, ${n}'s new home. It's a safe zone — no battles here. Try walking around!`, goal: "Move with the joystick, WASD, or tap where to walk" },
-  { title: "Off to the forest", text: () => "Resources only grow outside the village. Follow the arrow through the West Gate into the Whispering Forest.", goal: "Reach the Whispering Forest", target: () => poi("forest_gate") ?? poi("village_west") },
+const STAGES: Stage[] = [
   {
-    title: "Spot the resources", text: () => "Out here, glowing spots are things your pet can gather. Here's what to look for:",
-    extra: () => (
-      <div className="tut-res">
-        {[["node-wood", "Wood", "Forest trees"], ["node-fish", "Fish", "Lake & stream"], ["node-herbs", "Herbs", "Forest meadows"], ["node-minerals", "Stone", "Mining Valley"]].map(([k, n, w]) => (
-          <div key={k}><img src={genUrl(k!)} alt="" onError={(e) => { (e.target as HTMLImageElement).style.visibility = "hidden"; }} /><b>{n}</b><small>{w}</small></div>
-        ))}
-      </div>
-    ),
+    name: "First Steps", icon: "👣", learn: ["Moving around"],
+    steps: [
+      { title: "Welcome to my glade!", pose: "wave", text: (n) => `This is the Keeper's Glade — a safe place to practise with ${n}. Let's start with a little walk!`, goal: "walk", goalText: "Move with the joystick, WASD, or tap where to walk" },
+    ],
   },
-  { title: "Gather!", text: () => "Walk up to a spot and tap Gather. A little minigame pops up — perfect timing means double loot!", goal: "Gather a resource", target: nearestNode },
-  { title: "Sell & snack", text: (n) => `Nice haul! Travelling merchants wander the roads buying resources. Tap one to sell, then buy meals to keep ${n} fed and full of energy.` },
-  { title: "Battles", text: () => "In the Forest and Mining Valley, tap another player's pet to challenge it to Bubble Roulette — splash, dodge, last pet standing wins. No coins at stake." },
-  { title: "You're a Keeper now!", text: (n) => `That's everything! Explore, catch more friends, and turn on autopilot in the backpack so ${n} keeps busy while you're away. Have fun!` },
+  {
+    name: "Gathering", icon: "🪵", learn: ["Gathering resources", "Energy & hunger"],
+    steps: [
+      { title: "Gather resources", pose: "point", text: () => "See the glowing spots? Walk up to one and tap Gather. Time the minigame well — a perfect hit gives double loot!", goal: "gather", goalText: "Gather from a glowing spot", target: nearestNode },
+      {
+        title: "Energy & hunger", pose: "idle", text: (n) => `Hard work tires ${n} out and makes them hungry. Keep an eye on the bars on your pet badge (top left):`,
+        extra: () => (
+          <div className="tut-bars">
+            <span><i className="hp" />HP — health</span><span><i className="en" />Energy — gathering uses it</span><span><i className="fd" />Food — eat before it empties</span>
+          </div>
+        ),
+      },
+    ],
+  },
+  {
+    name: "Trading", icon: "🪙", learn: ["Selling to merchants", "Buying food"],
+    steps: [
+      { title: "Sell to a merchant", pose: "point", text: () => "Merchants buy what you gather. Today I'm your merchant! Walk over to me, tap me, and sell your haul for coins.", goal: "sell", goalText: "Sell your resources to the Keeper", target: () => poi("glade_stall") },
+      { title: "Time for a snack", pose: "wave", text: (n) => `Merchants sell food too! Tap me again and buy a meal — it fills ${n} up and restores energy. Meals cost ${fmt(ECONOMY.food.price)}.`, goal: "meal", goalText: "Buy a meal from the Keeper", target: () => poi("glade_stall") },
+    ],
+  },
+  {
+    name: "Danger!", icon: "⚔️", learn: ["Bandits", "Fighting back"],
+    steps: [
+      {
+        title: "Watch out for bandits", pose: "point", text: () => "Out in the Forest and Mining Valley, masked bandits chase pets carrying loot — if they catch you, they steal everything! Run when you see a red “!”, or stand and fight. The village is always safe.",
+        extra: () => <div className="tut-bandit"><span className="tb-mask" /><b>Bandit</b><span className="tb-alert">!</span></div>,
+      },
+      { title: "Practice fight!", pose: "point", text: (n) => `This Training Bandit won't steal anything. Walk up to it, tap it, and hit Fight! Strong, healthy pets win more often — show it what ${n} can do!`, goal: "fight", goalText: "Beat the Training Bandit", target: trainingBandit },
+    ],
+  },
+  {
+    name: "Marketplace", icon: "🛒", learn: ["Buying & selling pets"],
+    steps: [
+      {
+        title: "The marketplace", pose: "idle", text: () => "Want a rarer friend? Other Keepers sell their pets in the Marketplace — and you can sell yours too. Take a peek, then come back!", goal: "market", goalText: "Open the marketplace and come back",
+        extra: () => <button className="btn sky sm" onClick={() => { marketOpened = true; store.set({ screen: "market", sheet: null }); }}>🛒 Open the marketplace</button>,
+      },
+    ],
+  },
+  {
+    name: "Graduation", icon: "🎓", learn: ["Heading out into the world"],
+    steps: [
+      { title: "You're ready, Keeper!", pose: "wave", text: (n) => `That's everything! Step through the portal to Paw Village — ${n}'s new home. Bring more sparks to light up the world!`, goal: "portal", goalText: "Walk into the portal", target: () => poi("glade_exit") },
+    ],
+  },
 ];
+const STEPS = STAGES.flatMap((st, si) => st.steps.map((s, k) => ({ ...s, stage: si, k, first: k === 0, last: k === st.steps.length - 1 })));
+
+// Survives the coach unmounting while the marketplace page is open.
+let marketOpened = false;
+let phaseMem: { step: number; phase: "intro" | "play" | "clear" } | null = null;
+let enteredOnce = false;
 
 export function TutorialCoach() {
   const onboarding = useStore((s) => s.onboarding);
   const own = useStore((s) => s.own);
   const controlled = useStore((s) => s.controlled);
+  const fight = useStore((s) => s.banditFight);
   const step = onboarding?.stage === "tutorial" ? Math.min(STEPS.length - 1, onboarding.tutorial ?? 0) : -1;
+  const cur = step >= 0 ? STEPS[step]! : null;
+  const [phase, setPhaseRaw] = useState<"intro" | "play" | "clear">(() =>
+    phaseMem && phaseMem.step === step ? phaseMem.phase : cur?.first ? "intro" : "play");
+  const setPhase = (p: "intro" | "play" | "clear") => { phaseMem = { step, phase: p }; setPhaseRaw(p); };
   const [met, setMet] = useState(false);
   const [min, setMin] = useState(false);
-  const start = useRef<{ x: number; y: number } | null>(null);
+  const base = useRef<{ x: number; y: number; carried: number; hunger: number } | null>(null);
+  const readyAt = useRef(0);
+  const stepStart = useRef(Date.now());
   const arrow = useRef<HTMLDivElement>(null);
-  const pet = own.find((p) => p.id === controlled)?.name ?? "your pet";
+  const pet = own.find((p) => p.id === controlled);
+  const name = pet?.name ?? "your pet";
 
-  const advance = (to = step + 1) => {
-    setMet(false); setMin(false); start.current = null;
-    if (to >= STEPS.length) void setOnboarding("done");
-    else void setOnboarding("tutorial", to);
+  const finish = () => {
+    if (pet) send({ t: "tutorial", petId: pet.id, action: "exit" });
+    phaseMem = null; enteredOnce = false; marketOpened = false;
+    void setOnboarding("done");
+  };
+  const goTo = (to: number) => {
+    setMet(false); setMin(false); base.current = null; stepStart.current = Date.now();
+    if (to >= STEPS.length) return finish();
+    const next = STEPS[to]!;
+    const p = next.first ? "intro" : "play";
+    phaseMem = { step: to, phase: p }; setPhaseRaw(p);
+    void setOnboarding("tutorial", to);
+  };
+  const complete = () => {
+    if (!cur) return;
+    if (cur.last) { setPhase("clear"); sfx.fanfare(); }
+    else goTo(step + 1);
+  };
+  const startStage = () => {
+    if (!cur) return;
+    if (pet) send({ t: "tutorial", petId: pet.id, action: "stage", stage: cur.stage + 1 });
+    base.current = null; readyAt.current = Date.now() + 900; stepStart.current = Date.now();
+    setPhase("play"); sfx.whoosh();
   };
 
-  // Objectives.
+  // Onboarding can arrive after mount: show the right card for the step.
   useEffect(() => {
-    if (step < 0) return;
-    const done = () => { if (!met) { setMet(true); sfx.perfect(); setTimeout(() => advance(), 1100); } };
-    const onGathered = () => { if (step === 3) done(); };
+    if (!cur || phaseMem?.step === step) return;
+    phaseMem = { step, phase: cur.first ? "intro" : "play" }; setPhaseRaw(phaseMem.phase);
+  }, [step]);
+
+  // Make sure the pet is in the glade (first load or after a reload mid-stage).
+  useEffect(() => {
+    if (step < 0 || !pet || enteredOnce) return;
+    const t = setTimeout(() => {
+      enteredOnce = true;
+      if (!inGlade(petPos()) && cur) { send({ t: "tutorial", petId: pet.id, action: "stage", stage: cur.stage + 1 }); readyAt.current = Date.now() + 900; base.current = null; }
+    }, 600);
+    return () => clearTimeout(t);
+  }, [step, pet?.id]);
+
+  // Coming back from the marketplace completes stage 5.
+  useEffect(() => {
+    if (cur?.goal === "market" && phase === "play" && marketOpened && !met) {
+      marketOpened = false; setMet(true); sfx.perfect(); setTimeout(complete, 900);
+    }
+  }, [step, phase]);
+
+  // Winning the practice fight.
+  useEffect(() => {
+    if (!fight || cur?.goal !== "fight" || phase !== "play" || met) return;
+    if (fight.at < stepStart.current) return;
+    if (fight.won) { setMet(true); setTimeout(complete, 3000); } // let the battle popup play out
+  }, [fight?.at]);
+
+  // Objectives + arrow.
+  useEffect(() => {
+    if (!cur || phase !== "play") return;
+    const done = () => { if (!met) { setMet(true); sfx.perfect(); setTimeout(complete, 1100); } };
+    const onGathered = () => { if (cur.goal === "gather") done(); };
     window.addEventListener("catchami:gathered", onGathered);
-    // Objectives on a timer (keeps working even if the tab isn't painting).
     const check = setInterval(() => {
-      const p = petPos();
-      if (!p) return;
-      if (step === 0) {
-        start.current ??= p;
-        if (Math.hypot(p.x - start.current.x, p.y - start.current.y) > TILE * 3) done();
-      }
-      if (step === 1) {
-        const [x0, , x1] = AREA_BOUNDS.village;
-        const tx = p.x / TILE;
-        if (tx < x0 || tx >= x1) done();
-      }
+      if (Date.now() < readyAt.current) return; // wait for the stage teleport to land
+      const p = petPos(), me = controlledPet(store.get());
+      if (!p || !me) return;
+      base.current ??= { x: p.x, y: p.y, carried: inventoryWeight(me.carried), hunger: me.hunger };
+      const b = base.current;
+      if (cur.goal === "walk" && Math.hypot(p.x - b.x, p.y - b.y) > TILE * 3) done();
+      if (cur.goal === "sell") { const w = inventoryWeight(me.carried); if (b.carried > 0 && w === 0) done(); if (w > b.carried) b.carried = w; }
+      if (cur.goal === "meal" && (me.hunger < b.hunger - 50 || b.hunger < 60)) done(); // already full: nothing to buy
+      if (cur.goal === "portal") { const ex = poi("glade_exit"); if (ex && Math.hypot(p.x - ex.x, p.y - ex.y) < TILE * 2) done(); }
     }, 400);
     let raf = 0;
     const tick = () => {
       const p = petPos();
-      // Arrow beside the pet, pointing at the target.
-      const t = STEPS[step]?.target?.();
+      const t = cur.target?.();
       const el = arrow.current, a = window.__petAnchor;
       if (el) {
-        if (t && p && a && Math.hypot(t.x - p.x, t.y - p.y) > TILE * 2.5) {
+        if (t && p && a && Math.hypot(t.x - p.x, t.y - p.y) > TILE * 2.2) {
           const ang = Math.atan2(t.y - p.y, t.x - p.x);
           el.style.display = "flex";
           el.style.transform = `translate(${a.x + Math.cos(ang) * 74}px, ${a.y - 30 + Math.sin(ang) * 74}px)`;
@@ -122,26 +226,59 @@ export function TutorialCoach() {
     };
     raf = requestAnimationFrame(tick);
     return () => { window.removeEventListener("catchami:gathered", onGathered); clearInterval(check); cancelAnimationFrame(raf); };
-  }, [step, met]);
+  }, [step, met, phase]);
 
-  if (step < 0) return null;
-  const s = STEPS[step]!;
+  if (!cur) return null;
+  const stage = STAGES[cur.stage]!;
+  const n = cur.stage + 1, total = STAGES.length;
+  const lastStage = n === total;
+
+  if (phase === "intro") return (
+    <div className="stage-card-wrap">
+      <div className="stage-card panel">
+        <div className="stage-pips">{STAGES.map((_, i) => <i key={i} className={i < cur.stage ? "done" : i === cur.stage ? "now" : ""} />)}</div>
+        <span className="stage-kicker">Stage {n} of {total}</span>
+        <div className="stage-icon">{stage.icon}</div>
+        <h2 className="stage-name">{stage.name}</h2>
+        <div className="stage-learn">
+          <small>You'll learn</small>
+          {stage.learn.map((l) => <span key={l}>✦ {l}</span>)}
+        </div>
+        <button className="btn leaf stage-go" onClick={startStage}>Let's go!</button>
+        <button className="link-btn" onClick={finish}>Skip tutorial</button>
+      </div>
+    </div>
+  );
+
+  if (phase === "clear") return (
+    <div className="stage-card-wrap clear">
+      <div className="confetti-burst" style={{ left: "50%", top: "38%" }}>{Array.from({ length: 30 }, (_, k) => <i key={k} style={{ "--a": `${k * 12}deg`, "--d": `${110 + (k % 5) * 36}px`, "--c": ["#ff7a59", "#ffd166", "#6cc04a", "#5ab8ff", "#a66bf2", "#f0569c"][k % 6], animationDelay: `${(k % 4) * 40}ms` } as React.CSSProperties} />)}</div>
+      <div className="stage-card panel">
+        <div className="stage-stars">{[0, 1, 2].map((i) => <span key={i} style={{ animationDelay: `${150 + i * 180}ms` }}>★</span>)}</div>
+        <h2 className="stage-clear-title">{lastStage ? "Tutorial Complete!" : "Stage Clear!"}</h2>
+        <span className="stage-kicker">Stage {n} · {stage.name}</span>
+        <p className="stage-clear-msg">{lastStage ? `${name} is ready for the big wide world!` : `Nice work! Next up: ${STAGES[n]!.icon} ${STAGES[n]!.name}`}</p>
+        <button className="btn sun stage-go" onClick={() => goTo(step + 1)}>{lastStage ? "Enter Paw Village" : "Next stage ›"}</button>
+      </div>
+    </div>
+  );
+
   return (
     <>
       <div ref={arrow} className="tut-arrow" style={{ display: "none" }}><span>➜</span><small /></div>
-      <div className={`tut-card panel ${min ? "min" : ""}`}>
+      <div className={`tut-card sticky panel ${min ? "min" : ""}`}>
         <button className="tut-min" onClick={() => setMin((v) => !v)} aria-label={min ? "Expand" : "Minimise"}>{min ? "▴" : "▾"}</button>
-        <Keeper size={58} cube={false} className="mini" pose="point" />
+        <Keeper size={62} cube={false} className="mini" pose={cur.pose} />
         <div className="tut-body">
-          <span className="tut-step">Tutorial {step + 1}/{STEPS.length}</span>
-          <b>{s.title}</b>
-          {!min && <p>{s.text(pet)}</p>}
-          {!min && s.extra?.()}
-          {s.goal && <span className={`tut-goal ${met ? "met" : ""}`}><i>{met ? "✓" : ""}</i>{s.goal}</span>}
+          <span className="tut-step">Stage {n} · {stage.name}{stage.steps.length > 1 ? ` · ${cur.k + 1}/${stage.steps.length}` : ""}</span>
+          <b>{cur.title}</b>
+          {!min && <p>{cur.text(name)}</p>}
+          {!min && cur.extra?.(name)}
+          {cur.goalText && <span className={`tut-goal2 ${met ? "met" : ""}`}>{met ? "✓ Nice one!" : `🎯 ${cur.goalText}`}</span>}
           {!min && (
             <div className="row tut-actions">
-              {!s.goal && <button className="btn leaf sm" onClick={() => advance()}>{step === STEPS.length - 1 ? "Start exploring!" : "Next"}</button>}
-              <button className="link-btn" onClick={() => advance(STEPS.length)}>Skip tutorial</button>
+              {cur.goal ? <span /> : <button className="btn leaf sm" onClick={complete}>Got it!</button>}
+              <button className="link-btn" onClick={finish}>Skip tutorial</button>
             </div>
           )}
         </div>

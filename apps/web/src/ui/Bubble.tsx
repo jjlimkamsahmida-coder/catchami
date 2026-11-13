@@ -9,6 +9,7 @@ import { send, serverNow } from "../net/api.ts";
 import { PetArt } from "./common.tsx";
 import { sfx } from "./sfx.ts";
 import { genUrl } from "../game/assets.ts";
+import { Ribbon } from "./Ribbon.tsx";
 
 const art = (k: string) => genUrl(k);
 
@@ -121,7 +122,7 @@ export function BubbleScreen() {
       {finished && (
         <div className="br-note panel col">
           {m.state === "finished"
-            ? <div className={`br-ribbon ${won ? "win" : "lose"}`}><img src={art(won ? "br-ribbon-win" : "br-ribbon-lose")} alt="" /><b>{won ? "You win!" : `${m[m.winner ?? them].name} wins`}</b></div>
+            ? <Ribbon className="br-ribbon" tone={won ? "gold" : "purple"} crown={won} text={won ? "You win!" : `${m[m.winner ?? them].name} wins`} />
             : <b style={{ fontSize: 20 }}>No match</b>}
           <span className="small">{m.reason}</span>
           {m.state === "finished" && <span className="small muted">Battle HP carries back to your pet. Match #{m.id.slice(3, 9)} · fair-roll epoch {m.epoch}</span>}

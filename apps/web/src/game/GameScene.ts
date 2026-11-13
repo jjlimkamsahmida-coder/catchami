@@ -7,6 +7,8 @@ import { DECAL_KINDS, drawProp, paintChunk, windmillBlades } from "./world-art.t
 import { ALL_SPRITES, genUrl, loadTextures, MERCHANT_ART, MERCHANT_HEIGHT, NODE_WIDTH, PROP_ART } from "./assets.ts";
 
 const TILE = 32;
+/** Above every world object (props and pets are depth-sorted by their y). */
+const LABEL_DEPTH = 1_000_000;
 const INTERP_DELAY = 140;
 const CHUNK_W = 24, CHUNK_H = 18;
 const RARITY_COLOR: Record<string, number> = { common: 0xffffff, uncommon: 0x7ee081, rare: 0x5ab8ff, epic: 0xc28bff, legendary: 0xffc24b, mythic: 0xff6fb5 };
@@ -16,6 +18,7 @@ interface PetSprite { root: Phaser.GameObjects.Container; body: Phaser.GameObjec
 export class GameScene extends Phaser.Scene {
   private pets = new Map<string, PetSprite>();
   private merchants = new Map<string, Phaser.GameObjects.Container>();
+  private bandits = new Map<string, { c: Phaser.GameObjects.Container; img: Phaser.GameObjects.Image; alert: Phaser.GameObjects.Text; ring: Phaser.GameObjects.Graphics }>();
   private nodes = new Map<string, { img: Phaser.GameObjects.Image; badge: Phaser.GameObjects.Text; res: Resource; depleted: boolean }>();
   private built = false;
   private keys: Record<string, Phaser.Input.Keyboard.Key> = {};
@@ -54,11 +57,9 @@ export class GameScene extends Phaser.Scene {
     if (this.input.keyboard) {
       this.keys = this.input.keyboard.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT") as Record<string, Phaser.Input.Keyboard.Key>;
     }
-    this.input.on("wheel", (_p: Phaser.Input.Pointer, _o: unknown, _dx: number, dy: number) => {
-      this.onZoom(new CustomEvent("z", { detail: { factor: dy > 0 ? 0.9 : 1.1 } }));
-    });
     this.input.on("pointerup", (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
       if (over.length || p.getDistance() > 12) return;
+      if (p.downElement && p.downElement !== this.game.canvas) return; // started on a HUD control
       const wp = this.cameras.main.getWorldPoint(p.x, p.y);
       send({ t: "goto", x: wp.x, y: wp.y });
       this.tapMarker(wp.x, wp.y);
@@ -68,10 +69,8 @@ export class GameScene extends Phaser.Scene {
     window.addEventListener("catchami:battle", this.onBattle as EventListener);
     window.addEventListener("catchami:joystick", this.onJoystick as EventListener);
     window.addEventListener("catchami:focus", this.onFocus as EventListener);
-    window.addEventListener("catchami:zoom", this.onZoom as EventListener);
     window.addEventListener("catchami:gathered", this.onGathered as EventListener);
     this.events.once("destroy", () => {
-      window.removeEventListener("catchami:zoom", this.onZoom as EventListener);
       window.removeEventListener("catchami:gathered", this.onGathered as EventListener);
       this.unsub?.();
       window.removeEventListener("catchami:battle", this.onBattle as EventListener);
@@ -80,17 +79,14 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  /** User zoom multiplier (mouse wheel / +/- keys), applied on top of the screen-fit zoom. */
+  /** Fixed zoom: the map always fits the screen the same way (no player zoom). */
   private userZoom = 1;
   private fitZoom() {
     const { width, height } = this.scale;
-    const base = Phaser.Math.Clamp(Math.min(width, height) / 520, 0.85, 1.7);
+    // Phones get a closer, chunkier view; bigger screens fit more of the area.
+    const base = width < 640 ? Phaser.Math.Clamp(width / 290, 1.2, 1.5) : Phaser.Math.Clamp(Math.min(width, height) / 520, 0.85, 1.7);
     this.cameras.main.setZoom(Phaser.Math.Clamp(base * this.userZoom, 0.5, 2.4));
   }
-  private onZoom = (e: CustomEvent<{ factor: number }>) => {
-    this.userZoom = Phaser.Math.Clamp(this.userZoom * e.detail.factor, 0.55, 1.8);
-    this.fitZoom();
-  };
 
   private world: WorldDef | null = null;
   private decals: Prop[] = [];
@@ -258,9 +254,9 @@ export class GameScene extends Phaser.Scene {
       const shadow = this.add.image(0, 0, "shadow").setScale(0.9);
       const ring = this.add.graphics();
       const body = this.add.image(0, 0, tex).setOrigin(0.5, 0.92);
-      const label = this.add.text(0, -60, "", { fontFamily: "Fredoka", fontSize: "12px", color: "#ffffff", stroke: "#2b1d3a", strokeThickness: 4 }).setOrigin(0.5);
-      const root = this.add.container(0, 0, [shadow, ring, body, label]);
-      root.setSize(52, 56).setInteractive(new Phaser.Geom.Rectangle(-26, -52, 52, 56), Phaser.Geom.Rectangle.Contains);
+      const label = this.add.text(0, -60, "", { fontFamily: "Fredoka", fontSize: "12px", color: "#ffffff", stroke: "#2b1d3a", strokeThickness: 4 }).setOrigin(0.5).setDepth(LABEL_DEPTH);
+      const root = this.add.container(0, 0, [shadow, ring, body]);
+      root.setSize(52, 56).setInteractive(new Phaser.Geom.Rectangle(0, -24, 52, 56), Phaser.Geom.Rectangle.Contains);
       root.on("pointerup", () => store.set({ sheet: { kind: "pet", id: e.id } }));
       ps = { root, body, shadow, label, ring, tex: "", phase: Math.random() * 10, hurtUntil: 0, lungeUntil: 0, lungeDir: 1 };
       this.pets.set(e.id, ps);
@@ -281,6 +277,24 @@ export class GameScene extends Phaser.Scene {
     return ps;
   }
 
+  /** Stack pet name labels that would overlap, so every name stays readable. */
+  private declutterLabels(controlled: string | null) {
+    const list = [...this.pets.entries()].filter(([, ps]) => ps.label.visible && ps.label.text)
+      .sort(([a], [b]) => (a === controlled ? -1 : b === controlled ? 1 : 0));
+    const placed: Array<{ x0: number; x1: number; y0: number; y1: number }> = [];
+    for (const [, ps] of list) {
+      const w = ps.label.width, h = ps.label.height;
+      let y = ps.label.y;
+      for (let tries = 0; tries < 4; tries++) {
+        const r = { x0: ps.label.x - w / 2, x1: ps.label.x + w / 2, y0: y - h / 2, y1: y + h / 2 };
+        if (!placed.some((q) => r.x0 < q.x1 && q.x0 < r.x1 && r.y0 < q.y1 && q.y0 < r.y1)) break;
+        y -= h - 2;
+      }
+      ps.label.setY(y);
+      placed.push({ x0: ps.label.x - w / 2, x1: ps.label.x + w / 2, y0: y - h / 2, y1: y + h / 2 });
+    }
+  }
+
   update(time: number) {
     if (!this.built) return;
     this.streamChunks();
@@ -288,12 +302,13 @@ export class GameScene extends Phaser.Scene {
     const now = serverNow() - INTERP_DELAY;
     const s = store.get();
     // Pets.
-    for (const [id, ps] of this.pets) if (!entities.has(id)) { ps.root.destroy(); this.pets.delete(id); }
+    for (const [id, ps] of this.pets) if (!entities.has(id)) { ps.root.destroy(); ps.label.destroy(); this.pets.delete(id); }
     for (const e of entities.values()) {
       const ps = this.ensurePet(e);
       if (!ps) continue;
       const [x, y] = sample(e, now);
       ps.root.setPosition(x, y).setDepth(y);
+      ps.label.setPosition(x, y - 60).setFontStyle(e.id === s.controlled ? "bold" : "");
       this.animate(ps, e, time);
       if (e.id === s.controlled) {
         const cam = this.cameras.main;
@@ -311,10 +326,13 @@ export class GameScene extends Phaser.Scene {
             window.dispatchEvent(new CustomEvent("catchami:area", { detail: a }));
           }
         }
+        // On phones, lift the pet higher on screen while the tutorial card sits below it.
+        const lift = s.onboarding?.stage === "tutorial" ? (this.scale.height * 0.13) / cam.zoom : 0;
         cam.scrollX += (x - cam.midPoint.x) * 0.12;
-        cam.scrollY += (y - cam.midPoint.y) * 0.12;
+        cam.scrollY += (y + lift - cam.midPoint.y) * 0.12;
       }
     }
+    this.declutterLabels(s.controlled);
     // Merchants.
     const ctrl = s.controlled ? entities.get(s.controlled) : null;
     const cpos = ctrl ? sample(ctrl, now) : null;
@@ -329,7 +347,7 @@ export class GameScene extends Phaser.Scene {
         if (src.height > 120) img.setScale(MERCHANT_HEIGHT / src.height);
         const label = this.add.text(0, -MERCHANT_HEIGHT - 10, m.name, { fontFamily: "Fredoka", fontSize: "12px", color: "#2b1d3a", backgroundColor: "#ffd166", padding: { x: 6, y: 2 } }).setOrigin(0.5);
         c = this.add.container(m.x, m.y, [glow, img, label]);
-        c.setSize(56, 64).setInteractive(new Phaser.Geom.Rectangle(-28, -62, 56, 66), Phaser.Geom.Rectangle.Contains);
+        c.setSize(56, 64).setInteractive(new Phaser.Geom.Rectangle(0, -30, 56, 66), Phaser.Geom.Rectangle.Contains);
         c.on("pointerup", () => store.set({ sheet: { kind: "merchant", id: m.id } }));
         this.merchants.set(m.id, c);
       }
@@ -344,6 +362,39 @@ export class GameScene extends Phaser.Scene {
       glow.clear();
       if (cpos && visible && Math.hypot(cpos[0] - m.x, cpos[1] - m.y) <= 72) glow.lineStyle(3, 0xffd166, 0.9 - 0.3 * Math.sin(time / 200)).strokeEllipse(0, 0, 70, 24);
     }
+    // Bandits: masked thieves; a red "!" and ring while chasing.
+    const seenB = new Set<string>();
+    for (const [id, bx, by, st, facing, name] of s.bandits) {
+      seenB.add(id);
+      let b = this.bandits.get(id);
+      if (!b) {
+        const key = this.textures.exists("merchant-tom") ? "merchant-tom" : "shadow";
+        const ring = this.add.graphics();
+        const img = this.add.image(0, 0, key).setOrigin(0.5, 0.95).setTint(0x8a6bb8);
+        const src = this.textures.get(key).getSourceImage();
+        if (src.height > 120) img.setScale((MERCHANT_HEIGHT * 0.9) / src.height);
+        const mask = this.add.graphics();
+        mask.fillStyle(0x2b1d3a, 1).fillRoundedRect(-17, -MERCHANT_HEIGHT * 0.78, 34, 9, 4);
+        mask.fillStyle(0xff4d4d, 1).fillCircle(-7, -MERCHANT_HEIGHT * 0.78 + 4.5, 2.2).fillCircle(7, -MERCHANT_HEIGHT * 0.78 + 4.5, 2.2);
+        const label = this.add.text(0, -MERCHANT_HEIGHT - 6, `${name}`, { fontFamily: "Fredoka", fontSize: "11px", color: "#ffffff", backgroundColor: "#c0392b", padding: { x: 5, y: 1 } }).setOrigin(0.5);
+        const alert = this.add.text(0, -MERCHANT_HEIGHT - 28, "!", { fontFamily: "Fredoka", fontSize: "26px", color: "#ff4d4d", stroke: "#2b1d3a", strokeThickness: 6 }).setOrigin(0.5).setAlpha(0);
+        const c = this.add.container(bx, by, [ring, img, mask, label, alert]);
+        c.setSize(56, 64).setInteractive(new Phaser.Geom.Rectangle(0, -30, 56, 66), Phaser.Geom.Rectangle.Contains);
+        c.on("pointerup", () => store.set({ sheet: { kind: "bandit", id } }));
+        b = { c, img, alert, ring };
+        this.bandits.set(id, b);
+      }
+      b.c.x += (bx - b.c.x) * 0.25;
+      b.c.y += (by - b.c.y) * 0.25;
+      b.c.setDepth(b.c.y);
+      b.img.setFlipX(facing < 0);
+      b.img.y = Math.abs(Math.sin(time / (st === 1 ? 90 : 200))) * -4;
+      b.alert.setAlpha(st === 1 ? 1 : 0).setY(-MERCHANT_HEIGHT - 28 + Math.sin(time / 120) * 3);
+      b.ring.clear();
+      if (st === 1) b.ring.lineStyle(3, 0xff4d4d, 0.8).strokeEllipse(0, 0, 60, 20);
+      b.c.setAlpha(st === 2 ? 0.75 : 1);
+    }
+    for (const [id, b] of this.bandits) if (!seenB.has(id)) { b.c.destroy(); this.bandits.delete(id); }
     // Nodes.
     for (const [id, n] of this.nodes) {
       const rem = s.nodes[id];
@@ -351,7 +402,7 @@ export class GameScene extends Phaser.Scene {
       const dep = rem <= 0;
       if (dep !== n.depleted) { n.depleted = dep; n.img.setTexture(`node-${n.res}${dep ? "-empty" : ""}`); this.fitNode(n.img); }
       const near = cpos && Math.hypot(cpos[0] - n.img.x, cpos[1] - n.img.y) < 160;
-      n.badge.setText(dep ? "regrowing" : `${rem} left`).setAlpha(near ? 1 : 0);
+      n.badge.setText(dep ? "regrowing" : `${rem >= 1000 ? `${Math.round(rem / 1000)}k` : rem} left`).setAlpha(near ? 1 : 0);
     }
   }
 

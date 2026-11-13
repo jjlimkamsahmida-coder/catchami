@@ -38,14 +38,19 @@ export async function setOnboarding(db: Db, userId: string, stage: unknown, tuto
 }
 
 /** One starter grant per account. Test units only: no value, not onchain. */
-export async function starterGrant(db: Db, userId: string) {
-  if (env.network === "mainnet") throw new ServiceError("not_available", "The starter grant only exists on test networks", 404);
-  const amount = tokens(ECONOMY.catch.starterGrantWhole);
+/**
+ * The first-time "buy $CATCHAMI" step. On test networks it's a simulated purchase:
+ * the chosen pack is credited as test units (no payment is taken). One per account.
+ */
+export async function starterGrant(db: Db, userId: string, packId?: unknown) {
+  if (env.network === "mainnet") throw new ServiceError("not_available", "Starter packs are simulated on test networks only", 404);
+  const pack = ECONOMY.catch.starterPacks.find((p) => p.id === packId) ?? ECONOMY.catch.starterPacks[0]!;
+  const amount = tokens(pack.whole);
   const r = await db.tx((tx) => post(tx, {
-    idem: `starter:${userId}`, kind: "starter_grant", postings: transfer(acct.chain, acct.user(userId), amount),
-    meta: { note: `${env.network.toUpperCase()} starter units — no value, not onchain` }, settlementRef: "starter:unbacked",
+    idem: `starter:${userId}`, kind: "starter_purchase", postings: transfer(acct.chain, acct.user(userId), amount),
+    meta: { pack: pack.id, priceNear: pack.near, note: `${env.network.toUpperCase()} simulated purchase — test units, not onchain` }, settlementRef: "starter:simulated",
   }));
-  return { amount: toWire(amount), already: r.duplicate };
+  return { amount: toWire(amount), pack: pack.id, already: r.duplicate };
 }
 
 // ------------------------------------------------------------ phone handoff

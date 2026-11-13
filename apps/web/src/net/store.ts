@@ -31,13 +31,17 @@ export interface State {
   hq: { tx: number; ty: number } | null;
   nodes: Record<string, number>;
   merchants: MerchantPublic[];
+  /** Roaming bandits near you: [id, x, y, state 0 wander · 1 chase · 2 flee, facing, name]. */
+  bandits: Array<[string, number, number, number, 1 | -1, string]>;
   merchantDetail: Record<string, { detail: MerchantDetail; at: number }>;
   own: OwnPet[];
   controlled: string | null;
   wallet: { balance: string; available: string; held: string } | null;
   ticker: MarketTicker | null;
   toasts: Toast[];
-  sheet: null | { kind: "merchant"; id: string } | { kind: "pet"; id: string } | { kind: "node"; id: string };
+  sheet: null | { kind: "merchant"; id: string } | { kind: "pet"; id: string } | { kind: "node"; id: string } | { kind: "bandit"; id: string };
+  /** Last bandit scuffle result, for the battle popup. */
+  banditFight: { banditName: string; petName: string; won: boolean; stolen: string; brave: boolean; at: number } | null;
   screen: "world" | "catch" | "pets" | "market" | "ranks" | "wallet" | "fairness" | "map";
   petScreen: string | null;
   /** Open gathering minigame round (client clock when it arrived). */
@@ -51,9 +55,9 @@ export const entities = new Map<string, PetEntity>();
 
 let state: State = {
   token: null, onboarding: null, nearAccount: null, userId: null, displayName: "", network: "", connected: false,
-  map: null, nodesDef: [], pois: [], hq: null, nodes: {}, merchants: [], merchantDetail: {},
+  map: null, nodesDef: [], pois: [], hq: null, nodes: {}, merchants: [], bandits: [], merchantDetail: {},
   own: [], controlled: null, wallet: null, ticker: null, toasts: [], sheet: null, screen: "world", petScreen: null,
-  minigame: null, mgResult: null, bubble: null, bubbleInvite: null,
+  minigame: null, mgResult: null, bubble: null, bubbleInvite: null, banditFight: null,
 };
 const subs = new Set<() => void>();
 

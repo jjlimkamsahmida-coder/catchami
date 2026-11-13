@@ -87,7 +87,6 @@ export function EconomyGuide({ onClose }: { onClose: () => void }) {
           <div><b>40 / 55 / 5</b><span>HQ / market / team split at launch</span></div>
           <div><b>Fair rolls</b><span>every catch & reward is checkable afterwards</span></div>
         </div>
-        <p className="econ-honest">Honest bit: coins can lose value, and nothing here promises you'll earn. Right now you're on a test network — coins are play money with no value.</p>
         <button className="game-btn start" style={{ minHeight: 66, fontSize: 26 }} onClick={onClose}><span className="gb-label">Got it!</span></button>
       </div>
     </div>

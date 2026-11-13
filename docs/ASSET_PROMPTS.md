@@ -136,3 +136,42 @@ not right for faithful stickers. Proper options:
 **3. More species.** COCO also knows horse, sheep, cow, bird, bear… and the
 vision model can name anything. Say which animals you want and I'll add them
 (the sticker cutout also needs a matching class or option 2 above).
+
+---
+
+## Redo: starter gift (the first version was cropped at the left and top)
+
+**Prompt K — `gift.png`**
+> An open gift box overflowing with golden paw-print coins and one glowing
+> teal-and-coral CamiCube on top, a pink bow, a few confetti pieces and
+> sparkles. The WHOLE object must fit inside the canvas with at least 120 px of
+> empty space on every side — nothing touching or cut by the edges. 1024×1024,
+> transparent background.
+
+---
+
+## First-catch tutorial demo ("Bring back the first spark")
+
+Paste the house style first. These replace the code-drawn demo scene.
+
+**Prompt L — demo background (`demo-bg.png`)**
+> A small cosy outdoor scene seen through a phone camera, for a game tutorial
+> card: soft blue sky with one puffy cloud, a gentle grassy lawn in the lower
+> 40%, a few tiny flowers and a bush at the sides, the middle left empty for a
+> pet to stand in. Simple, bright, low detail so characters read clearly on
+> top. Wide format 1200×600, opaque (no transparency), no characters, no text.
+
+**Prompt M — tutorial pet sheet (2×2 grid, equal cells)**
+> A cute chibi ginger cat (round body, big shiny eyes, pink cheeks, tiny smile)
+> in four poses on one 2×2 sheet with equal square cells and lots of spacing:
+> (1) sitting and looking around curiously, (2) sitting still and looking at
+> the viewer, (3) surprised with wide eyes and a little "!" mark, (4) happy
+> jumping with sparkles. Same character, proportions and colours in every cell.
+> Full body, nothing touching the cell edges. Transparent background.
+
+**Prompt N — magnifying glass (`demo-magnifier.png`)**
+> A chunky cartoon magnifying glass with a round brass rim, a wooden handle and
+> a light-blue glass lens with a white shine streak, tilted 30° with the handle
+> pointing to the bottom right. Thick dark-plum outline, a couple of tiny
+> sparkles. Whole object centred with at least 100 px of empty space on every
+> side. 1024×1024, transparent background.

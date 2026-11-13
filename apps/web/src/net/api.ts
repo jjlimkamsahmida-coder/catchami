@@ -126,7 +126,7 @@ function onMessage(m: ServerMsg) {
         e.anim = anim; e.facing = facing; e.lastSeen = now;
       }
       for (const [id, e] of entities) if (!seen.has(id) && now - e.lastSeen > 2000) entities.delete(id);
-      store.set({ merchants: m.m });
+      store.set({ merchants: m.m, bandits: m.b ?? [] });
       break;
     }
     case "meta": {
@@ -176,6 +176,9 @@ function onMessage(m: ServerMsg) {
         bubble: m.match,
         bubbleInvite: s.bubbleInvite?.matchId === m.match.id && m.match.state !== "invited" ? null : s.bubbleInvite,
       }));
+      break;
+    case "bandit_fight":
+      store.set({ banditFight: { banditName: m.banditName, petName: m.petName, won: m.won, stolen: m.stolen, brave: m.brave, at: Date.now() } });
       break;
     case "pong":
       clockOffset = m.serverTime - (m.at + Date.now()) / 2;

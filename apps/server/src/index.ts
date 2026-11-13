@@ -11,6 +11,7 @@ import { startHttp } from "./http.ts";
 import { loadDetector, type Detector } from "./capture/detector.ts";
 import { sweepPendingCaptures } from "./capture/capture.ts";
 import { reconcile } from "./services.ts";
+import { seedDemoMarket } from "./demo.ts";
 
 await mkdir(env.dataDir, { recursive: true });
 await mkdir(env.mediaDir, { recursive: true });
@@ -24,6 +25,7 @@ await ensureGenesis(db);
 const game = new Game(db);
 await game.load();
 game.start();
+await seedDemoMarket(db, game).catch((e) => console.error("demo market seed failed:", e));
 
 let detector: Detector | null = null;
 if (existsSync(join(env.modelDir, "ssdlite_mobilenet_v2", "model.json"))) {

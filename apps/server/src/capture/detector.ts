@@ -53,7 +53,7 @@ export async function loadDetector(modelDir: string): Promise<Detector> {
       if (!seg) return null;
       // Segment only the animal's box (plus a margin) so the model's 513px input
       // is spent on the animal, not the whole room: much sharper silhouettes.
-      const crop = cropAround(img, bbox, 0.14);
+      const crop = cropAround(img, bbox, 0.4);
       const raw = await seg.segment(crop.img, VOC[species]);
       const box = [bbox[0] - crop.x, bbox[1] - crop.y, bbox[2], bbox[3]].map(Math.round) as [number, number, number, number];
       const m = cleanMask(raw, crop.img.width, crop.img.height, box);

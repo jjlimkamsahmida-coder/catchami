@@ -44,7 +44,7 @@ function PetDetail({ p }: { p: OwnPet }) {
           <span className="muted small">{p.species} · {p.activity}</span>
           <div className="row"><span className="muted">Balance</span><b className="right num" style={{ fontSize: 20 }}>{fmt(p.balance)}</b></div>
           {p.held !== "0" && <div className="row small"><span className="muted">Committed</span><span className="right num">{fmt(p.held)}</span></div>}
-          <div className="row small"><span className="muted">NFT</span><span className="right">{p.mintStatus === "minted" ? p.nftTokenId : p.mintStatus === "awaiting_chain" ? "mint queued — contracts not deployed on this network" : "mint pending"}</span></div>
+          <div className="row small"><span className="muted">NFT</span><span className="right">{p.mintStatus === "minted" ? p.nftTokenId : p.mintStatus === "awaiting_chain" ? "mint queued" : "mint pending"}</span></div>
           <button className="btn sm" onClick={() => { send({ t: "select", petId: p.id }); store.set({ controlled: p.id, screen: "world", petScreen: null }); }}>Control in world</button>
         </div>
       </div>
@@ -112,7 +112,7 @@ function HistoryCard({ petId }: { petId: string }) {
   );
 }
 
-function StrategyTab({ p }: { p: OwnPet }) {
+export function StrategyTab({ p }: { p: OwnPet }) {
   const [s, setS] = useState<Strategy>(p.strategy);
   const set = <K extends keyof Strategy>(k: K, v: Strategy[K]) => setS((x) => ({ ...x, [k]: v }));
   const seg = <K extends keyof Strategy>(k: K, opts: Array<[Strategy[K], string]>) => (
@@ -138,7 +138,6 @@ function StrategyTab({ p }: { p: OwnPet }) {
         {seg("battle", [["avoid", "Avoid"], ["defensive", "Defend only"], ["balanced", "Balanced"], ["aggressive", "Aggressive"]])}
         <label className="field">Fight only above {Math.round(s.minHpBps / 100)}% HP<input type="range" min={1000} max={10000} step={500} value={s.minHpBps} onChange={(e) => set("minHpBps", Number(e.target.value))} /></label>
         <label className="field">Head to a merchant once carrying {Math.round(s.maxCarryRiskBps / 100)}% of capacity (theft exposure)<input type="range" min={1000} max={10000} step={500} value={s.maxCarryRiskBps} onChange={(e) => set("maxCarryRiskBps", Number(e.target.value))} /></label>
-        <div className="notice small">Real-token wagers are <b>off</b> and can't be enabled: they stay disabled until legal approval for your region. Battles never put tokens at risk today.</div>
       </div>
       <div className="card col">
         <h3>Survival</h3>
@@ -152,7 +151,7 @@ function StrategyTab({ p }: { p: OwnPet }) {
   );
 }
 
-function WalletTab({ p }: { p: OwnPet }) {
+export function WalletTab({ p }: { p: OwnPet }) {
   const wallet = useStore((s) => s.wallet);
   const [amt, setAmt] = useState("");
   const [busy, setBusy] = useState(false);
@@ -213,7 +212,7 @@ function WalletTab({ p }: { p: OwnPet }) {
   );
 }
 
-function GearTab({ p }: { p: OwnPet }) {
+export function GearTab({ p }: { p: OwnPet }) {
   const gear = useAsync(() => api(`/api/equipment`), []);
   const recipes = useAsync(() => api(`/api/craft`), []);
   const [busy, setBusy] = useState(false);

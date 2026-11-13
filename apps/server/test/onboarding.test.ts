@@ -21,7 +21,7 @@ describe("three-area world", () => {
   });
   it("every landmark and resource spot is reachable from HQ", () => {
     const hq = w.pois.find((p) => p.id === "hq")!;
-    for (const p of w.pois) expect(findPath(w, hq.tx, hq.ty, p.tx, p.ty, 300_000), p.id).not.toBeNull();
+    for (const p of w.pois.filter((q) => !q.id.startsWith("glade"))) expect(findPath(w, hq.tx, hq.ty, p.tx, p.ty, 300_000), p.id).not.toBeNull();
   });
   it("battles are off in the village and on in the wild", () => {
     const at = (id: string) => { const p = w.pois.find((q) => q.id === id)!; return battlesAllowed(w, tileCenter(p.tx), tileCenter(p.ty)); };
@@ -38,11 +38,11 @@ describe("new-player journey", () => {
     await setOnboarding(db, u.userId, "tutorial", 2);
     expect(await getOnboarding(db, u.userId)).toMatchObject({ stage: "tutorial", tutorial: 2 });
     await expect(setOnboarding(db, u.userId, "nope", 0)).rejects.toThrow();
-    const a = await starterGrant(db, u.userId), b = await starterGrant(db, u.userId);
+    const a = await starterGrant(db, u.userId, "bloom"), b = await starterGrant(db, u.userId, "grove");
     expect(a.already).toBe(false);
     expect(b.already).toBe(true);
     const bal = await db.tx((tx) => balanceOf(tx, acct.user(u.userId)));
-    expect(bal.balance).toBe(tokens(ECONOMY.catch.starterGrantWhole));
+    expect(bal.balance).toBe(tokens(ECONOMY.catch.starterPacks.find((p) => p.id === "bloom")!.whole));
   });
   it("phone hand-off codes work once and give the same account", async () => {
     const u = await createGuest(db);

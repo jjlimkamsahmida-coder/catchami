@@ -33,6 +33,7 @@ export const AREAS = [
   { id: "village", name: "Paw Village", battles: false },
   { id: "forest", name: "Whispering Forest", battles: true },
   { id: "mines", name: "Mining Valley", battles: true },
+  { id: "glade", name: "Keeper's Glade", battles: false },
 ] as const;
 export type AreaId = (typeof AREAS)[number]["id"];
 
@@ -84,19 +85,23 @@ export interface WorldDef {
 export const FOREST_W = 72;
 export const VILLAGE_W = 48;
 export const MINES_W = 72;
-export const WORLD_W = FOREST_W + VILLAGE_W + MINES_W;
+/** Keeper's Glade: a sealed tutorial area east of the mines (players are moved in and out). */
+export const GLADE_W = 40;
+export const WORLD_W = FOREST_W + VILLAGE_W + MINES_W + GLADE_W;
 export const WORLD_H = 60;
 export const VILLAGE_X0 = FOREST_W;
 export const MINES_X0 = FOREST_W + VILLAGE_W;
+export const GLADE_X0 = FOREST_W + VILLAGE_W + MINES_W;
 /** Row of the east/west gate roads. */
 export const GATE_Y = 29;
-export const WORLD_SEED = "catchami-world-v3";
+export const WORLD_SEED = "catchami-world-v5";
 
 /** Tile bounds [x0, y0, x1, y1) of each area, for cameras and minimaps. */
 export const AREA_BOUNDS: Record<AreaId, [number, number, number, number]> = {
   forest: [0, 0, FOREST_W, WORLD_H],
   village: [VILLAGE_X0, 0, MINES_X0, WORLD_H],
-  mines: [MINES_X0, 0, WORLD_W, WORLD_H],
+  mines: [MINES_X0, 0, GLADE_X0, WORLD_H],
+  glade: [GLADE_X0, 0, WORLD_W, WORLD_H],
 };
 
 function valueNoise(rng: Rng, w: number, h: number, cell: number): (x: number, y: number) => number {
@@ -122,14 +127,15 @@ export function generateWorld(seed = WORLD_SEED): WorldDef {
   const n1 = valueNoise(rng, w, h, 9);
   const n2 = valueNoise(rng, w, h, 4);
   const n3 = valueNoise(rng, w, h, 2);
+  const groves = valueNoise(Rng.fromString(seed + ":groves"), w, h, 6);
   const tiles = new Uint8Array(w * h);
   const area = new Uint8Array(w * h);
   const idx = (x: number, y: number) => y * w + x;
   const inb = (x: number, y: number) => x >= 0 && y >= 0 && x < w && y < h;
   const set = (x: number, y: number, t: Tile) => { if (inb(x, y)) tiles[idx(x, y)] = t; };
   const get = (x: number, y: number) => (inb(x, y) ? tiles[idx(x, y)]! : T.rock);
-  const A = { village: 0, forest: 1, mines: 2 } as const;
-  const areaOfX = (x: number) => (x < VILLAGE_X0 ? A.forest : x < MINES_X0 ? A.village : A.mines);
+  const A = { village: 0, forest: 1, mines: 2, glade: 3 } as const;
+  const areaOfX = (x: number) => (x < VILLAGE_X0 ? A.forest : x < MINES_X0 ? A.village : x < GLADE_X0 ? A.mines : A.glade);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) area[idx(x, y)] = areaOfX(x);
   const areaAt = (x: number, y: number) => area[idx(Math.max(0, Math.min(w - 1, x)), Math.max(0, Math.min(h - 1, y)))]!;
 
@@ -138,16 +144,16 @@ export function generateWorld(seed = WORLD_SEED): WorldDef {
     const a = areaAt(x, y);
     const n = n2(x, y) * 0.6 + n3(x, y) * 0.4;
     let t: Tile = T.grass;
-    if (a === A.village) t = n > 0.66 ? T.meadow : T.grass;
+    if (a === A.village || a === A.glade) t = n > 0.66 ? T.meadow : T.grass;
     else if (a === A.forest) t = n > 0.64 ? T.meadow : T.forest;
-    else t = n > 0.78 && n1(x, y) > 0.55 ? T.rock : T.highland;
+    else t = T.highland;
     set(x, y, t);
   }
   // Outer rim and the cliff walls between areas (gates are carved by the roads).
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const rim = x < 2 || y < 2 || x >= w - 2 || y >= h - 2;
     const wob = Math.round((n1(x, y) - 0.5) * 2);
-    const wall = Math.abs(x - VILLAGE_X0 - wob) <= 1 || Math.abs(x - MINES_X0 - wob) <= 1;
+    const wall = Math.abs(x - VILLAGE_X0 - wob) <= 1 || Math.abs(x - MINES_X0 - wob) <= 1 || Math.abs(x - GLADE_X0 - wob) <= 1;
     if (rim || wall) set(x, y, T.rock);
   }
 
@@ -166,6 +172,7 @@ export function generateWorld(seed = WORLD_SEED): WorldDef {
   for (let y = 2; y < 36; y++) { const sx = 24 + Math.round((n1(30, y) - 0.5) * 8); set(sx, y, T.water); set(sx + 1, y, T.shallow); set(sx - 1, y, T.shallow); }
   blob(52, 10, 5, 3);
   blob(96, 47, 4, 2, false);
+  blob(GLADE_X0 + 9, 15, 5, 3); // glade pond (practice fishing)
 
   // Village plaza (cobblestone); HQ castle on its north side.
   const hq = { tx: 96, ty: 20 };
@@ -250,6 +257,14 @@ export function generateWorld(seed = WORLD_SEED): WorldDef {
   place("signpost", VILLAGE_X0 + 4, GATE_Y - 1, true);
   place("signpost", MINES_X0 - 5, GATE_Y - 1, true);
 
+  // Keeper's Glade: a small loop path, the exit portal, signpost.
+  carve(GLADE_X0 + 6, 40, GLADE_X0 + 32, 40);
+  carve(GLADE_X0 + 20, 40, GLADE_X0 + 20, 22);
+  carve(GLADE_X0 + 8, 22, GLADE_X0 + 32, 22);
+  place("portal", GLADE_X0 + 33, 29, true);
+  place("signpost", GLADE_X0 + 22, 41, true);
+  for (const [x, y] of [[GLADE_X0 + 31, 28], [GLADE_X0 + 37, 28], [GLADE_X0 + 30, 31], [GLADE_X0 + 37, 31]] as const) place("glowcrystal", x, y);
+
   // Forest landmarks.
   place("portal", 10, 10, true);
   for (const [x, y] of [[8, 13], [14, 9], [9, 8], [15, 12]] as const) place("glowcrystal", x, y);
@@ -258,32 +273,61 @@ export function generateWorld(seed = WORLD_SEED): WorldDef {
 
   // Mining Valley landmarks.
   place("mine", 150, 10, true);
-  for (let x = MINES_X0 + 6; x <= w - 6; x++) if (get(x, 24) !== T.rock && get(x, 24) !== T.path) props.push({ kind: "rail", tx: x, ty: 24, v: 0 });
+  for (let x = MINES_X0 + 6; x <= GLADE_X0 - 6; x++) if (get(x, 24) !== T.rock && get(x, 24) !== T.path) props.push({ kind: "rail", tx: x, ty: 24, v: 0 });
   place("cart", 132, 24, true); place("cart", 160, 24, true);
   place("smithy", 170, 47);
   for (const [x, y] of [[176, 44], [177, 44], [146, 12], [149, 16]] as const) place("crate", x, y);
   for (const [x, y] of [[168, 44], [175, 49]] as const) place("barrel", x, y);
 
-  // Scatter.
+  // Decoration — organised, not noisy: groves and clearings in the forest,
+  // tree-lined streets and hedges in the village, clusters along the cliffs.
+  const nextToRock = (x: number, y: number) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([i, j]) => get(x + i!, y + j!) === T.rock);
+  // Village: tree rows along both sides of every road, every third tile.
+  const avenue = (x0: number, y0: number, x1: number, y1: number) => {
+    for (let x = Math.min(x0, x1), k = 0; x <= Math.max(x0, x1); x++) for (let y = Math.min(y0, y1); y <= Math.max(y0, y1); y++, k++) {
+      if (k % 3 === 0) place(k % 6 === 0 ? "tree" : "bush", x, y);
+    }
+  };
+  avenue(VILLAGE_X0 + 4, GATE_Y - 2, PX0 - 3, GATE_Y - 2);
+  avenue(VILLAGE_X0 + 4, GATE_Y + 3, PX0 - 3, GATE_Y + 3);
+  avenue(PX1 + 3, GATE_Y - 2, MINES_X0 - 4, GATE_Y - 2);
+  avenue(PX1 + 3, GATE_Y + 3, MINES_X0 - 4, GATE_Y + 3);
+  avenue(102, 4, 102, PY0 - 4);
+  avenue(107, 4, 107, PY0 - 4);
+  avenue(94, PY1 + 3, 94, h - 5);
+  avenue(99, PY1 + 3, 99, h - 5);
+  // Village: a neat pine hedge just inside the cliffs and the top/bottom rims.
+  for (let y = 3; y < h - 3; y += 2) { place("pine", VILLAGE_X0 + 2, y); place("pine", MINES_X0 - 3, y); }
+  for (let x = VILLAGE_X0 + 3; x < MINES_X0 - 3; x += 2) { place("pine", x, 2); place("pine", x, h - 3); }
+  // Village: flower beds at the plaza corners.
+  for (const [cx0, cy0] of [[PX0 - 3, PY0 - 3], [PX1 + 1, PY0 - 3], [PX0 - 3, PY1 + 1], [PX1 + 1, PY1 + 1]] as const) {
+    for (let j = 0; j < 2; j++) for (let i = 0; i < 3; i++) if (canPlace("flower", cx0 + i, cy0 + j) && !nearPath(cx0 + i, cy0 + j, 0)) { occupied[idx(cx0 + i, cy0 + j)] = 1; props.push({ kind: "flower", tx: cx0 + i, ty: cy0 + j, v: (i + j) % 4 }); }
+  }
   for (let y = 2; y < h - 2; y++) for (let x = 2; x < w - 2; x++) {
     const t = get(x, y), a = areaAt(x, y), r = rng.float();
     if (occupied[idx(x, y)] || nearPath(x, y, 0)) continue;
+    const gv = groves(x, y);
     if (a === A.forest) {
-      if (t === T.forest && r < 0.22 && !nearPath(x, y, 1)) place(r < 0.09 ? "pine" : "tree", x, y);
-      else if (t === T.meadow && r < 0.18) props.push({ kind: "purpleflower", tx: x, ty: y, v: rng.int(4) });
-      else if (r > 0.985) place("mushroom", x, y);
-      else if (r > 0.975 && t === T.forest) place("stone", x, y);
+      // Dense groves where the grove noise is high, open meadows elsewhere.
+      if (gv > 0.52 && t !== T.sand && !nearPath(x, y, 1) && r < 0.62) place(gv > 0.68 || r < 0.18 ? "pine" : "tree", x, y);
+      else if (gv < 0.4 && (t === T.meadow || t === T.forest) && r < 0.06) props.push({ kind: "purpleflower", tx: x, ty: y, v: rng.int(4) });
+      else if (gv > 0.45 && gv <= 0.52 && r < 0.05) place("mushroom", x, y);
+    } else if (a === A.glade) {
+      // A tidy ring of trees around the glade, flowers inside.
+      const edgeBand = x < GLADE_X0 + 5 || x > w - 6 || y < 6 || y > h - 7;
+      if (edgeBand && !nearPath(x, y, 1) && r < 0.5) place(r < 0.2 ? "pine" : "tree", x, y);
+      else if (!edgeBand && (t === T.grass || t === T.meadow) && gv > 0.6 && r < 0.12) props.push({ kind: "flower", tx: x, ty: y, v: rng.int(4) });
     } else if (a === A.village) {
+      // Only gentle flower patches in the open lawns — streets stay clear.
       const inPlaza = x >= PX0 - 1 && x <= PX1 + 1 && y >= PY0 - 4 && y <= PY1 + 1;
-      if (inPlaza) continue;
-      if (t === T.grass && r < 0.06 && !nearPath(x, y, 1)) place(r < 0.02 ? "pine" : "tree", x, y);
-      else if (t === T.grass && r < 0.08) place("bush", x, y);
-      else if ((t === T.grass || t === T.meadow) && r > 0.9) props.push({ kind: "flower", tx: x, ty: y, v: rng.int(4) });
+      if (!inPlaza && gv > 0.68 && (t === T.grass || t === T.meadow) && r < 0.2 && !nearPath(x, y, 1)) props.push({ kind: "flower", tx: x, ty: y, v: rng.int(4) });
     } else {
-      if (t === T.highland && r < 0.022) place("boulder", x, y);
-      else if (t === T.highland && r < 0.032) place("crystal", x, y);
-      else if (t === T.highland && r < 0.037) place("deadtree", x, y);
-      else if (t === T.highland && r < 0.044 && !nearPath(x, y, 1)) place("pine", x, y);
+      // Mining Valley: boulders and pines hug the cliffs; crystals near the old mine.
+      const nearMine = Math.abs(x - 152) < 9 && Math.abs(y - 12) < 7;
+      if (nextToRock(x, y) && r < 0.16) place(r < 0.05 ? "pine" : "boulder", x, y);
+      else if (nearMine && r < 0.08) place("crystal", x, y);
+      else if (gv > 0.72 && r < 0.05) place("boulder", x, y);
+      else if (gv < 0.2 && r < 0.01) place("deadtree", x, y);
     }
   }
 
@@ -341,14 +385,20 @@ export function generateWorld(seed = WORLD_SEED): WorldDef {
   addNodes("herbs", 9, A.forest, (_x, _y, t) => t === T.meadow || t === T.forest);
   addNodes("fish", 8, A.forest, (x, y, t) => ground(t) && nextToWater(x, y));
   addNodes("minerals", 15, A.mines, (_x, _y, t) => t === T.highland);
+  for (const [resource, x, y] of [["wood", GLADE_X0 + 13, 27], ["herbs", GLADE_X0 + 25, 26], ["fish", GLADE_X0 + 9, 19], ["minerals", GLADE_X0 + 27, 35], ["wood", GLADE_X0 + 12, 35], ["herbs", GLADE_X0 + 16, 44]] as const) {
+    // Clear the tile and its neighbours so the spot is always reachable.
+    for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) if (get(x + i, y + j) !== T.water && get(x + i, y + j) !== T.shallow) { set(x + i, y + j, T.grass); blocked[idx(x + i, y + j)] = 0; }
+    for (let k = props.length - 1; k >= 0; k--) { const q = props[k]!; if (Math.abs(q.tx - x) <= 1 && Math.abs(q.ty - y) <= 1 && PROP_SIZE[q.kind].w === 1) props.splice(k, 1); }
+    nodes.push({ id: `glade-${resource}-${x}`, resource, tx: x, ty: y });
+  }
   for (const n of nodes) blocked[idx(n.tx, n.ty)] = 1;
 
   const pois: Poi[] = [
     { id: "hq", label: "HQ Castle", tx: hq.tx, ty: PY0 + 4 },
     { id: "village_west", label: "West Gate", tx: VILLAGE_X0 + 6, ty: GATE_Y },
     { id: "village_east", label: "East Gate", tx: MINES_X0 - 6, ty: GATE_Y },
-    { id: "village_north", label: "North Road · closed", tx: 104, ty: 9 },
-    { id: "village_south", label: "South Road · closed", tx: 96, ty: 50 },
+    { id: "village_north", label: "North Road · too dark to travel", tx: 104, ty: 9 },
+    { id: "village_south", label: "South Road · too dark to travel", tx: 96, ty: 50 },
     { id: "forest_gate", label: "Forest Trail", tx: VILLAGE_X0 - 6, ty: GATE_Y },
     { id: "forest", label: "Whispering Forest", tx: 40, ty: GATE_Y },
     { id: "lake", label: "Moonlit Lake", tx: 34, ty: 46 },
@@ -357,6 +407,16 @@ export function generateWorld(seed = WORLD_SEED): WorldDef {
     { id: "mines", label: "Mining Valley", tx: 142, ty: GATE_Y },
     { id: "mine", label: "Old Mine", tx: 152, ty: 14 },
     { id: "smithy", label: "Forge", tx: 172, ty: 44 },
+    { id: "glade_spawn", label: "Keeper's Glade", tx: GLADE_X0 + 8, ty: 40 },
+    { id: "glade_stall", label: "The Keeper", tx: GLADE_X0 + 20, ty: 31 },
+    { id: "glade_exit", label: "Portal to Paw Village", tx: GLADE_X0 + 30, ty: 30 },
+    // Tutorial stage start spots.
+    { id: "glade_s1", label: "Stage 1", tx: GLADE_X0 + 8, ty: 40 },
+    { id: "glade_s2", label: "Stage 2", tx: GLADE_X0 + 16, ty: 30 },
+    { id: "glade_s3", label: "Stage 3", tx: GLADE_X0 + 17, ty: 33 },
+    { id: "glade_s4", label: "Stage 4", tx: GLADE_X0 + 24, ty: 40 },
+    { id: "glade_s5", label: "Stage 5", tx: GLADE_X0 + 20, ty: 38 },
+    { id: "glade_s6", label: "Stage 6", tx: GLADE_X0 + 25, ty: 30 },
   ];
   return { w, h, tiles, area, nodes, pois, hq, props, blocked };
 }

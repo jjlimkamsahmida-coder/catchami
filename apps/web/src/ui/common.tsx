@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode, useRef } from "react";
 import { formatTokens, RARITY_LABEL, type Rarity, type Resource, type PetLook, type Species } from "@catchami/shared";
 import * as art from "../game/art.ts";
 
@@ -55,11 +55,26 @@ export function Sheet({ onClose, children }: { onClose: () => void; children: Re
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
   }, [onClose]);
+  const ref = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ y0: number; dy: number } | null>(null);
+  const onDown = (e: React.PointerEvent) => { drag.current = { y0: e.clientY, dy: 0 }; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); };
+  const onMove = (e: React.PointerEvent) => {
+    const d = drag.current; if (!d || !ref.current) return;
+    d.dy = Math.max(0, e.clientY - d.y0);
+    ref.current.style.transform = `translate(-50%, ${d.dy}px)`;
+  };
+  const onUp = () => {
+    const d = drag.current; drag.current = null;
+    if (!ref.current) return;
+    if (d && d.dy > 90) onClose();
+    else { ref.current.style.transition = "transform 180ms ease"; ref.current.style.transform = ""; setTimeout(() => { if (ref.current) ref.current.style.transition = ""; }, 200); }
+  };
   return (
     <>
       <div className="sheet-backdrop" onClick={onClose} />
-      <div className="sheet panel" role="dialog">
-        <div className="grab" />
+      <div className="sheet panel" role="dialog" ref={ref}>
+        <div className="sheet-handle" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}><div className="grab" /></div>
+        <button className="sheet-x" onClick={onClose} aria-label="Close">×</button>
         {children}
       </div>
     </>
@@ -74,6 +89,13 @@ export function ScreenHead({ title, onBack, right }: { title: string; onBack?: (
       {right}
     </div>
   );
+}
+
+/** Compact resource quantity: 1,250 → 1.25k, 320,000 → 320k. */
+export function fmtQty(n: number): string {
+  if (n >= 1_000_000) return `${+(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 10_000) return `${+(n / 1000).toFixed(n >= 100_000 ? 0 : 1)}k`;
+  return Math.round(n).toLocaleString();
 }
 
 export function pct(ppm: number) {

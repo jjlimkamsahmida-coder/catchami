@@ -4,7 +4,7 @@
  * know (its own state, public merchant positions/preferences, global demand)
  * and only spends through the same authorized game actions a player uses.
  */
-import { ECONOMY, inventoryWeight, RESOURCE_LABEL, RESOURCES, tileCenter, toTile, type Resource } from "@catchami/shared";
+import { carryCapacity, ECONOMY, inventoryWeight, RESOURCE_LABEL, RESOURCES, tileCenter, toTile, type Resource } from "@catchami/shared";
 import type { Game } from "./game.ts";
 import type { MerchantRt, PetRt } from "./types.ts";
 
@@ -58,7 +58,7 @@ export function decide(g: Game, p: PetRt, now: number, urgentOnly = false) {
         if (t === p || t.ownerId === p.ownerId || t.busy) continue;
         if (Math.hypot(t.s.x - s.x, t.s.y - s.y) > ECONOMY.battle.challengeRangePx) continue;
         if ((memo.get(t.id) ?? 0) > now) continue;
-        if (st.battle === "balanced" && inventoryWeight(t.s.inventory) < 8) continue;
+        if (st.battle === "balanced" && inventoryWeight(t.s.inventory) < 80) continue;
         memo.set(t.id, now + 5 * 60_000);
         void g.battle(p, t, "auto").catch(fail);
         return;
@@ -73,8 +73,9 @@ export function decide(g: Game, p: PetRt, now: number, urgentOnly = false) {
   const sellW = inventoryWeight(sellable);
   const carryW = inventoryWeight(s.inventory);
   const minUnitW = Math.min(...RESOURCES.map((r) => ECONOMY.resources[r].weight));
-  const full = carryW + 4 > p.stats.carry || carryW >= p.stats.carry * 0.85;
-  const risky = carryW * 10_000 >= p.stats.carry * st.maxCarryRiskBps;
+  const cap = carryCapacity(p.stats);
+  const full = carryW + 40 > cap || carryW >= cap * 0.85;
+  const risky = carryW * 10_000 >= cap * st.maxCarryRiskBps;
   const wantSell = sellW >= minUnitW && (st.sell === "immediate" ? sellW >= 6 : full || risky);
   if (wantSell && !g.flags.pauseTrades) {
     const m = chooseMerchant(g, p, sellable, st.sell === "best_price");
@@ -89,7 +90,7 @@ export function decide(g: Game, p: PetRt, now: number, urgentOnly = false) {
 
   // Gathering.
   const resource = pickResource(g, st.resource);
-  const free = p.stats.carry - carryW;
+  const free = carryCapacity(p.stats) - carryW;
   if (free < ECONOMY.resources[resource].weight) { p.activity = "Bag full"; return; }
   const nodes = [...g.nodes.values()].filter((n) => n.resource === resource && n.remaining > 0)
     .map((n) => ({ n, d: Math.hypot(tileCenter(n.tx) - s.x, tileCenter(n.ty) - s.y) }))

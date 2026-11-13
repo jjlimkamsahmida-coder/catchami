@@ -12,6 +12,9 @@ import type { Rgba } from "./image.ts";
 /** PASCAL VOC class ids used by DeepLab. */
 export const VOC: Record<Species, number> = { cat: 8, dog: 12 };
 
+/** All PASCAL animal classes: the model often labels part of a pet's body as a neighbouring animal class. */
+export const ANIMAL_CLASSES = [3, 8, 10, 12, 13, 17];
+
 export interface Segmenter { segment(img: Rgba, cls: number): Promise<Uint8Array> }
 
 export async function loadSegmenter(modelDir: string): Promise<Segmenter> {
@@ -45,7 +48,8 @@ export async function loadSegmenter(modelDir: string): Promise<Segmenter> {
       // Upscale with bilinear filtering of the class mask, thresholded at 0.5:
       // smooth silhouettes instead of blocky nearest-neighbour stairs.
       const W = pw!, H = ph!;
-      const on = (x: number, y: number) => (pred[Math.min(H - 1, Math.max(0, y)) * W + Math.min(W - 1, Math.max(0, x))] === cls ? 1 : 0);
+      const animal = (v: number) => v === cls || ANIMAL_CLASSES.includes(v);
+      const on = (x: number, y: number) => (animal(pred[Math.min(H - 1, Math.max(0, y)) * W + Math.min(W - 1, Math.max(0, x))]!) ? 1 : 0);
       const mask = new Uint8Array(img.width * img.height);
       for (let y = 0; y < img.height; y++) {
         const fy = ((y + 0.5) / img.height) * H - 0.5, y0 = Math.floor(fy), ty = fy - y0;
@@ -96,8 +100,8 @@ export function cleanMask(mask: Uint8Array, w: number, h: number, bbox: [number,
     const i = y * w + x;
     if (kept[i] && kept[i - 1] && kept[i + 1] && kept[i - w] && kept[i + w]) { out[i] = 1; n++; }
   }
-  // Too small relative to the animal's box: segmentation failed.
-  if (n < bw * bh * 0.12) return null;
+  // Covers too little of the animal's box (e.g. only the head): fall back to the framed photo sticker.
+  if (n < bw * bh * 0.3) return null;
   return out;
 }
 

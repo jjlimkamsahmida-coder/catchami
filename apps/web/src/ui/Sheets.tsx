@@ -1,7 +1,7 @@
-import { AREA_BOUNDS, ECONOMY, RESOURCE_LABEL, RESOURCES, inventoryWeight, type Resource } from "@catchami/shared";
+import { AREA_BOUNDS, ECONOMY, nodeStock, RESOURCE_LABEL, RESOURCES, inventoryWeight, type Resource } from "@catchami/shared";
 import { controlledPet, entities, store, useStore } from "../net/store.ts";
-import { send } from "../net/api.ts";
-import { fmt, PetArt, RarityTag, ResIcon, Sheet } from "./common.tsx";
+import { rid, send } from "../net/api.ts";
+import { fmt, fmtQty, PetArt, RarityTag, ResIcon, Sheet } from "./common.tsx";
 
 const close = () => store.set({ sheet: null });
 
@@ -9,8 +9,32 @@ export function Sheets() {
   const sheet = useStore((s) => s.sheet);
   if (!sheet) return null;
   if (sheet.kind === "merchant") return <MerchantSheet id={sheet.id} />;
+  if (sheet.kind === "bandit") return <BanditSheet id={sheet.id} />;
   if (sheet.kind === "pet") return <PetSheet id={sheet.id} />;
   return <NodeSheet id={sheet.id} />;
+}
+
+function BanditSheet({ id }: { id: string }) {
+  const b = useStore((s) => s.bandits.find((x) => x[0] === id));
+  const p = useStore(controlledPet);
+  if (!b) return null;
+  const [, bx, by, st, , name] = b;
+  const e = p ? entities.get(p.id)?.samples.at(-1) : null;
+  const dist = e ? Math.hypot(e[1] - bx, e[2] - by) : Infinity;
+  const near = dist <= 140;
+  return (
+    <Sheet onClose={close}>
+      <div className="col" style={{ gap: 10, alignItems: "center", textAlign: "center" }}>
+        <span className="bandit-badge">🦝</span>
+        <h2 style={{ margin: 0 }}>{name}</h2>
+        <p className="small" style={{ margin: 0 }}>{id === "bandit-practice" ? "A friendly sparring partner. It never steals — practise all you like!" : st === 1 ? "Chasing a pet with loot!" : st === 2 ? "Running away…" : "Sneaking around, looking for pets carrying resources."}</p>
+        {id !== "bandit-practice" && <p className="small muted" style={{ margin: 0 }}>Win a scuffle and the bandit flees empty-handed. Lose and it steals everything in your bag. Challenging first gives you a better chance!</p>}
+        <button className="game-btn start sm" disabled={!p || !near || st === 2} onClick={() => { if (p) send({ t: "fight_bandit", petId: p.id, banditId: id }); close(); }}>
+          <span className="gb-label">{!p ? "Catch a pet first" : st === 2 ? "It's running away" : near ? "⚔️ Fight!" : "Get closer to fight"}</span>
+        </button>
+      </div>
+    </Sheet>
+  );
 }
 
 function MerchantSheet({ id }: { id: string }) {
@@ -50,6 +74,10 @@ function MerchantSheet({ id }: { id: string }) {
               ))}
             </div>
             <button className="btn leaf block" disabled={!p || inventoryWeight(p.carried) === 0} onClick={() => sell(p!.carried)}>Sell everything</button>
+            <div className="row" style={{ gap: 8 }}>
+              <button className="btn sun grow" disabled={!p || p.hunger < 50} onClick={() => p && send({ t: "buy", petId: p.id, item: "food", rid: rid() })}>🍖 Buy meal · {fmt(ECONOMY.food.price)}</button>
+              <button className="btn coral grow" disabled={!p || (p.status !== "knocked_out" && p.hp >= p.stats.maxHp)} onClick={() => p && send({ t: "buy", petId: p.id, item: "medicine", rid: rid() })}>💊 Medicine · {fmt(ECONOMY.medicine.price)}</button>
+            </div>
             <p className="small muted" style={{ margin: 0 }}>Prices follow live demand and HQ's treasury health. The merchant pays from its own HQ-funded budget and stops buying when cash or cart space runs out.</p>
           </>
         )}
@@ -117,7 +145,7 @@ function NodeSheet({ id }: { id: string }) {
       <div className="col" style={{ gap: 10 }}>
         <div className="row"><ResIcon r={n.resource} size={34} /><h2>{RESOURCE_LABEL[n.resource]} spot</h2></div>
         <dl className="kv">
-          <dt>Available now</dt><dd>{rem === undefined ? "get closer to see" : rem <= 0 ? "picked clean — regrowing" : `${rem} of ${cfg.nodeCapacity}`}</dd>
+          <dt>Available now</dt><dd>{rem === undefined ? "get closer to see" : rem <= 0 ? "picked clean — regrowing" : `${fmtQty(rem)} of ${fmtQty(nodeStock(n.id))}`}</dd>
           <dt>Weight per unit</dt><dd>{cfg.weight}</dd>
           <dt>Used for</dt><dd>{{ fish: "food", herbs: "medicine", wood: "crafting", minerals: "crafting" }[n.resource]}</dd>
         </dl>

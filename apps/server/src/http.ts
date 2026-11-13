@@ -72,7 +72,7 @@ export function startHttp(db: Db, game: Game, detector: () => Detector | null, s
   }, { auth: true });
   // New-player journey.
   route("POST", "/api/onboarding", async (c) => onb.setOnboarding(db, uid(c), c.body.stage, c.body.tutorial), { auth: true });
-  route("POST", "/api/onboarding/starter", async (c) => onb.starterGrant(db, uid(c)), { auth: true });
+  route("POST", "/api/onboarding/starter", async (c) => onb.starterGrant(db, uid(c), c.body.pack), { auth: true });
   route("POST", "/api/handoff", async (c) => onb.createHandoff(uid(c)), { auth: true });
   route("POST", "/api/handoff/redeem", async (c) => {
     if (!allow(`handoff:${ip(c.req)}`, 1 / 10, 10)) throw new HttpError(429, "rate_limited", "Too many tries");

@@ -136,7 +136,7 @@ describe("gameplay economy loop", () => {
     await game.buy(p2, "food", "r1");
     expect(p2.s.hunger).toBe(700 - ECONOMY.food.hungerRestore);
     expect((await db.tx((tx) => balanceOf(tx, acct.team))).balance - teamBefore).toBe(ECONOMY.food.price / 10n);
-    expect(game.hqStockCache.fish).toBe(caught - 1);
+    expect(game.hqStockCache.fish).toBe(caught - ECONOMY.food.fishPerMeal);
 
     // Battles need consent from the defender's strategy.
     p1.s.inventory.wood = 10;

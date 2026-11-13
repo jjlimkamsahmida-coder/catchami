@@ -45,7 +45,7 @@ export const PROP_ART: Partial<Record<PropKind, { keys: string[]; width: number 
 
 export const NODE_ART = ["fish", "herbs", "wood", "minerals"].flatMap((r) => [`node-${r}`, `node-${r}-empty`]);
 export const NODE_WIDTH = 64;
-export const MERCHANT_ART: Record<string, string> = { finn: "merchant-finn", marigold: "merchant-marigold", tom: "merchant-tom", ruby: "merchant-ruby" };
+export const MERCHANT_ART: Record<string, string> = { finn: "merchant-finn", marigold: "merchant-marigold", tom: "merchant-tom", ruby: "merchant-ruby", keeper: "keeper-idle" };
 export const MERCHANT_HEIGHT = 78;
 export const CUBE = { happy: "cube-happy", excited: "cube-excited", fly: "cube-fly", open: "cube-open", wobble: "cube-wobble", dizzy: "cube-dizzy" } as const;
 export const TEXTURES = { grass: "tex-grass", forest: "tex-forest", dirt: "tex-dirt", cobble: "tex-cobble" } as const;

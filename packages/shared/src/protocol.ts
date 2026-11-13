@@ -101,6 +101,8 @@ export interface OwnPet extends PublicPet {
   losses: number;
 }
 
+/** [id, x, y, state (0 wander · 1 chase · 2 flee), facing, name] */
+export type BanditRow = [string, number, number, number, 1 | -1, string];
 export interface MerchantPublic { id: string; name: string; x: number; y: number; state: "travelling" | "returning" | "at_hq" | "unavailable"; hue: number }
 export interface MerchantDetail {
   id: string;
@@ -137,7 +139,9 @@ export type ClientMsg =
   | { t: "br_respond"; matchId: string; accept: boolean }
   | { t: "br_action"; matchId: string; target: "self" | "opponent"; turnNo: number }
   | { t: "br_forfeit"; matchId: string }
-  | { t: "br_sync" };
+  | { t: "br_sync" }
+  | { t: "tutorial"; petId: string; action: "enter" | "exit" | "stage"; stage?: number }
+  | { t: "fight_bandit"; petId: string; banditId: string };
 
 export interface BattleEvent {
   id: string;
@@ -162,7 +166,8 @@ export type ServerMsg =
       hq: { tx: number; ty: number };
       controlled: string | null;
     }
-  | { t: "snap"; tick: number; p: PetPos[]; m: MerchantPublic[] }
+  | { t: "snap"; tick: number; p: PetPos[]; m: MerchantPublic[]; b?: BanditRow[] }
+  | { t: "bandit_fight"; banditId: string; banditName: string; petId: string; petName: string; won: boolean; stolen: string; brave: boolean }
   | { t: "meta"; pets: PublicPet[]; nodes: NodeState[] }
   | { t: "own"; pets: OwnPet[]; wallet: { available: Amount }; controlled: string | null }
   | { t: "merchant"; detail: MerchantDetail | null; id: string }

@@ -18,8 +18,9 @@ import { currentEpoch } from "../fairness.ts";
 import { newId } from "../auth.ts";
 import { decide } from "./ai.ts";
 import { BubbleArena } from "./bubble.ts";
+import { Bandits } from "./bandits.ts";
 import { epochIdAt, type Epoch } from "../fairness.ts";
-import { battlesAllowed, RESOURCE_LABEL, gradeRound, makeRound, MINIGAMES } from "@catchami/shared";
+import { areaAt, battlesAllowed, carryCapacity, nodeStock, RESOURCE_LABEL, gradeRound, makeRound, MINIGAMES } from "@catchami/shared";
 import { freshPetState, MERCHANT_DEFS, recomputeStats, type MerchantRt, type NodeRt, type PetRt, type PetState } from "./types.ts";
 
 export interface GameClient {
@@ -37,7 +38,7 @@ export class GameError extends Error {
 
 export interface Flags { pauseCatches: boolean; pauseTrades: boolean; pauseBattles: boolean; pauseWithdrawals: boolean }
 
-const SPEED_SCALE = 0.95; // px/s per speed point
+const SPEED_SCALE = 1.7; // px/s per speed point (≈170 px/s ≈ 5 tiles/s for an average pet)
 const GATHER_RANGE = 1.7 * ECONOMY.world.tileSize;
 
 export class Game {
@@ -60,6 +61,7 @@ export class Game {
   private lastSlow = 0;
   now = () => Date.now();
   arena = new BubbleArena(this);
+  bandits!: Bandits;
   private epoch: Epoch | null = null;
   /** Fair-RNG epoch for synchronous rolls (refreshed in the background each hour). */
   epochNow(): Epoch | null {
@@ -72,8 +74,9 @@ export class Game {
   constructor(db: Db, world?: WorldDef) {
     this.db = db;
     this.world = world ?? generateWorld(WORLD_SEED);
+    this.bandits = new Bandits(this);
     for (const n of this.world.nodes) {
-      this.nodes.set(n.id, { ...n, remaining: ECONOMY.resources[n.resource].nodeCapacity, nextRegen: 0 });
+      this.nodes.set(n.id, { ...n, remaining: nodeStock(n.id), nextRegen: 0 });
     }
   }
 
@@ -94,6 +97,7 @@ export class Game {
       const cash = (await this.db.tx((tx) => balanceOf(tx, acct.merchant(def.id)))).balance;
       const m: MerchantRt = {
         ...def, legIdx: 0, path: [], x: hq.x, y: hq.y, state: "at_hq", waitUntil: now + 2000,
+        ...(def.stationary ? (() => { const q = this.world.pois.find((z) => z.id === def.route[0])!; return { x: tileCenter(q.tx), y: tileCenter(q.ty) }; })() : {}),
         cash, inventory: saved?.inventory ?? emptyInventory(), tripNo: Number(saved?.tripNo ?? 0), busy: Promise.resolve(),
       };
       if (!saved) await this.db.query(`INSERT INTO merchants (id, name, state) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`, [def.id, def.name, JSON.stringify(this.merchantState(m))]);
@@ -118,6 +122,16 @@ export class Game {
 
   hq() { return { x: tileCenter(this.world.hq.tx), y: tileCenter(this.world.hq.ty + 2) }; }
 
+  /** A random free spot around the village plaza, so arriving pets don't pile up on one tile. */
+  spawnSpot(): { x: number; y: number } {
+    const h = this.world.hq;
+    for (let i = 0; i < 60; i++) {
+      const tx = h.tx + Math.floor(Math.random() * 21) - 10, ty = h.ty + 4 + Math.floor(Math.random() * 14);
+      if (walkable(this.world, tx, ty)) return { x: tileCenter(tx), y: tileCenter(ty) };
+    }
+    return this.hq();
+  }
+
   hydrate(row: PetRow, now = this.now()): PetRt {
     const genome = row.genome;
     const equipment = (row.equipment ?? []).filter((e) => e.equipped).map((e) => ({ id: e.id, kind: e.kind, rarity: e.rarity }));
@@ -127,7 +141,7 @@ export class Game {
     // Offline catch-up for needs while the server was down (capped at 24h).
     const gap = Math.min(24 * 3600, Math.max(0, (now - new Date(row.updated_at).getTime()) / 1000));
     s.hunger = Math.min(ECONOMY.stats.hungerMax, s.hunger + gap * ECONOMY.stats.hungerPerSec);
-    if (s.worldSeed !== WORLD_SEED || !walkable(this.world, toTile(s.x), toTile(s.y))) { s.x = this.hq().x + (Math.random() - 0.5) * 64; s.y = this.hq().y + 16 + Math.random() * 32; }
+    if (s.worldSeed !== WORLD_SEED || !walkable(this.world, toTile(s.x), toTile(s.y))) { const sp = this.spawnSpot(); s.x = sp.x; s.y = sp.y; }
     s.worldSeed = WORLD_SEED;
     const p: PetRt = {
       id: row.id, ownerId: row.owner_id, ownerName: row.display_name, name: row.name, species: row.species, rarity: row.rarity,
@@ -186,10 +200,11 @@ export class Game {
     this.tick++;
     for (const p of this.pets.values()) this.stepPet(p, dt, now);
     for (const m of this.merchants) this.stepMerchant(m, dt, now);
+    if (!this.flags.pauseBattles) this.bandits.step(dt, now);
     for (const n of this.nodes.values()) {
-      const cap = ECONOMY.resources[n.resource].nodeCapacity;
+      const cap = nodeStock(n.id);
       if (n.remaining < cap && now >= n.nextRegen) {
-        if (n.nextRegen !== 0) n.remaining++;
+        if (n.nextRegen !== 0) n.remaining = Math.min(cap, n.remaining + ECONOMY.gather.unitsPerHit);
         n.nextRegen = now + ECONOMY.resources[n.resource].regenMs;
       }
     }
@@ -220,11 +235,11 @@ export class Game {
     } else {
       s.status = p.task?.kind === "rest" ? "sleeping" : "active";
     }
-    if (s.status === "knocked_out" || s.status === "inactive") { p.moveDir = null; p.path = []; p.dirty = true; return; }
+    if (s.status === "knocked_out") { p.moveDir = null; p.path = []; p.dirty = true; return; }
 
     // Movement.
     const exhausted = s.energy < cfg.exhaustedEnergy;
-    const speed = p.stats.speed * SPEED_SCALE * (exhausted ? 0.5 : 1) * (s.hunger >= cfg.hungerMax ? 0.7 : 1);
+    const speed = p.stats.speed * SPEED_SCALE * (s.status === "inactive" ? 0.45 : exhausted ? 0.6 : 1) * (s.hunger >= cfg.hungerMax ? 0.85 : 1);
     let moved = false;
     if (p.moveDir && now < p.moveDir.until && !p.busy) {
       const { dx, dy } = p.moveDir;
@@ -313,7 +328,7 @@ export class Game {
       if (t.minigame) { p.round = null; this.toOwner(p, { t: "mg_end", petId: p.id, reason: why }); }
     };
     if (s.energy < ECONOMY.stats.exhaustedEnergy) return stop("Too tired to gather");
-    if (inventoryWeight(s.inventory) + w > p.stats.carry) return stop("Bag is full");
+    if (inventoryWeight(s.inventory) + w > carryCapacity(p.stats)) return stop("Bag is full");
     if (node.remaining <= 0) return stop("This spot is picked clean — it regrows soon");
     if (t.minigame) return this.stepMinigame(p, node, now, stop);
     if (t.endsAt === null) {
@@ -322,14 +337,17 @@ export class Game {
       return;
     }
     if (now < t.endsAt) return;
-    node.remaining--;
+    // "Earn more": every hit yields a batch of units (bounded by the spot and the bag).
+    const units = Math.max(1, Math.min(ECONOMY.gather.unitsPerHit, node.remaining, Math.floor((carryCapacity(p.stats) - inventoryWeight(s.inventory)) / w)));
+    node.remaining -= units;
     if (node.nextRegen === 0 || node.nextRegen < now) node.nextRegen = now + ECONOMY.resources[node.resource].regenMs;
-    s.inventory[node.resource]++;
-    s.energy = Math.max(0, s.energy - ECONOMY.stats.gatherEnergyPerUnit);
+    s.inventory[node.resource] += units;
+    s.energy = Math.max(0, s.energy - ECONOMY.stats.gatherEnergyPerUnit * units);
+    s.hunger = Math.min(ECONOMY.stats.hungerMax, s.hunger + ECONOMY.stats.gatherHungerPerUnit * units);
     const today = dayKey(now);
     if (s.gatherDay !== today) { s.gatherDay = today; s.gatheredToday = 0; }
-    s.gatheredToday++;
-    s.gatheredTotal++;
+    s.gatheredToday += units;
+    s.gatheredTotal += units;
     p.dirty = true;
     p.metaDirty = true;
     t.endsAt = null;
@@ -382,13 +400,15 @@ export class Game {
     if (p.s.energy < ECONOMY.stats.exhaustedEnergy) throw new GameError("tired", "Too tired to gather");
     const { grade, detail } = gradeRound(round.params, ms);
     const w = ECONOMY.resources[node.resource].weight;
-    const room = Math.floor((p.stats.carry - inventoryWeight(p.s.inventory)) / w);
+    const room = Math.floor((carryCapacity(p.stats) - inventoryWeight(p.s.inventory)) / w);
     const gained = Math.max(0, Math.min(MINIGAMES.yield[grade], node.remaining, room));
     p.s.energy = Math.max(0, p.s.energy - MINIGAMES.energyPerAttempt);
     if (gained > 0) {
       node.remaining -= gained;
       if (node.nextRegen === 0 || node.nextRegen < now) node.nextRegen = now + ECONOMY.resources[node.resource].regenMs;
       p.s.inventory[node.resource] += gained;
+      p.s.energy = Math.max(0, p.s.energy - ECONOMY.stats.gatherEnergyPerUnit * gained);
+      p.s.hunger = Math.min(ECONOMY.stats.hungerMax, p.s.hunger + ECONOMY.stats.gatherHungerPerUnit * gained);
       const today = dayKey(now);
       if (p.s.gatherDay !== today) { p.s.gatherDay = today; p.s.gatheredToday = 0; }
       p.s.gatheredToday += gained;
@@ -404,6 +424,7 @@ export class Game {
   }
 
   private stepMerchant(m: MerchantRt, dt: number, now: number) {
+    if (m.stationary) return this.stepStationary(m, now);
     if (now < m.waitUntil) return;
     if (m.state === "at_hq" || m.state === "unavailable") {
       m.waitUntil = now + 60_000; // guard against re-entry while the grant is in flight
@@ -431,6 +452,37 @@ export class Game {
     const capLeft = ECONOMY.merchants.inventoryCapacity - inventoryWeight(m.inventory);
     const lowCash = m.cash * 10_000n < ECONOMY.merchants.tripMinBudget * BigInt(ECONOMY.merchants.lowFundsBps);
     if (m.state === "travelling" && (capLeft < 4 || lowCash)) this.sendMerchantHome(m);
+  }
+
+  /** The Keeper's stall in the tutorial glade: never travels; delivers and refills in place. */
+  private stepStationary(m: MerchantRt, now: number) {
+    if (now < m.waitUntil) return;
+    const capLeft = ECONOMY.merchants.inventoryCapacity - inventoryWeight(m.inventory);
+    const lowCash = m.cash * 10_000n < ECONOMY.merchants.tripMinBudget * BigInt(ECONOMY.merchants.lowFundsBps);
+    if (m.state === "travelling" && !lowCash && capLeft > 400) return;
+    m.waitUntil = now + 60_000;
+    void this.merchantAtHq(m, now).then(() => {
+      const poi = this.world.pois.find((q) => q.id === m.route[0]);
+      if (poi) { m.x = tileCenter(poi.tx); m.y = tileCenter(poi.ty); }
+      m.path = [];
+      if (m.state === "travelling") m.waitUntil = now + 5_000;
+    });
+  }
+
+  /** Tutorial: move the player's pet into the Keeper's Glade, or out to Paw Village. */
+  tutorialMove(userId: string, petId: string, where: "enter" | "exit", stage?: number) {
+    const p = this.pets.get(petId);
+    if (!p || p.ownerId !== userId) throw new GameError("not_owner", "Not your pet");
+    if (where === "exit") { const sp = this.spawnSpot(); p.s.x = sp.x; p.s.y = sp.y; }
+    else {
+      const id = stage && stage >= 1 && stage <= 6 ? `glade_s${stage}` : "glade_spawn";
+      const poi = this.world.pois.find((q) => q.id === id) ?? this.world.pois.find((q) => q.id === "glade_spawn")!;
+      p.s.x = tileCenter(poi.tx) + (Math.random() - 0.5) * 20; p.s.y = tileCenter(poi.ty) + Math.random() * 10;
+    }
+    p.path = []; p.moveDir = null; p.task = null; p.round = null;
+    p.activity = where === "enter" ? "Training with the Keeper" : "Arrived in Paw Village";
+    p.dirty = true; p.metaDirty = true;
+    return { ok: true };
   }
 
   private sendMerchantHome(m: MerchantRt) {
@@ -596,6 +648,7 @@ export class Game {
     const cfg = item === "food" ? ECONOMY.food : ECONOMY.medicine;
     const resource: Resource = item === "food" ? "fish" : "herbs";
     const qty = item === "food" ? ECONOMY.food.fishPerMeal : ECONOMY.medicine.herbsPerDose;
+    const inGlade = areaAt(this.world, p.s.x, p.s.y).id === "glade";
     return this.withPet(p, async () => {
       const next = { ...p.s };
       if (item === "food") {
@@ -607,7 +660,7 @@ export class Game {
       }
       try {
         await this.db.tx(async (tx) => {
-          const ok = await consumeHqStock(tx, resource, qty, `${item}:${rid}`);
+          const ok = inGlade || (await consumeHqStock(tx, resource, qty, `${item}:${rid}`));
           if (!ok) throw new GameError("sold_out", item === "food" ? "HQ kitchen is out of fish — merchants need fish deliveries" : "HQ clinic is out of herbs — merchants need herb deliveries");
           await post(tx, { idem: `${item}:${rid}`, kind: item, postings: feePostings(acct.pet(p.id), cfg.price, cfg.split), meta: { petId: p.id } });
           await tx.query(`UPDATE pets SET state = $2, updated_at = now() WHERE id = $1`, [p.id, JSON.stringify(next)]);
@@ -618,8 +671,10 @@ export class Game {
       }
       p.s.hunger = next.hunger; p.s.energy = next.energy; p.s.hp = next.hp; p.s.status = next.status; p.s.koUntil = next.koUntil;
       p.balance -= cfg.price;
-      this.pendingConsume[resource] += qty;
-      this.hqStockCache[resource] = Math.max(0, this.hqStockCache[resource] - qty);
+      if (!inGlade) {
+        this.pendingConsume[resource] += qty;
+        this.hqStockCache[resource] = Math.max(0, this.hqStockCache[resource] - qty);
+      }
       p.anim = "eat"; p.animUntil = now + 1500;
       p.activity = item === "food" ? "Had a meal" : "Took medicine";
       p.metaDirty = true;
@@ -678,7 +733,7 @@ export class Game {
       const res = simulateBattle(inputs.a, inputs.b, epoch.seed, id);
       const winner = res.winner === null ? null : res.winner === 0 ? a : b;
       const loser = res.winner === null ? null : res.winner === 0 ? b : a;
-      const stolen = winner && loser ? computeTheft(loser.s.inventory, winner.s.inventory, winner.stats.carry) : emptyInventory();
+      const stolen = winner && loser ? computeTheft(loser.s.inventory, winner.s.inventory, carryCapacity(winner.stats)) : emptyInventory();
       const sa = { ...a.s, inventory: { ...a.s.inventory }, recentOpponents: { ...a.s.recentOpponents, [b.id]: now } };
       const sb = { ...b.s, inventory: { ...b.s.inventory }, recentOpponents: { ...b.s.recentOpponents, [a.id]: now } };
       const [sw, sl] = winner === a ? [sa, sb] : [sb, sa];
@@ -780,6 +835,16 @@ export class Game {
         manual(p);
         return;
       }
+      case "fight_bandit": {
+        const p = own(msg.petId);
+        this.bandits.challenge(p, msg.banditId, now);
+        return;
+      }
+      case "tutorial": {
+        own(msg.petId);
+        this.tutorialMove(c.userId, msg.petId, msg.action === "exit" ? "exit" : "enter", msg.action === "stage" ? Number(msg.stage) : undefined);
+        return;
+      }
       case "goto": {
         if (!c.controlled) return;
         const p = own(c.controlled);
@@ -834,6 +899,7 @@ export class Game {
     if (!this.clients.size) return;
     const R = ECONOMY.world.viewRadiusPx;
     const m = this.merchants.map((x) => ({ id: x.id, name: x.name, x: Math.round(x.x), y: Math.round(x.y), state: x.state, hue: x.hue }));
+    const b = this.bandits.snapshot();
     const sendMeta = this.tick % 10 === 0;
     const sendOwn = this.tick % 5 === 0;
     const sendMarket = this.tick % 50 === 0;
@@ -843,7 +909,7 @@ export class Game {
       const near: PetRt[] = [];
       for (const p of this.pets.values()) if (Math.abs(p.s.x - ctr.x) < R && Math.abs(p.s.y - ctr.y) < R) near.push(p);
       const pos: PetPos[] = near.map((p) => [p.id, Math.round(p.s.x), Math.round(p.s.y), p.anim, p.facing]);
-      c.send({ t: "snap", tick: this.tick, p: pos, m });
+      c.send({ t: "snap", tick: this.tick, p: pos, m, b: b.filter((r) => Math.abs(r[1] - ctr.x) < R && Math.abs(r[2] - ctr.y) < R) });
       if (sendMeta || now - c.lastMeta > 1000) {
         c.lastMeta = now;
         const nodes = [...this.nodes.values()].filter((n) => Math.abs(tileCenter(n.tx) - ctr.x) < R && Math.abs(tileCenter(n.ty) - ctr.y) < R).map((n) => ({ id: n.id, remaining: n.remaining }));

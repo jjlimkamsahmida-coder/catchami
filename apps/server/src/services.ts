@@ -217,7 +217,7 @@ export async function equip(db: Db, game: Game, userId: string, equipmentId: str
 export async function marketListings(db: Db, filters: { species?: string; rarity?: string; kind?: string }) {
   const r = await db.query<Record<string, unknown>>(
     `SELECT l.id, l.price::text, l.created_at::text, u.display_name AS seller, l.seller_id,
-            p.id AS pet_id, p.name, p.species, p.rarity AS pet_rarity, p.sticker, p.genome->'look' AS look, a.balance::text AS pet_balance,
+            p.id AS pet_id, p.name, p.species, p.rarity AS pet_rarity, p.sticker, p.genome->'look' AS look, p.genome->'stats' AS stats, p.genome->'traits' AS traits, a.balance::text AS pet_balance,
             e.id AS equipment_id, e.kind, e.rarity AS eq_rarity
      FROM listings l JOIN users u ON u.id = l.seller_id
      LEFT JOIN pets p ON p.id = l.pet_id LEFT JOIN accounts a ON a.id = 'pet:' || p.id
@@ -318,13 +318,13 @@ export async function buyListing(db: Db, game: Game, buyerId: string, listingId:
 // ---------------------------------------------------------- leaderboards --
 
 export async function leaderboards(db: Db, game: Game) {
-  const richest = await db.query(`SELECT p.id, p.name, p.species, p.rarity, u.display_name AS owner, a.balance::text AS value FROM pets p JOIN users u ON u.id = p.owner_id JOIN accounts a ON a.id = 'pet:' || p.id ORDER BY a.balance DESC LIMIT 10`);
+  const richest = await db.query(`SELECT p.id, p.name, p.species, p.rarity, p.sticker, u.display_name AS owner, a.balance::text AS value FROM pets p JOIN users u ON u.id = p.owner_id JOIN accounts a ON a.id = 'pet:' || p.id ORDER BY a.balance DESC LIMIT 10`);
   const pets = [...game.pets.values()];
-  const top = (f: (p: PetRt) => number) => pets.filter((p) => f(p) > 0).sort((a, b) => f(b) - f(a)).slice(0, 10).map((p) => ({ id: p.id, name: p.name, species: p.species, rarity: p.rarity, owner: p.ownerName, value: f(p) }));
+  const top = (f: (p: PetRt) => number) => pets.filter((p) => f(p) > 0).sort((a, b) => f(b) - f(a)).slice(0, 10).map((p) => ({ id: p.id, name: p.name, species: p.species, rarity: p.rarity, sticker: p.sticker, owner: p.ownerName, value: f(p) }));
   const earnings = await db.query(
-    `SELECT p.id, p.name, p.species, p.rarity, u.display_name AS owner, SUM(CASE WHEN j.kind IN ('sale','reward') THEN po.amount WHEN j.kind IN ('food','medicine','craft') THEN po.amount ELSE 0 END)::text AS value
+    `SELECT p.id, p.name, p.species, p.rarity, p.sticker, u.display_name AS owner, SUM(CASE WHEN j.kind IN ('sale','reward') THEN po.amount WHEN j.kind IN ('food','medicine','craft') THEN po.amount ELSE 0 END)::text AS value
      FROM postings po JOIN journal j ON j.id = po.journal_id JOIN pets p ON 'pet:' || p.id = po.account_id JOIN users u ON u.id = p.owner_id
-     GROUP BY p.id, p.name, p.species, p.rarity, u.display_name HAVING COUNT(*) > 0 ORDER BY SUM(CASE WHEN j.kind IN ('sale','reward','food','medicine','craft') THEN po.amount ELSE 0 END) DESC LIMIT 10`,
+     GROUP BY p.id, p.name, p.species, p.rarity, p.sticker, u.display_name HAVING COUNT(*) > 0 ORDER BY SUM(CASE WHEN j.kind IN ('sale','reward','food','medicine','craft') THEN po.amount ELSE 0 END) DESC LIMIT 10`,
   );
   return {
     richest: richest.rows,
