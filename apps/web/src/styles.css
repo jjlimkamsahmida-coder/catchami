@@ -1771,3 +1771,4 @@ html.has-touch .joystick { display: block !important; }
 .mapscreen { grid-template-columns: minmax(0, 1fr); }
 .mapscreen > .col { min-width: 0; max-width: 100%; }
 .mapscroll { width: 100%; }
+.dcatch-scene { position: absolute; inset: 0; z-index: 30; }

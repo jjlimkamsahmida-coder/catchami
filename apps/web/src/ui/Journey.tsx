@@ -81,7 +81,7 @@ function Dialogue({ lines, onDone, onCue }: { lines: Line[]; onDone: () => void;
   );
 }
 
-function Scene({ night = false, children, onSkip }: { night?: boolean; children: React.ReactNode; onSkip?: () => void }) {
+export function Scene({ night = false, children, onSkip }: { night?: boolean; children: React.ReactNode; onSkip?: () => void }) {
   return (
     <div className={`scene ${night ? "night" : "day"}`}>
       <div className="scene-bg" />
@@ -325,7 +325,7 @@ const MISSION_STEPS = [
 ];
 
 /** Looping mini-demo of the three catch steps, Keeper as the coach. */
-function MissionDemo() {
+export function MissionDemo({ title = "Bring back the first spark!" }: { title?: string } = {}) {
   const [step, setStep] = useState(0);
   const [hold, setHold] = useState(false);
   useEffect(() => {
@@ -345,7 +345,7 @@ function MissionDemo() {
     <div className="mdemo">
       <div className="mission-head">
         <div className="mission-row">{pills}</div>
-        <h2>Bring back the first spark!</h2>
+        <h2>{title}</h2>
       </div>
       <div className="mdemo-stage">
       <div className={`mdemo-window s${step}`} key={step}>

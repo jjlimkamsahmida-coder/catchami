@@ -14,7 +14,7 @@ import { CollectorCard, cardFromPet } from "./CollectorCard.tsx";
 import { GearTab, StrategyTab, WalletTab } from "./Pets.tsx";
 import { genUrl } from "../game/assets.ts";
 import { sfx } from "./sfx.ts";
-import { PhoneHandoff } from "./Journey.tsx";
+import { MissionDemo, PhoneHandoff, Scene } from "./Journey.tsx";
 
 const backToGame = () => store.set({ screen: "world", petScreen: null, sheet: null });
 
@@ -304,19 +304,23 @@ export function DesktopCatchScreen() {
   const [start] = useState(() => new Set(store.get().own.map((p) => p.id)));
   const fresh = own.find((p) => !start.has(p.id)) ?? null;
   return (
-    <PageFrame title="Catch a pet" icon="cube-excited" theme="catchp">
-      {fresh ? (
-        <div className="dcatch-reveal">
-          <h2 className="dcatch-title">New friend caught!</h2>
-          <CollectorCard flipIn width={260} card={cardFromPet(fresh)} />
-          <button className="game-btn start" onClick={backToGame}><span className="gb-label">Back to the game</span></button>
-        </div>
-      ) : (
-        <div className="dcatch">
-          <p className="dcatch-lead">Catching uses your phone's camera. Scan the code, point your phone at a real cat or dog, and throw a CamiCube!</p>
-          <PhoneHandoff />
-        </div>
-      )}
-    </PageFrame>
+    // Same scene as the very first catch: the three-step demo with the Keeper, plus the phone QR code.
+    <div className="dcatch-scene">
+      <Scene>
+        {fresh ? (
+          <div className="dcatch-reveal">
+            <h2 className="dcatch-title">New friend caught!</h2>
+            <CollectorCard flipIn width={260} card={cardFromPet(fresh)} />
+            <button className="game-btn start" onClick={backToGame}><span className="gb-label">Back to the game</span></button>
+          </div>
+        ) : (
+          <div className="mission">
+            <MissionDemo title="Catch a new buddy!" />
+            <PhoneHandoff />
+            <button className="link-btn mission-later" onClick={backToGame}>Back to the game ›</button>
+          </div>
+        )}
+      </Scene>
+    </div>
   );
 }
