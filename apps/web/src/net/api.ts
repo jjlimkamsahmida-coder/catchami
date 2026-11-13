@@ -173,7 +173,8 @@ function onMessage(m: ServerMsg) {
       break;
     case "br_state":
       store.set((s) => ({
-        bubble: m.match,
+        // A cancelled invite (expired / declined) must not pop the battle screen open over the game.
+        bubble: m.match.state === "cancelled" && s.bubble?.id !== m.match.id ? s.bubble : m.match,
         bubbleInvite: s.bubbleInvite?.matchId === m.match.id && m.match.state !== "invited" ? null : s.bubbleInvite,
       }));
       break;

@@ -1646,3 +1646,9 @@ table.lb td:first-child { width: 28px; font-weight: 700; }
 .br-rules-card li p { margin: 0; }
 
 .bagfull.ko { background: linear-gradient(#ffd6d6, #ff9a9a); }
+
+/* Phones: action buttons live in the space left of the joystick (never on top of it). */
+@media (pointer: coarse) {
+  .actions { left: calc(10px + var(--safe-left)) !important; right: calc(150px + var(--safe-right)) !important; transform: none !important; flex-wrap: wrap; align-content: flex-end; pointer-events: none; }
+  .actions > * { pointer-events: auto; }
+}
