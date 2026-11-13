@@ -199,7 +199,7 @@ export function BagFullBanner() {
   return (
     <div className="bagfull" role="status">
       <span className="bagfull-ico">🎒</span>
-      <span><b>Bag full!</b><small>{tut ? "Sell your loot to the Keeper" : "Sell your loot to a merchant to gather more"}</small></span>
+      <span><b>Bag full!</b><small>{tut ? "Sell your loot to Merchant Mari" : "Sell your loot to a merchant to gather more"}</small></span>
     </div>
   );
 }
@@ -227,7 +227,8 @@ export function ActionBar() {
   const btns: React.ReactNode[] = [];
   const touch = window.matchMedia("(pointer: coarse)").matches;
   const full = inventoryWeight(p.carried) >= carryCapacity(p.stats) * 0.98;
-  if (touch && node && !ko && !store.get().minigame) btns.push(<button key="gather" className="btn big-action" disabled={(nodes[node.id] ?? 1) <= 0 || full} onClick={() => send({ t: "gather", petId: p.id, nodeId: node.id })}>{full ? "Bag full" : (nodes[node.id] ?? 1) <= 0 ? "Regrowing…" : "Gather!"}</button>);
+  if (touch && m && !store.get().sheet) btns.push(<button key="shop" className="btn big-action" onClick={() => store.set({ sheet: { kind: "merchant", id: m.id } })}>Open shop</button>);
+  if (touch && node && !ko && !store.get().mgSession) btns.push(<button key="gather" className="btn big-action" disabled={(nodes[node.id] ?? 1) <= 0 || full} onClick={() => send({ t: "gather", petId: p.id, nodeId: node.id })}>{full ? "Bag full" : (nodes[node.id] ?? 1) <= 0 ? "Regrowing…" : "Gather!"}</button>);
   // The tutorial teaches one thing per stage: only selling and gathering show up there.
   if (tut) return btns.length ? <div className="actions">{btns}</div> : null;
   if (p.hunger > 300 && !ko) {

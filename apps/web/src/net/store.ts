@@ -48,6 +48,8 @@ export interface State {
   petScreen: string | null;
   /** Open gathering minigame round (client clock when it arrived). */
   minigame: { round: MinigameRound; receivedAt: number } | null;
+  /** The gathering overlay stays open across rounds until the player closes it. */
+  mgSession: { petId: string; kind: string; ended: string | null } | null;
   mgResult: { roundId: string; grade: Grade; gained: number; resource: Resource; detail: string; note?: string; at: number } | null;
   bubble: BubbleMatchView | null;
   bubbleInvite: { matchId: string; fromName: string; ownerName: string; sticker: string | null; species: "cat" | "dog"; look: OwnPet["look"]; toPetId: string; expiresAt: number } | null;
@@ -59,7 +61,7 @@ let state: State = {
   token: null, onboarding: null, nearAccount: null, userId: null, displayName: "", network: "", connected: false,
   map: null, nodesDef: [], pois: [], hq: null, nodes: {}, merchants: [], bandits: [], merchantDetail: {},
   own: [], controlled: null, wallet: null, ticker: null, toasts: [], sheet: null, screen: "world", petScreen: null,
-  minigame: null, mgResult: null, bubble: null, bubbleInvite: null, banditFight: null, banditDuel: null,
+  minigame: null, mgSession: null, mgResult: null, bubble: null, bubbleInvite: null, banditFight: null, banditDuel: null,
 };
 const subs = new Set<() => void>();
 

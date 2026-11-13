@@ -390,6 +390,7 @@ export class GameScene extends Phaser.Scene {
       if (e.id === s.controlled) {
         const cam = this.cameras.main;
         window.__petAnchor = { x: (x - cam.worldView.x) * cam.zoom, y: (y - cam.worldView.y) * cam.zoom };
+        window.__w2s = (wx: number, wy: number) => ({ x: (wx - cam.worldView.x) * cam.zoom, y: (wy - cam.worldView.y) * cam.zoom });
         if (this.world) {
           const a = areaAt(this.world, x, y);
           const arena = a.id === "glade" ? gladeArenaAt(Math.floor(x / TILE), Math.floor(y / TILE)) : -1;
@@ -446,7 +447,7 @@ export class GameScene extends Phaser.Scene {
       const near = !!cpos && visible && Math.hypot(cpos[0] - m.x, cpos[1] - m.y) <= ECONOMY.merchants.interactRangePx;
       if (near) glow.lineStyle(3, 0xffd166, 0.9 - 0.3 * Math.sin(time / 200)).strokeEllipse(0, 0, 70, 24);
       const mb = this.merchantBtns.get(m.id);
-      if (mb) mb.setVisible(near && !store.get().sheet).setPosition(c.x, c.y - MERCHANT_HEIGHT - 44 + Math.sin(time / 260) * 3);
+      if (mb) mb.setVisible(!TOUCH && near && !store.get().sheet).setPosition(c.x, c.y - MERCHANT_HEIGHT - 44 + Math.sin(time / 260) * 3);
     }
     // Bandits: masked thieves; a red "!" and ring while chasing.
     const seenB = new Set<string>();
@@ -494,7 +495,7 @@ export class GameScene extends Phaser.Scene {
       const dep = rem <= 0;
       if (dep !== n.depleted) { n.depleted = dep; n.img.setTexture(`node-${n.res}${dep ? "-empty" : ""}`); this.fitNode(n.img); }
       const near = cpos && Math.hypot(cpos[0] - n.img.x, cpos[1] - n.img.y) < 160;
-      n.btn.setVisible(!TOUCH && !dep && !s.minigame && !!cpos && Math.hypot(cpos[0] - n.img.x, cpos[1] - n.img.y) < 120);
+      n.btn.setVisible(!TOUCH && !dep && !s.mgSession && !!cpos && Math.hypot(cpos[0] - n.img.x, cpos[1] - n.img.y) < 120);
       n.badge.setText(dep ? "regrowing" : `${rem >= 1000 ? `${Math.round(rem / 1000)}k` : rem} left`).setAlpha(near ? 1 : 0);
     }
   }

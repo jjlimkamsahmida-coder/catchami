@@ -22,44 +22,55 @@ let streak = 0;
 let lastCounted = "";
 
 export function MinigameLayer() {
+  const session = useStore((s) => s.mgSession);
   const mg = useStore((s) => s.minigame);
   const result = useStore((s) => s.mgResult);
   const controlled = useStore((s) => s.controlled);
-  const fallback = () => ({ x: window.innerWidth / 2, y: window.innerHeight * 0.62 });
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(() => window.__petAnchor ?? fallback());
-  // Follow the pet on screen.
-  useEffect(() => {
-    let raf = 0;
-    const loop = () => { const a = window.__petAnchor ?? fallback(); if (a) setPos((p) => (p && Math.abs(p.x - a.x) < 1 && Math.abs(p.y - a.y) < 1 ? p : { ...a })); raf = requestAnimationFrame(loop); };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, []);
-  const showResult = result && performance.now() - result.at < 1200;
+  const [, tick] = useState(0);
+  useEffect(() => { if (mg || !session) return; const id = setInterval(() => tick((n) => n + 1), 200); return () => clearInterval(id); }, [mg, session]);
   if (result && result.roundId !== lastCounted) { lastCounted = result.roundId; streak = result.grade === "miss" ? 0 : streak + 1; }
-  if (!pos || (!mg && !showResult) || (mg && mg.round.petId !== controlled)) return showResult && pos ? <ResultPop pos={pos} r={result!} /> : null;
-  const W = Math.min(310, window.innerWidth - 16);
-  const left = Math.max(8, Math.min(window.innerWidth - W - 8, pos.x - W / 2));
-  const top = Math.max(70, Math.min(window.innerHeight - 330, pos.y - 300));
+  if (!session || session.petId !== controlled) return null;
+  const kind = (mg?.round.params.kind ?? session.kind) as keyof typeof TITLE;
+  const recent = result && performance.now() - result.at < 2500 ? result : null;
+  const close = () => {
+    if (!session.ended) send({ t: "mg_stop", petId: session.petId });
+    streak = 0;
+    store.set({ minigame: null, mgSession: null });
+  };
   return (
-    <>
-      {mg && <Panel key={mg.round.id} round={mg.round} receivedAt={mg.receivedAt} style={{ left, top, width: W }} />}
-      {showResult && <ResultPop pos={pos} r={result!} />}
-    </>
+    <div className="mg-overlay">
+      <div className={`mg-panel mg-${kind}`}>
+        <div className="mg-head">
+          <span className="mg-badge"><img src={genUrl(`icon-${RES[kind]}`)} alt="" /></span>
+          <b className="mg-title">{TITLE[kind]}</b>
+          {streak >= 2 && <span key={streak} className="mg-streak">🔥 x{streak}</span>}
+          <button className="mg-x" onClick={close} aria-label="Stop gathering">×</button>
+        </div>
+        {mg ? <Round key={mg.round.id} round={mg.round} receivedAt={mg.receivedAt} /> : (
+          <div className="mg-between">
+            {recent && <ResultBig r={recent} />}
+            {session.ended
+              ? <><p className="mg-ended">{session.ended}</p><button className="mg-tap done" onClick={close}><span>Close</span></button></>
+              : <p className="mg-next"><span className="spinner sm" /> Next round…</p>}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
-function ResultPop({ pos, r }: { pos: { x: number; y: number }; r: NonNullable<ReturnType<typeof store.get>["mgResult"]> }) {
-  const label = r.grade === "perfect" ? "Perfect!" : r.grade === "good" ? "Good" : r.resource === "fish" ? "It got away" : r.detail === "too early" ? "Too early" : r.detail === "too late" ? "Slipped!" : "Miss";
+function ResultBig({ r }: { r: NonNullable<ReturnType<typeof store.get>["mgResult"]> }) {
+  const label = r.grade === "perfect" ? "Perfect!" : r.grade === "good" ? "Nice!" : r.resource === "fish" ? "It got away!" : r.detail === "too early" ? "Too early!" : r.detail === "too late" ? "Slipped!" : "Miss!";
   return (
-    <div key={r.roundId} className={`mg-pop ${r.grade}`} style={{ left: pos.x, top: pos.y - 90 }}>
+    <div key={r.roundId} className={`mg-big ${r.grade}`}>
       <b>{label}</b>
-      {r.gained > 0 && <span><img src={genUrl(`icon-${r.resource}`)} alt="" />+{r.gained}</span>}
+      {r.gained > 0 ? <span><img src={genUrl(`icon-${r.resource}`)} alt="" />+{r.gained}</span> : <small>Try again!</small>}
       {r.note && <small>{r.note}</small>}
     </div>
   );
 }
 
-function Panel({ round, receivedAt, style }: { round: MinigameRound; receivedAt: number; style: React.CSSProperties }) {
+function Round({ round, receivedAt }: { round: MinigameRound; receivedAt: number }) {
   const kind = round.params.kind;
   const [now, setNow] = useState(() => performance.now());
   const sent = useRef(false);
@@ -115,13 +126,7 @@ function Panel({ round, receivedAt, style }: { round: MinigameRound; receivedAt:
     : { onPointerDown: () => submit(performance.now() - receivedAt) };
 
   return (
-    <div className={`mg-panel mg-${kind} ${sent.current ? "sent" : ""}`} style={style}>
-      <div className="mg-head">
-        <span className="mg-badge"><img src={genUrl(`icon-${RES[kind]}`)} alt="" /></span>
-        <b className="mg-title">{TITLE[kind]}</b>
-        {streak >= 2 && <span key={streak} className="mg-streak">🔥 x{streak}</span>}
-        <button className="mg-x" onClick={() => { send({ t: "mg_stop", petId: round.petId }); store.set({ minigame: null }); }} aria-label="Stop gathering">×</button>
-      </div>
+    <>
       <span className="mg-timer"><i style={{ width: `${(left / MINIGAMES.timeoutMs) * 100}%` }} /></span>
       <div className="mg-stage" {...tapHandlers}>
         {kind === "chop" && <ChopBar p={round.params as ChopRound} ms={elapsed} />}
@@ -131,9 +136,9 @@ function Panel({ round, receivedAt, style }: { round: MinigameRound; receivedAt:
       </div>
       <div className="mg-hint">{HINT[kind]}</div>
       <button className={`mg-tap ${inZone ? "now" : ""} ${holding ? "holding" : ""}`} disabled={sent.current} {...tapHandlers}>
-        <span>{sent.current ? "Nice!" : inZone ? "NOW!" : holding ? "HOLDING…" : VERB[kind]}</span>
+        <span>{sent.current ? "…" : inZone ? "NOW!" : holding ? "HOLDING…" : VERB[kind]}</span>
       </button>
-    </div>
+    </>
   );
 }
 

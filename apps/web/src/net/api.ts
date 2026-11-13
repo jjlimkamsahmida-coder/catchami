@@ -158,14 +158,14 @@ function onMessage(m: ServerMsg) {
       toast("bad", m.message);
       break;
     case "mg_round":
-      store.set({ minigame: { round: m.round, receivedAt: performance.now() } });
+      store.set({ minigame: { round: m.round, receivedAt: performance.now() }, mgSession: { petId: m.round.petId, kind: m.round.params.kind, ended: null } });
       break;
     case "mg_result":
       store.set((s) => ({ minigame: s.minigame?.round.id === m.roundId ? null : s.minigame, mgResult: { roundId: m.roundId, grade: m.grade, gained: m.gained, resource: m.resource, detail: m.detail, note: m.note, at: performance.now() } }));
       window.dispatchEvent(new CustomEvent("catchami:gathered", { detail: m }));
       break;
     case "mg_end":
-      store.set({ minigame: null });
+      store.set((s) => ({ minigame: null, mgSession: s.mgSession ? { ...s.mgSession, ended: m.reason } : null }));
       toast("info", m.reason);
       break;
     case "br_invite":
@@ -178,7 +178,7 @@ function onMessage(m: ServerMsg) {
       }));
       break;
     case "bandit_duel":
-      store.set({ banditDuel: { duelId: m.duelId, banditId: m.banditId, banditName: m.banditName, petName: m.petName, brave: m.brave, practice: m.practice, rounds: m.rounds, deadlineMs: m.deadlineMs, at: Date.now() }, sheet: null, minigame: null });
+      store.set({ banditDuel: { duelId: m.duelId, banditId: m.banditId, banditName: m.banditName, petName: m.petName, brave: m.brave, practice: m.practice, rounds: m.rounds, deadlineMs: m.deadlineMs, at: Date.now() }, sheet: null, minigame: null, mgSession: null });
       break;
     case "bandit_fight":
       store.set({ banditFight: { banditId: m.banditId, banditName: m.banditName, petName: m.petName, won: m.won, stolen: m.stolen, brave: m.brave, at: Date.now() } });

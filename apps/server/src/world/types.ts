@@ -122,7 +122,7 @@ export function recomputeStats(p: Pick<PetRt, "genome" | "equipment">): Stats {
 }
 
 export const MERCHANT_DEFS: Array<Pick<MerchantRt, "id" | "name" | "hue" | "prefs" | "route" | "stationary">> = [
-  { id: "keeper", name: "The Keeper", hue: 280, prefs: {}, route: ["glade_stall"], stationary: true },
+  { id: "keeper", name: "Merchant Mari", hue: 280, prefs: {}, route: ["glade_stall"], stationary: true },
   { id: "finn", name: "Finn the Fishmonger", hue: 200, prefs: { fish: 1_200, wood: -600 }, route: ["hq", "village_west", "forest_gate", "lake", "forest", "forest_gate", "village_west", "hq"] },
   { id: "marigold", name: "Sage Marigold", hue: 120, prefs: { herbs: 1_200, minerals: -600 }, route: ["hq", "village_west", "forest_gate", "forest", "ruins", "forest", "forest_gate", "village_west", "hq"] },
   { id: "tom", name: "Timber Tom", hue: 30, prefs: { wood: 1_200, fish: -600 }, route: ["hq", "village_west", "forest_gate", "lake", "ruins", "forest", "forest_gate", "village_west", "hq"] },

@@ -428,7 +428,7 @@ export function generateWorld(seed = WORLD_SEED): WorldDef {
     { id: "smithy", label: "Forge", tx: 172, ty: 44 },
     { id: "glade_spawn", label: "Keeper's Glade", tx: GLADE_X0 + 4, ty: 48 },
     { id: "glade_goal", label: "Goal flag", tx: GLADE_X0 + 16, ty: 48 },
-    { id: "glade_stall", label: "The Keeper", tx: GLADE_X0 + 31, ty: 29 },
+    { id: "glade_stall", label: "Merchant Mari", tx: GLADE_X0 + 31, ty: 29 },
     { id: "glade_bandit", label: "Training Bandit", tx: GLADE_X0 + 13, ty: 30 },
     { id: "glade_market", label: "Market stall", tx: GLADE_X0 + 12, ty: 11 },
     { id: "glade_exit", label: "Portal to Paw Village", tx: GLADE_X0 + 32, ty: 10 },
