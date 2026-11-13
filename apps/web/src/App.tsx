@@ -5,12 +5,12 @@ import { boot } from "./net/api.ts";
 import { ActionBar, BanditFightPopup, BottomNav, Joystick, PetCard, Toasts, TopBar } from "./ui/Hud.tsx";
 import { Sheets } from "./ui/Sheets.tsx";
 import { FairnessScreen, WalletScreen } from "./ui/Screens.tsx";
-import { BagScreen, CollectionScreen, MarketScreen, RanksScreen } from "./ui/GamePages.tsx";
+import { BagScreen, CollectionScreen, DesktopCatchScreen, MarketScreen, RanksScreen } from "./ui/GamePages.tsx";
 import { AreaBanner, MapScreen, MiniMap } from "./ui/WorldHud.tsx";
 import { EconomyGuide } from "./ui/EconomyGuide.tsx";
 import { MinigameLayer } from "./ui/Minigame.tsx";
 import { BubbleInvite, BubbleScreen } from "./ui/Bubble.tsx";
-import { Journey, PhoneCatch, WelcomeBack } from "./ui/Journey.tsx";
+import { isDesktop, Journey, PhoneCatch, WelcomeBack } from "./ui/Journey.tsx";
 import { TutorialCoach } from "./ui/Tutorial.tsx";
 import { MusicToggle } from "./ui/MusicToggle.tsx";
 import { music } from "./ui/music.ts";
@@ -192,7 +192,7 @@ function Shell() {
         {screen === "ranks" && <RanksScreen />}
         {screen === "wallet" && <WalletScreen />}
         {screen === "fairness" && <FairnessScreen />}
-        {screen === "catch" && <Suspense fallback={<div className="catch" />}><CatchScreen /></Suspense>}
+        {screen === "catch" && (isDesktop() ? <DesktopCatchScreen /> : <Suspense fallback={<div className="catch" />}><CatchScreen /></Suspense>)}
         {(screen === "world" || screen === "map") && !tutorial && <BottomNav />}
         <Toasts />
       </div>

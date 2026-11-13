@@ -15,6 +15,7 @@ import { CollectorCard, cardFromPet } from "./CollectorCard.tsx";
 import { GearTab, StrategyTab, WalletTab } from "./Pets.tsx";
 import { genUrl } from "../game/assets.ts";
 import { sfx } from "./sfx.ts";
+import { PhoneHandoff } from "./Journey.tsx";
 
 const backToGame = () => store.set({ screen: "world", petScreen: null, sheet: null });
 
@@ -145,10 +146,15 @@ export function MarketScreen() {
       setConfirm(null); list.reload(); await refreshWallet();
     } catch (e) { toast("bad", (e as Error).message); setConfirm(null); list.reload(); }
   };
-  const cardW = Math.min(150, Math.floor((Math.min(window.innerWidth, 560) - 56) / 2));
+  const wide = window.innerWidth >= 900;
+  const cardW = wide ? 196 : Math.min(150, Math.floor((Math.min(window.innerWidth, 560) - 76) / 2));
   return (
     <PageFrame title="Marketplace" icon="prop-stall-0" theme="t-market" right={<span className="gpage-coins"><img src={genUrl("ui-coin")} alt="" />{fmt(wallet?.available)}</span>}>
       <div className="awning" aria-hidden />
+      <div className="mkt-hero">
+        <img src={genUrl("prop-stall-0")} alt="" />
+        <div><b>Paw Market</b><span>Adopt rare friends from other Keepers — or sell your own!</span></div>
+      </div>
       <div className="gtabs big">
         <button className={tab === "buy" ? "on" : ""} onClick={() => setTab("buy")}>🛒 Buy pets</button>
         <button className={tab === "sell" ? "on" : ""} onClick={() => setTab("sell")}>🏷️ Sell my pet</button>
@@ -165,7 +171,7 @@ export function MarketScreen() {
             {list.data?.listings.filter((l) => l.pet_id).map((l, i) => {
               const mine = l.seller_id === userId;
               return (
-                <div key={l.id} className="shelf-item" style={{ animationDelay: `${i * 60}ms` }}>
+                <div key={l.id} className={`shelf-item r-${l.pet_rarity ?? "common"}`} style={{ animationDelay: `${i * 60}ms` }}>
                   <CollectorCard width={cardW} card={{ id: l.pet_id!, name: l.name ?? "Pet", species: l.species ?? "cat", rarity: l.pet_rarity ?? "common", sticker: l.sticker, look: l.look ?? ({ hue: 30, outline: 0, pattern: 0, bounce: 100 } as never), stats: l.stats ?? null, traits: l.traits }} />
                   <div className="price-tag"><img src={genUrl("ui-coin")} alt="" />{fmt(l.price)}</div>
                   <small className="seller">by {mine ? "you" : l.seller}{BigInt(l.pet_balance || "0") > 0n ? ` · comes with ${fmt(l.pet_balance)}` : ""}</small>
@@ -292,6 +298,29 @@ export function RanksScreen() {
           </div>
         ))}
       </div>
+    </PageFrame>
+  );
+}
+
+/** Computers have no catching camera: show the phone QR, then reveal the new pet when it arrives. */
+export function DesktopCatchScreen() {
+  const own = useStore((s) => s.own);
+  const [start] = useState(() => new Set(store.get().own.map((p) => p.id)));
+  const fresh = own.find((p) => !start.has(p.id)) ?? null;
+  return (
+    <PageFrame title="Catch a pet" icon="cube-excited" theme="catchp">
+      {fresh ? (
+        <div className="dcatch-reveal">
+          <h2 className="dcatch-title">New friend caught!</h2>
+          <CollectorCard flipIn width={260} card={cardFromPet(fresh)} />
+          <button className="game-btn start" onClick={backToGame}><span className="gb-label">Back to the game</span></button>
+        </div>
+      ) : (
+        <div className="dcatch">
+          <p className="dcatch-lead">Catching uses your phone's camera. Scan the code, point your phone at a real cat or dog, and throw a CamiCube!</p>
+          <PhoneHandoff />
+        </div>
+      )}
     </PageFrame>
   );
 }

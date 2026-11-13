@@ -177,6 +177,9 @@ function onMessage(m: ServerMsg) {
         bubbleInvite: s.bubbleInvite?.matchId === m.match.id && m.match.state !== "invited" ? null : s.bubbleInvite,
       }));
       break;
+    case "bandit_duel":
+      store.set({ banditDuel: { duelId: m.duelId, banditName: m.banditName, petName: m.petName, brave: m.brave, practice: m.practice, rounds: m.rounds, deadlineMs: m.deadlineMs, at: Date.now() }, sheet: null, minigame: null });
+      break;
     case "bandit_fight":
       store.set({ banditFight: { banditName: m.banditName, petName: m.petName, won: m.won, stolen: m.stolen, brave: m.brave, at: Date.now() } });
       break;

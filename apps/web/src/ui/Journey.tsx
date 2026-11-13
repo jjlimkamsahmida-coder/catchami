@@ -372,7 +372,7 @@ function MissionDemo() {
 }
 
 /** Laptop: show a QR the phone scans to continue the same account on its camera. */
-function PhoneHandoff() {
+export function PhoneHandoff() {
   const [qr, setQr] = useState<{ url: string; img: string; expiresAt: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const make = async () => {

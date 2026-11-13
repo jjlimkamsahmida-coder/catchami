@@ -212,8 +212,6 @@ export function ActionBar() {
   const ko = p.status === "knocked_out";
   const koReady = ko && p.koUntil !== null && Date.now() >= p.koUntil;
   const btns: React.ReactNode[] = [];
-  if (m && inventoryWeight(p.carried) > 0) btns.push(<button key="sell" className="btn leaf" onClick={() => store.set({ sheet: { kind: "merchant", id: m.id } })}>Sell to {m.name.startsWith("The ") ? m.name.slice(4) : m.name.split(" ")[0]}</button>);
-  if (node && !ko) btns.push(<button key="gather" className="btn" disabled={(nodes[node.id] ?? 1) <= 0} onClick={() => send({ t: "gather", petId: p.id, nodeId: node.id })}><ResIcon r={node.resource} /> Gather</button>);
   // The tutorial teaches one thing per stage: only selling and gathering show up there.
   if (tut) return btns.length ? <div className="actions">{btns}</div> : null;
   if (p.hunger > 300 && !ko) {
@@ -280,29 +278,4 @@ export function Toasts() {
   return <div className="toasts">{toasts.map((t) => <div key={t.id} className={`toast panel ${t.kind}`}>{t.text}</div>)}</div>;
 }
 
-/** Quick "bandit battle" popup: both fighters clash, then the result. */
-export function BanditFightPopup() {
-  const f = useStore((s) => s.banditFight);
-  const pet = useStore(controlledPet);
-  const [phase, setPhase] = useState<"clash" | "result" | null>(null);
-  useEffect(() => {
-    if (!f) return;
-    setPhase("clash"); sfx.whoosh();
-    const t1 = setTimeout(() => { setPhase("result"); if (f.won) sfx.win(); else sfx.bad(); }, 1200);
-    const t2 = setTimeout(() => setPhase(null), 3600);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, [f?.at]);
-  if (!f || !phase) return null;
-  return (
-    <div className={`bfight ${phase} ${f.won ? "won" : "lost"}`} onClick={() => setPhase(null)}>
-      <div className="bfight-title">{f.brave ? "⚔️ You challenged a bandit!" : "⚠️ Bandit ambush!"}</div>
-      <div className="bfight-stage">
-        <div className="bf-side pet">{pet ? <PetArt sticker={pet.sticker} species={pet.species} look={pet.look} /> : null}<b>{f.petName}</b></div>
-        <span className="bf-vs">VS</span>
-        <div className="bf-side bandit"><span className="bf-bandit">🦝</span><b>{f.banditName}</b></div>
-        {phase === "clash" && <span className="bf-boom">💥</span>}
-      </div>
-      {phase === "result" && <div className="bfight-result">{f.won ? `${f.petName} wins! The bandit ran off.` : f.stolen ? `${f.banditName} stole ${f.stolen}!` : f.banditName === "Training Bandit" ? "It dodged! Tap it and try again." : `${f.banditName} won — but your bag was empty!`}</div>}
-    </div>
-  );
-}
+export { BanditFightPopup } from "./BanditBattle.tsx";

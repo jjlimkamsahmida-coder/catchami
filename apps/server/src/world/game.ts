@@ -835,6 +835,7 @@ export class Game {
         manual(p);
         return;
       }
+      case "duel_input": { this.bandits.duelInput(c.userId, String(msg.duelId), Number(msg.hits)); return; }
       case "fight_bandit": {
         const p = own(msg.petId);
         this.bandits.challenge(p, msg.banditId, now);

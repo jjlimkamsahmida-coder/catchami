@@ -209,7 +209,9 @@ describe("bandits", () => {
     b.nextThink = 0;
     const rnd = Math.random;
     Math.random = () => 0.99; // force the bandit to win the scuffle
-    for (let i = 0; i < 20 && p.s.inventory.wood > 0; i++) { t += 100; game.bandits.step(0.1, t); }
+    for (let i = 0; i < 20 && (b.state as string) !== "duel"; i++) { t += 100; game.bandits.step(0.1, t); }
+    expect(b.state).toBe("duel"); // caught: the battle minigame starts
+    t += 15_000; game.bandits.step(0.1, t); // nobody played it: resolves with no hits
     Math.random = rnd;
     expect(p.s.inventory.wood).toBe(0);
     expect(b.state).toBe("flee");
@@ -218,6 +220,8 @@ describe("bandits", () => {
     b.state = "wander"; b.x = p.s.x + 10; b.y = p.s.y;
     Math.random = () => 0.01;
     game.bandits.challenge(p, b.id, t);
+    expect(b.state).toBe("duel");
+    t += 15_000; game.bandits.step(0.1, t);
     Math.random = rnd;
     expect(p.s.inventory.herbs).toBe(40);
     // A pet in Paw Village is safe even right next to a bandit.

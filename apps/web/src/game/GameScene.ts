@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { AREA_BOUNDS, areaAt, decodeTiles, GLADE_ARENAS, gladeArenaAt, generateWorld, PROP_SIZE, RARITY_LABEL, T, type BattleEvent, type Prop, type Resource, type WorldDef } from "@catchami/shared";
+import { ECONOMY, GATE_Y, MINES_X0, VILLAGE_X0, AREA_BOUNDS, areaAt, decodeTiles, GLADE_ARENAS, gladeArenaAt, generateWorld, PROP_SIZE, RARITY_LABEL, T, type BattleEvent, type Prop, type Resource, type WorldDef } from "@catchami/shared";
 import { entities, store, type PetEntity } from "../net/store.ts";
 import { send, serverNow } from "../net/api.ts";
 import * as art from "./art.ts";
@@ -18,8 +18,10 @@ interface PetSprite { root: Phaser.GameObjects.Container; body: Phaser.GameObjec
 export class GameScene extends Phaser.Scene {
   private pets = new Map<string, PetSprite>();
   private merchants = new Map<string, Phaser.GameObjects.Container>();
+  /** Floating "Open shop" button over each merchant (shown when your pet is next to them). */
+  private merchantBtns = new Map<string, Phaser.GameObjects.Container>();
   private bandits = new Map<string, { c: Phaser.GameObjects.Container; img: Phaser.GameObjects.Image; alert: Phaser.GameObjects.Text; ring: Phaser.GameObjects.Graphics }>();
-  private nodes = new Map<string, { img: Phaser.GameObjects.Image; badge: Phaser.GameObjects.Text; res: Resource; depleted: boolean }>();
+  private nodes = new Map<string, { img: Phaser.GameObjects.Image; badge: Phaser.GameObjects.Text; res: Resource; depleted: boolean; btn: Phaser.GameObjects.Container }>();
   private built = false;
   private keys: Record<string, Phaser.Input.Keyboard.Key> = {};
   private lastMove = 0;
@@ -144,9 +146,24 @@ export class GameScene extends Phaser.Scene {
         this.tweens.add({ targets: bl, angle: 360, duration: 9000, repeat: -1 });
       }
       if (p.kind === "portal" || p.kind === "glowcrystal" || p.kind === "lamp") this.tweens.add({ targets: img, alpha: { from: 1, to: 0.8 }, duration: 1300 + (p.tx % 5) * 200, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
-      if (p.kind === "banner") this.tweens.add({ targets: img, scaleX: { from: 1, to: 0.92 }, duration: 900, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      if (p.kind === "banner") this.tweens.add({ targets: img, scaleX: { from: img.scaleX, to: img.scaleX * 0.92 }, duration: 900, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
     }
 
+    // Warp rings where the roads cross between areas (and at the glade portal).
+    const exit = s.pois.find((q) => q.id === "glade_exit");
+    for (const [wx, wy] of [[VILLAGE_X0 * TILE, (GATE_Y + 1) * TILE], [MINES_X0 * TILE, (GATE_Y + 1) * TILE], ...(exit ? [[exit.tx * TILE + 16, exit.ty * TILE + 16]] : [])] as Array<[number, number]>) this.warpRing(wx, wy);
+    const goal = s.pois.find((q) => q.id === "glade_goal");
+    if (goal) {
+      const gx = goal.tx * TILE + 16, gy = goal.ty * TILE + 16;
+      const ring = this.add.graphics({ x: gx, y: gy }).setDepth(-50);
+      ring.fillStyle(0xffd166, 0.32).fillEllipse(0, 0, 92, 40);
+      ring.lineStyle(4, 0xffd166, 0.95).strokeEllipse(0, 0, 92, 40);
+      ring.lineStyle(2, 0xffffff, 0.8).strokeEllipse(0, 0, 70, 30);
+      this.tweens.add({ targets: ring, scale: { from: 0.9, to: 1.12 }, alpha: { from: 1, to: 0.6 }, duration: 800, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      const pulse = this.add.graphics({ x: gx, y: gy }).setDepth(-49);
+      pulse.lineStyle(3, 0xffffff, 1).strokeEllipse(0, 0, 92, 40);
+      this.tweens.add({ targets: pulse, scale: { from: 0.6, to: 1.6 }, alpha: { from: 0.9, to: 0 }, duration: 1300, repeat: -1, ease: "Cubic.easeOut" });
+    }
     for (const n of s.nodesDef) {
       const x = n.tx * TILE + 16, y = n.ty * TILE + 30;
       const img = this.add.image(x, y + 4, `node-${n.resource}`).setOrigin(0.5, 1).setDepth(y).setInteractive({ useHandCursor: true });
@@ -154,7 +171,17 @@ export class GameScene extends Phaser.Scene {
       // Tap a spot: the pet walks over and starts gathering right away (no sheet).
       img.on("pointerup", () => { const s = store.get(); const pid = s.controlled; if (!pid) return; send({ t: "gather", petId: pid, nodeId: n.id }); this.tapMarker(img.x, img.y - 6); });
       const badge = this.add.text(x, y - 58, "", { fontFamily: "Fredoka", fontSize: "13px", color: "#2b1d3a", backgroundColor: "#fff6e5", padding: { x: 5, y: 1 } }).setOrigin(0.5).setDepth(9000).setAlpha(0);
-      this.nodes.set(n.id, { img, badge, res: n.resource, depleted: false });
+      const bg = this.add.graphics();
+      bg.fillStyle(0x2b1d3a, 1).fillRoundedRect(-50, -15, 100, 36, 18);
+      bg.fillStyle(0x6cc04a, 1).fillRoundedRect(-50, -18, 100, 34, 17);
+      bg.lineStyle(3, 0x2b1d3a, 1).strokeRoundedRect(-50, -18, 100, 34, 17);
+      bg.fillStyle(0xffffff, 0.35).fillRoundedRect(-42, -14, 84, 9, 5);
+      const label = this.add.text(0, -1, "✋ Gather!", { fontFamily: "Fredoka", fontSize: "17px", fontStyle: "bold", color: "#ffffff", stroke: "#2b1d3a", strokeThickness: 4 }).setOrigin(0.5);
+      const btn = this.add.container(x, y - 110, [bg, label]).setDepth(9001).setVisible(false);
+      btn.setSize(100, 36).setInteractive(new Phaser.Geom.Rectangle(0, 0, 100, 36), Phaser.Geom.Rectangle.Contains);
+      btn.on("pointerup", () => { const pid = store.get().controlled; if (!pid) return; send({ t: "gather", petId: pid, nodeId: n.id }); btn.setVisible(false); });
+      this.tweens.add({ targets: btn, y: y - 116, duration: 520, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      this.nodes.set(n.id, { img, badge, res: n.resource, depleted: false, btn });
     }
     const hq = s.hq!;
     this.cameras.main.centerOn(hq.tx * TILE, (hq.ty + 4) * TILE);
@@ -216,6 +243,44 @@ export class GameScene extends Phaser.Scene {
   private onFocus = (e: CustomEvent<{ x: number; y: number }>) => {
     this.cameras.main.pan(e.detail.x, e.detail.y, 600, "Sine.easeInOut");
   };
+
+  /** A glowing, swirling warp circle on the ground. */
+  private warpRing(x: number, y: number) {
+    const base = this.add.graphics({ x, y }).setDepth(-60);
+    base.fillStyle(0x7b5cff, 0.25).fillEllipse(0, 0, 110, 46);
+    base.fillStyle(0x5ad8ff, 0.3).fillEllipse(0, 0, 76, 32);
+    base.lineStyle(4, 0x9f8bff, 0.95).strokeEllipse(0, 0, 110, 46);
+    base.lineStyle(2, 0xffffff, 0.85).strokeEllipse(0, 0, 76, 32);
+    this.tweens.add({ targets: base, alpha: { from: 1, to: 0.65 }, duration: 900, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+    // Swirl: dots orbiting the ellipse.
+    const dots = this.add.graphics({ x, y }).setDepth(-59);
+    let a = 0;
+    this.time.addEvent({ delay: 33, loop: true, callback: () => {
+      a += 0.08; dots.clear();
+      for (let i = 0; i < 6; i++) { const t = a + (i * Math.PI) / 3; dots.fillStyle(i % 2 ? 0xffffff : 0x9ff0ff, 0.95).fillCircle(Math.cos(t) * 46, Math.sin(t) * 19, 3.2); }
+    } });
+    // Rising sparkles.
+    for (let i = 0; i < 4; i++) {
+      const sp = this.add.image(x + (i - 1.5) * 18, y, "sparkle").setDepth(y + 1).setAlpha(0).setTint(0xb8a8ff);
+      this.tweens.add({ targets: sp, y: y - 60, alpha: { from: 0.9, to: 0 }, duration: 1500, delay: i * 350, repeat: -1, ease: "Sine.easeOut" });
+    }
+  }
+
+  private pillButton(text: string, fill: number, w: number, onTap: () => void): Phaser.GameObjects.Container {
+    const h = 34;
+    const bg = this.add.graphics();
+    bg.fillStyle(0x2b1d3a, 1).fillRoundedRect(-w / 2, -h / 2 + 3, w, h, h / 2);
+    bg.fillStyle(fill, 1).fillRoundedRect(-w / 2, -h / 2, w, h, h / 2);
+    bg.lineStyle(3, 0x2b1d3a, 1).strokeRoundedRect(-w / 2, -h / 2, w, h, h / 2);
+    bg.fillStyle(0xffffff, 0.35).fillRoundedRect(-w / 2 + 8, -h / 2 + 4, w - 16, 9, 5);
+    const label = this.add.text(0, 0, text, { fontFamily: "Fredoka", fontSize: "16px", fontStyle: "bold", color: "#ffffff", stroke: "#2b1d3a", strokeThickness: 4 }).setOrigin(0.5);
+    const c = this.add.container(0, 0, [bg, label]).setDepth(9001).setVisible(false);
+    c.setSize(w, h + 6).setInteractive(new Phaser.Geom.Rectangle(0, 0, w, h + 6), Phaser.Geom.Rectangle.Contains);
+    c.on("pointerdown", () => c.setScale(0.92));
+    c.on("pointerout", () => c.setScale(1));
+    c.on("pointerup", () => { c.setScale(1); this.tweens.add({ targets: c, scale: { from: 1.15, to: 1 }, duration: 180 }); onTap(); });
+    return c;
+  }
 
   private tapMarker(x: number, y: number) {
     const g = this.add.graphics({ x, y }).setDepth(5);
@@ -356,8 +421,10 @@ export class GameScene extends Phaser.Scene {
         const label = this.add.text(0, -MERCHANT_HEIGHT - 10, m.name, { fontFamily: "Fredoka", fontSize: "12px", color: "#2b1d3a", backgroundColor: "#ffd166", padding: { x: 6, y: 2 } }).setOrigin(0.5);
         c = this.add.container(m.x, m.y, [glow, img, label]);
         c.setSize(56, 64).setInteractive(new Phaser.Geom.Rectangle(0, -30, 56, 66), Phaser.Geom.Rectangle.Contains);
-        c.on("pointerup", () => store.set({ sheet: { kind: "merchant", id: m.id } }));
+        c.on("pointerup", () => { const mm = store.get().merchants.find((q) => q.id === m.id); if (mm) { send({ t: "goto", x: mm.x, y: mm.y + 30 }); this.tapMarker(mm.x, mm.y + 30); } });
         this.merchants.set(m.id, c);
+        const shop = this.pillButton("🛒 Open shop", 0x6cc04a, 136, () => store.set({ sheet: { kind: "merchant", id: m.id } }));
+        this.merchantBtns.set(m.id, shop);
       }
       c.x += (m.x - c.x) * 0.15;
       c.y += (m.y - c.y) * 0.15;
@@ -368,7 +435,10 @@ export class GameScene extends Phaser.Scene {
       img.y = Math.abs(Math.sin(time / 180)) * -3;
       const glow = c.list[0] as Phaser.GameObjects.Graphics;
       glow.clear();
-      if (cpos && visible && Math.hypot(cpos[0] - m.x, cpos[1] - m.y) <= 72) glow.lineStyle(3, 0xffd166, 0.9 - 0.3 * Math.sin(time / 200)).strokeEllipse(0, 0, 70, 24);
+      const near = !!cpos && visible && Math.hypot(cpos[0] - m.x, cpos[1] - m.y) <= ECONOMY.merchants.interactRangePx;
+      if (near) glow.lineStyle(3, 0xffd166, 0.9 - 0.3 * Math.sin(time / 200)).strokeEllipse(0, 0, 70, 24);
+      const mb = this.merchantBtns.get(m.id);
+      if (mb) mb.setVisible(near && !store.get().sheet).setPosition(c.x, c.y - MERCHANT_HEIGHT - 44 + Math.sin(time / 260) * 3);
     }
     // Bandits: masked thieves; a red "!" and ring while chasing.
     const seenB = new Set<string>();
@@ -410,6 +480,7 @@ export class GameScene extends Phaser.Scene {
       const dep = rem <= 0;
       if (dep !== n.depleted) { n.depleted = dep; n.img.setTexture(`node-${n.res}${dep ? "-empty" : ""}`); this.fitNode(n.img); }
       const near = cpos && Math.hypot(cpos[0] - n.img.x, cpos[1] - n.img.y) < 160;
+      n.btn.setVisible(!dep && !s.minigame && !!cpos && Math.hypot(cpos[0] - n.img.x, cpos[1] - n.img.y) < 120);
       n.badge.setText(dep ? "regrowing" : `${rem >= 1000 ? `${Math.round(rem / 1000)}k` : rem} left`).setAlpha(near ? 1 : 0);
     }
   }

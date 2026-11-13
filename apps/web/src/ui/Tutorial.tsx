@@ -82,18 +82,18 @@ const STAGES: Stage[] = [
   {
     name: "Trading", icon: "🪙", learn: ["Selling to merchants", "Buying food"],
     steps: [
-      { title: "Sell to a merchant", pose: "point", text: () => "Merchants buy what you gather. Today I'm your merchant! Walk over to me, tap me, and sell your haul for coins.", goal: "sell", goalText: "Sell your resources to the Keeper", target: () => poi("glade_stall") },
-      { title: "Time for a snack", pose: "wave", text: (n) => `Merchants sell food too! Tap me again and buy a meal — it fills ${n} up and restores energy. Meals cost ${fmt(ECONOMY.food.price)}.`, goal: "meal", goalText: "Buy a meal from the Keeper", target: () => poi("glade_stall") },
+      { title: "Sell to a merchant", pose: "point", text: () => "Merchants buy what you gather. Today I'm your merchant! Walk over to me, tap “Open shop”, then sell your haul for coins.", goal: "sell", goalText: "Sell your resources to the Keeper", target: () => poi("glade_stall") },
+      { title: "Time for a snack", pose: "wave", text: (n) => `Merchants sell food too! Open my shop again and buy a meal — it fills ${n} up and restores energy. Meals cost ${fmt(ECONOMY.food.price)}.`, goal: "meal", goalText: "Buy a meal from the Keeper", target: () => poi("glade_stall") },
     ],
   },
   {
-    name: "Danger!", icon: "⚔️", learn: ["Bandits", "Fighting back"],
+    name: "Danger!", icon: "⚔️", learn: ["Bandits", "Battle minigame"],
     steps: [
       {
-        title: "Watch out for bandits", pose: "point", text: () => "Out in the Forest and Mining Valley, masked bandits chase pets carrying loot — if they catch you, they steal everything! Run when you see a red “!”, or stand and fight. The village is always safe.",
+        title: "Bandits!", pose: "point", text: (n) => `Out in the wild, masked bandits chase pets carrying loot — lose a battle and they steal your whole bag! This Training Bandit is just for practice. When it charges, tap ATTACK while the marker is in the red zone. Show it what ${n} can do!`,
+        goal: "fight", goalText: "Beat the Training Bandit", target: trainingBandit,
         extra: () => <div className="tut-bandit"><span className="tb-mask" /><b>Bandit</b><span className="tb-alert">!</span></div>,
       },
-      { title: "Practice fight!", pose: "point", text: (n) => `This Training Bandit won't steal anything. Walk up to it, tap it, and hit Fight! Strong, healthy pets win more often — show it what ${n} can do!`, goal: "fight", goalText: "Beat the Training Bandit", target: trainingBandit },
     ],
   },
   {
@@ -256,7 +256,7 @@ export function TutorialCoach() {
   const lastStage = n === total;
 
   if (phase === "intro") return (
-    <div className="stage-card-wrap">
+    <div key="stage-intro" className="stage-card-wrap">
       <div className="stage-card panel">
         <div className="stage-pips">{STAGES.map((_, i) => <i key={i} className={i < cur.stage ? "done" : i === cur.stage ? "now" : ""} />)}</div>
         <span className="stage-kicker">Stage {n} of {total}</span>
@@ -273,7 +273,7 @@ export function TutorialCoach() {
   );
 
   if (phase === "clear") return (
-    <div className="stage-card-wrap clear">
+    <div key="stage-clear" className="stage-card-wrap clear">
       <div className="confetti-burst" style={{ left: "50%", top: "38%" }}>{Array.from({ length: 30 }, (_, k) => <i key={k} style={{ "--a": `${k * 12}deg`, "--d": `${110 + (k % 5) * 36}px`, "--c": ["#ff7a59", "#ffd166", "#6cc04a", "#5ab8ff", "#a66bf2", "#f0569c"][k % 6], animationDelay: `${(k % 4) * 40}ms` } as React.CSSProperties} />)}</div>
       <div className="stage-card panel">
         <div className="stage-stars">{[0, 1, 2].map((i) => <span key={i} style={{ animationDelay: `${150 + i * 180}ms` }}>★</span>)}</div>
@@ -287,8 +287,8 @@ export function TutorialCoach() {
 
   return (
     <>
-      <div ref={arrow} className="tut-arrow" style={{ display: "none" }}><span>➜</span><small /></div>
-      <div ref={card} className={`tut-card sticky panel ${min ? "min" : ""}`}>
+      <div key="arrow" ref={arrow} className="tut-arrow" style={{ display: "none" }}><span>➜</span><small /></div>
+      <div key="card" ref={card} className={`tut-card sticky panel ${min ? "min" : ""}`}>
         <button className="tut-min" onClick={() => setMin((v) => !v)} aria-label={min ? "Expand" : "Minimise"}>{min ? "▴" : "▾"}</button>
         <Keeper size={62} cube={false} className="mini" pose={cur.pose} />
         <div className="tut-body">

@@ -5,12 +5,12 @@
  * the Keeper's Glade are safe. Bandits are a little slower than pets, so a
  * watchful player can always dodge them.
  */
-import { AREA_BOUNDS, areaAt, findPath, inventoryWeight, RESOURCES, tileCenter, toTile, walkable, emptyInventory, Rng, type AreaId } from "@catchami/shared";
+import { AREA_BOUNDS, areaAt, findPath, gladeArenaAt, inventoryWeight, RESOURCES, tileCenter, toTile, walkable, emptyInventory, Rng, type AreaId } from "@catchami/shared";
 import type { Game } from "./game.ts";
 import { GameError } from "./game.ts";
 import type { PetRt } from "./types.ts";
 
-export type BanditState = "wander" | "chase" | "flee";
+export type BanditState = "wander" | "chase" | "flee" | "duel";
 export interface BanditRt {
   id: string; name: string; home: AreaId; x: number; y: number; facing: 1 | -1;
   path: Array<[number, number]>; state: BanditState; target: string | null;
@@ -26,10 +26,17 @@ const GIVE_UP = 460;    // px: stops chasing beyond this
 const CATCH = 30;       // px: close enough to steal
 const CALM_MS = 22_000; // after a theft, ignores pets for a while
 const PER_AREA: Partial<Record<AreaId, number>> = { forest: 4, mines: 3 };
+const DUEL_ROUNDS = 3;
+const DUEL_MS = 14_000; // the player has this long to play the attack minigame
+interface Duel { id: string; banditId: string; petId: string; ownerId: string; brave: boolean; deadline: number }
 
 export class Bandits {
   list: BanditRt[] = [];
   private rng = Rng.fromString("catchami-bandits");
+  private duels = new Map<string, Duel>();
+  /** When each pet entered the training arena (the Training Bandit lets them settle in first). */
+  private arrived = new Map<string, number>();
+  private duelSeq = 0;
 
   private game: Game;
   constructor(game: Game) {
@@ -79,11 +86,10 @@ export class Bandits {
   }
 
   step(dt: number, now: number) {
+    this.tickDuels(now);
     for (const b of this.list) {
-      if (b.practice) { // just bobs around its spot
-        if (b.state === "flee" && now > b.calmUntil) { b.state = "wander"; b.x = b.homeX!; b.y = b.homeY!; }
-        continue;
-      }
+      if (b.practice) { this.stepPractice(b, dt, now); continue; }
+      if (b.state === "duel") continue; // frozen while the battle plays out
       // Think (choose targets / paths) a few times a second.
       if (now >= b.nextThink) {
         b.nextThink = now + (b.state === "chase" ? 450 : 900);
@@ -113,9 +119,67 @@ export class Bandits {
       // Catch!
       if (b.state === "chase" && b.target) {
         const p = this.game.pets.get(b.target);
-        if (p && Math.hypot(p.s.x - b.x, p.s.y - b.y) < CATCH) this.fight(b, p, now, false);
+        if (p && Math.hypot(p.s.x - b.x, p.s.y - b.y) < CATCH) this.startDuel(b, p, now, false);
       }
     }
+  }
+
+  /** Training Bandit: waits at home, then runs at any pet in its arena and starts a battle. */
+  private stepPractice(b: BanditRt, dt: number, now: number) {
+    if (b.state === "duel") return;
+    if (b.state === "flee") { if (now > b.calmUntil) { b.state = "wander"; b.x = b.homeX!; b.y = b.homeY!; b.path = []; } return; }
+    const arena = gladeArenaAt(toTile(b.homeX!), toTile(b.homeY!));
+    let target: PetRt | null = null, bd = Infinity;
+    if (now >= b.calmUntil) for (const p of this.game.pets.values()) {
+      if (p.s.status === "knocked_out" || this.duelFor(p.id)) continue;
+      if (gladeArenaAt(toTile(p.s.x), toTile(p.s.y)) !== arena) { this.arrived.delete(p.id); continue; }
+      if (!this.arrived.has(p.id)) this.arrived.set(p.id, now);
+      if (now - this.arrived.get(p.id)! < 3_000) continue;
+      const d = Math.hypot(p.s.x - b.x, p.s.y - b.y);
+      if (d < bd) { bd = d; target = p; }
+    }
+    const gx = target ? target.s.x : b.homeX!, gy = target ? target.s.y : b.homeY!;
+    const d = Math.hypot(gx - b.x, gy - b.y);
+    b.state = target ? "chase" : "wander";
+    if (target && d < CATCH + 8) { this.startDuel(b, target, now, false); return; }
+    if (d > 2) {
+      const step = Math.min(d, (target ? 120 : 80) * dt);
+      if (Math.abs(gx - b.x) > 1) b.facing = gx > b.x ? 1 : -1;
+      b.x += ((gx - b.x) / d) * step; b.y += ((gy - b.y) / d) * step;
+    }
+  }
+
+  private duelFor(petId: string) { for (const d of this.duels.values()) if (d.petId === petId) return d; return null; }
+
+  /** Freeze both fighters and ask the owner to play the attack minigame. */
+  private startDuel(b: BanditRt, p: PetRt, now: number, brave: boolean) {
+    if (this.duelFor(p.id)) return;
+    const id = `duel_${++this.duelSeq}_${now}`;
+    this.duels.set(id, { id, banditId: b.id, petId: p.id, ownerId: p.ownerId, brave, deadline: now + DUEL_MS });
+    b.state = "duel"; b.path = []; b.target = p.id;
+    p.path = []; p.moveDir = null; p.task = null; p.round = null; p.dirty = true;
+    this.game.toOwner(p, { t: "bandit_duel", duelId: id, banditId: b.id, banditName: b.name, petId: p.id, petName: p.name, brave, practice: !!b.practice, rounds: DUEL_ROUNDS, deadlineMs: DUEL_MS - 2_000 });
+  }
+
+  /** The owner finished the minigame. */
+  duelInput(userId: string, duelId: string, hits: number) {
+    const d = this.duels.get(duelId);
+    if (!d || d.ownerId !== userId) return;
+    this.resolveDuel(d, Math.max(0, Math.min(DUEL_ROUNDS, Math.floor(hits) || 0)), Date.now());
+  }
+
+  /** Battles nobody played (owner away) resolve on their own with no hits. */
+  tickDuels(now: number) {
+    for (const d of this.duels.values()) if (now >= d.deadline) this.resolveDuel(d, 0, now);
+  }
+
+  private resolveDuel(d: Duel, hits: number, now: number) {
+    this.duels.delete(d.id);
+    const b = this.list.find((x) => x.id === d.banditId);
+    const p = this.game.pets.get(d.petId);
+    if (!b) return;
+    if (!p) { b.state = "wander"; b.target = null; return; }
+    this.fight(b, p, now, d.brave, hits);
   }
 
   /** Player taps "Fight!" on a nearby bandit: braver pets get a better chance. */
@@ -125,19 +189,26 @@ export class Bandits {
     if (p.s.status === "knocked_out") throw new GameError("ko", `${p.name} is knocked out`);
     if (b.state === "flee") throw new GameError("fled", `${b.name} is running away`);
     if (Math.hypot(p.s.x - b.x, p.s.y - b.y) > 140) throw new GameError("too_far", `Get closer to ${b.name}`);
-    this.fight(b, p, now, true);
+    if (b.state === "duel") throw new GameError("busy", `${b.name} is already in a battle`);
+    this.startDuel(b, p, now, true);
   }
 
-  /** A quick battle. Win: the bandit flees empty-handed. Lose: it steals the whole bag. */
-  private fight(b: BanditRt, p: PetRt, now: number, brave: boolean) {
+  /**
+   * Settle a battle. Each landed attack (0-3) adds to the odds. Win: the bandit
+   * flees empty-handed. Lose: it steals the whole bag.
+   */
+  private fight(b: BanditRt, p: PetRt, now: number, brave: boolean, hits = 0) {
     const s = p.stats;
     const hpShare = p.s.hp / s.maxHp;
-    const chance = b.practice ? 0.8 : Math.max(0.2, Math.min(0.85, 0.35 + (s.attack + s.defense - 200) / 400 + (brave ? 0.12 : 0) + (hpShare - 0.5) * 0.2));
+    const chance = b.practice
+      ? [0.15, 0.55, 0.95, 1][hits]!
+      : Math.max(0.1, Math.min(0.95, 0.2 + hits * 0.17 + (s.attack + s.defense - 200) / 400 + (brave ? 0.08 : 0) + (hpShare - 0.5) * 0.2));
     const won = Math.random() < chance;
     if (b.practice) {
       this.game.toastOwner(p, won ? "good" : "info", won ? `${p.name} beat the Training Bandit!` : "The Training Bandit dodged! Practice again — no loot lost.");
       this.game.toOwner(p, { t: "bandit_fight", banditId: b.id, banditName: b.name, petId: p.id, petName: p.name, won, stolen: "", brave });
-      b.state = won ? "flee" : "wander"; b.calmUntil = now + 4_000;
+      b.state = won ? "flee" : "wander"; b.target = null; b.calmUntil = now + (won ? 6_000 : 5_000);
+      if (!won) { b.x = b.homeX!; b.y = b.homeY!; } // back off, then try again
       return;
     }
     let stolen = "";
@@ -176,6 +247,6 @@ export class Bandits {
 
   /** Compact snapshot rows: [id, x, y, state(0 wander · 1 chase · 2 flee), facing]. */
   snapshot(): Array<[string, number, number, number, 1 | -1, string]> {
-    return this.list.map((b) => [b.id, Math.round(b.x), Math.round(b.y), b.state === "chase" ? 1 : b.state === "flee" ? 2 : 0, b.facing, b.name]);
+    return this.list.map((b) => [b.id, Math.round(b.x), Math.round(b.y), b.state === "chase" || b.state === "duel" ? 1 : b.state === "flee" ? 2 : 0, b.facing, b.name]);
   }
 }

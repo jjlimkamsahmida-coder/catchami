@@ -13,7 +13,13 @@ import { sfx } from "./sfx.ts";
 declare global { interface Window { __petAnchor?: { x: number; y: number } } }
 
 const TITLE = { chop: "Chop!", mine: "Strike!", fish: "Hook it!", pull: "Pull!" } as const;
-const HINT = { chop: "Tap when the marker is in the gold zone", mine: "Tap when the pick reaches the glowing spot", fish: "Tap when the fish reaches the bait", pull: "Hold the herb · let go when it glows" } as const;
+const HINT = { chop: "Tap when the log hits the gold zone", mine: "Tap when the pick reaches the glow", fish: "Tap when the fish nibbles the bait", pull: "Hold · let go when it glows" } as const;
+const RES = { chop: "wood", mine: "minerals", fish: "fish", pull: "herbs" } as const;
+const VERB = { chop: "CHOP!", mine: "STRIKE!", fish: "HOOK!", pull: "HOLD" } as const;
+
+/** Good/perfect hits in a row (client-side flair only; the server does the grading). */
+let streak = 0;
+let lastCounted = "";
 
 export function MinigameLayer() {
   const mg = useStore((s) => s.minigame);
@@ -29,10 +35,11 @@ export function MinigameLayer() {
     return () => cancelAnimationFrame(raf);
   }, []);
   const showResult = result && performance.now() - result.at < 1200;
+  if (result && result.roundId !== lastCounted) { lastCounted = result.roundId; streak = result.grade === "miss" ? 0 : streak + 1; }
   if (!pos || (!mg && !showResult) || (mg && mg.round.petId !== controlled)) return showResult && pos ? <ResultPop pos={pos} r={result!} /> : null;
-  const W = 260;
+  const W = Math.min(310, window.innerWidth - 16);
   const left = Math.max(8, Math.min(window.innerWidth - W - 8, pos.x - W / 2));
-  const top = Math.max(70, pos.y - 230);
+  const top = Math.max(70, Math.min(window.innerHeight - 330, pos.y - 300));
   return (
     <>
       {mg && <Panel key={mg.round.id} round={mg.round} receivedAt={mg.receivedAt} style={{ left, top, width: W }} />}
@@ -88,6 +95,17 @@ function Panel({ round, receivedAt, style }: { round: MinigameRound; receivedAt:
     return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
   });
 
+  const inZone = (() => {
+    const p = round.params;
+    if (kind === "chop") return Math.abs(chopMarker(p as ChopRound, elapsed) - (p as ChopRound).center) <= MINIGAMES.chop.good;
+    if (kind === "mine") { const d = Math.abs((((mineAngle(p as MineRound, elapsed) - (p as MineRound).zoneDeg) % 360) + 540) % 360 - 180); return d <= MINIGAMES.mine.goodDeg; }
+    if (kind === "fish") return Math.abs(fishX(p as FishRound, elapsed)) <= MINIGAMES.fish.good;
+    if (holdStart.current === null) return false;
+    const l = pullLoose(p as PullRound, now - holdStart.current);
+    return l >= MINIGAMES.pull.good[0] && l <= MINIGAMES.pull.good[1];
+  })();
+  const holding = kind === "pull" && holdStart.current !== null;
+
   const tapHandlers = kind === "pull"
     ? {
         onPointerDown: (e: React.PointerEvent) => { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); holdStart.current = performance.now(); },
@@ -97,12 +115,14 @@ function Panel({ round, receivedAt, style }: { round: MinigameRound; receivedAt:
     : { onPointerDown: () => submit(performance.now() - receivedAt) };
 
   return (
-    <div className={`mg-panel ${sent.current ? "sent" : ""}`} style={style}>
+    <div className={`mg-panel mg-${kind} ${sent.current ? "sent" : ""}`} style={style}>
       <div className="mg-head">
-        <b>{TITLE[kind]}</b>
-        <span className="mg-timer"><i style={{ width: `${(left / MINIGAMES.timeoutMs) * 100}%` }} /></span>
+        <span className="mg-badge"><img src={genUrl(`icon-${RES[kind]}`)} alt="" /></span>
+        <b className="mg-title">{TITLE[kind]}</b>
+        {streak >= 2 && <span key={streak} className="mg-streak">🔥 x{streak}</span>}
         <button className="mg-x" onClick={() => { send({ t: "mg_stop", petId: round.petId }); store.set({ minigame: null }); }} aria-label="Stop gathering">×</button>
       </div>
+      <span className="mg-timer"><i style={{ width: `${(left / MINIGAMES.timeoutMs) * 100}%` }} /></span>
       <div className="mg-stage" {...tapHandlers}>
         {kind === "chop" && <ChopBar p={round.params as ChopRound} ms={elapsed} />}
         {kind === "mine" && <MineRing p={round.params as MineRound} ms={elapsed} />}
@@ -110,6 +130,9 @@ function Panel({ round, receivedAt, style }: { round: MinigameRound; receivedAt:
         {kind === "pull" && <HerbPull p={round.params as PullRound} holdMs={holdStart.current === null ? 0 : now - holdStart.current} />}
       </div>
       <div className="mg-hint">{HINT[kind]}</div>
+      <button className={`mg-tap ${inZone ? "now" : ""} ${holding ? "holding" : ""}`} disabled={sent.current} {...tapHandlers}>
+        <span>{sent.current ? "Nice!" : inZone ? "NOW!" : holding ? "HOLDING…" : VERB[kind]}</span>
+      </button>
     </div>
   );
 }

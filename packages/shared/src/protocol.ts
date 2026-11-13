@@ -141,7 +141,9 @@ export type ClientMsg =
   | { t: "br_forfeit"; matchId: string }
   | { t: "br_sync" }
   | { t: "tutorial"; petId: string; action: "enter" | "exit" | "stage"; stage?: number }
-  | { t: "fight_bandit"; petId: string; banditId: string };
+  | { t: "fight_bandit"; petId: string; banditId: string }
+  /** Result of the bandit battle minigame: how many of the 3 attacks landed. */
+  | { t: "duel_input"; duelId: string; hits: number };
 
 export interface BattleEvent {
   id: string;
@@ -168,6 +170,8 @@ export type ServerMsg =
     }
   | { t: "snap"; tick: number; p: PetPos[]; m: MerchantPublic[]; b?: BanditRow[] }
   | { t: "bandit_fight"; banditId: string; banditName: string; petId: string; petName: string; won: boolean; stolen: string; brave: boolean }
+  /** A bandit battle begins: play the attack minigame, then send duel_input. */
+  | { t: "bandit_duel"; duelId: string; banditId: string; banditName: string; petId: string; petName: string; brave: boolean; practice: boolean; rounds: number; deadlineMs: number }
   | { t: "meta"; pets: PublicPet[]; nodes: NodeState[] }
   | { t: "own"; pets: OwnPet[]; wallet: { available: Amount }; controlled: string | null }
   | { t: "merchant"; detail: MerchantDetail | null; id: string }
