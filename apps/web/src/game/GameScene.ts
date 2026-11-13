@@ -621,7 +621,10 @@ export function createGame(parent: HTMLElement) {
     scale: { mode: Phaser.Scale.RESIZE, width: Math.max(320, parent.clientWidth || window.innerWidth), height: Math.max(320, parent.clientHeight || window.innerHeight) },
     render: { antialias: true, pixelArt: false, powerPreference: "high-performance" },
     fps: { target: 60 },
-    input: { activePointers: 2 },
+    // windowEvents off: Phaser must not track touches that start on HTML buttons (minigame TAP, joystick...).
+    // Those buttons can vanish mid-tap, the finger-up never reaches Phaser, and its touch pointers stay
+    // stuck "down" — after two minigames the map ignored every tap. Map touches still end on the canvas.
+    input: { activePointers: 2, windowEvents: false },
     loader: { maxParallelDownloads: 96 },
     scene: [GameScene],
   });
