@@ -1711,3 +1711,9 @@ table.lb td:first-child { width: 28px; font-weight: 700; }
 
 /* Any touch device keeps the joystick, even if it also reports a fine pointer (stylus, hybrid). */
 html.has-touch .joystick { display: block !important; }
+
+/* Tutorials that use the bottom menu: the tutorial card sits just above it, never on top of it. */
+.hud.nav-on { --nav-h: calc(86px + var(--safe-bottom)); }
+.hud.tutorial-on.nav-on .tut-card.sticky { bottom: var(--nav-h); min-height: 0; max-height: 30vh; border-radius: 24px; border-bottom: var(--stroke); }
+.hud.tutorial-on.nav-on .joystick { bottom: calc(var(--tut-h, 170px) + var(--nav-h) + 14px); }
+@media (pointer: coarse) { .hud.tutorial-on.nav-on .actions { bottom: calc(var(--tut-h, 170px) + var(--nav-h) + 14px) !important; } }

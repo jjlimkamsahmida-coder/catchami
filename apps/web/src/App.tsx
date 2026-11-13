@@ -181,7 +181,7 @@ function Shell() {
   return (
     <div className="shell">
       <div className="canvas-host" ref={host} />
-      <div className={`hud ${tutorial ? "tutorial-on" : ""}`}>
+      <div className={`hud ${tutorial ? "tutorial-on" : ""} ${tutorial && tutorialShowsNav(tutStep) && (screen === "world" || screen === "map") ? "nav-on" : ""}`}>
         {(screen === "world" || screen === "map") && (<><TopBar /><MusicToggle className="hud-music" /><PetCard />{!tutorial && <AreaBanner />}{!tutorial && <MiniMap />}<Joystick /><ActionBar /><BagFullBanner /><Sheets /><BanditFightPopup /></>)}
         {screen === "map" && <MapScreen />}
         {screen === "world" && <MinigameLayer />}
