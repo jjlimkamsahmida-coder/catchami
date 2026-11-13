@@ -1,0 +1,13 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "buildCommand": "pnpm --filter @catchami/web build && pnpm models"
+  },
+  "deploy": {
+    "startCommand": "node apps/server/src/index.ts",
+    "healthcheckPath": "/api/economy",
+    "healthcheckTimeout": 120,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 5
+  }
+}
