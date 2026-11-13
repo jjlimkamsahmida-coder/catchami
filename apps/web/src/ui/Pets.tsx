@@ -49,7 +49,7 @@ function PetDetail({ p }: { p: OwnPet }) {
         </div>
       </div>
       <div className="seg" style={{ marginBottom: 12 }}>
-        {(["status", "strategy", "wallet"] as Tab[]).map((t) => <button key={t} className={tab === t ? "on" : ""} onClick={() => setTab(t)} style={{ textTransform: "capitalize" }}>{t}</button>)}
+        {(["status", "strategy", "wallet", "gear"] as Tab[]).map((t) => <button key={t} className={tab === t ? "on" : ""} onClick={() => setTab(t)} style={{ textTransform: "capitalize" }}>{t}</button>)}
       </div>
       {tab === "status" && <StatusTab p={p} />}
       {tab === "strategy" && <StrategyTab p={p} />}
@@ -135,7 +135,7 @@ export function StrategyTab({ p }: { p: OwnPet }) {
       </div>
       <div className="card col">
         <h3>Battles</h3>
-        {seg("battle", [["avoid", "Avoid"], ["defensive", "Defend only"], ["balanced", "Balanced"], ["aggressive", "Aggressive"]])}
+        {seg("battle", [["balanced", "Accept challenges"], ["avoid", "Avoid battles"]])}
         <label className="field">Fight only above {Math.round(s.minHpBps / 100)}% HP<input type="range" min={1000} max={10000} step={500} value={s.minHpBps} onChange={(e) => set("minHpBps", Number(e.target.value))} /></label>
         <label className="field">Head to a merchant once carrying {Math.round(s.maxCarryRiskBps / 100)}% of capacity (theft exposure)<input type="range" min={1000} max={10000} step={500} value={s.maxCarryRiskBps} onChange={(e) => set("maxCarryRiskBps", Number(e.target.value))} /></label>
       </div>
@@ -155,18 +155,13 @@ export function WalletTab({ p }: { p: OwnPet }) {
   const wallet = useStore((s) => s.wallet);
   const [amt, setAmt] = useState("");
   const [busy, setBusy] = useState(false);
-  const act = async (kind: "fund" | "withdraw" | "claim") => {
+  const act = async (kind: "fund" | "withdraw") => {
     setBusy(true);
     try {
-      if (kind === "claim") {
-        const r = await api(`/api/pets/${p.id}/claim`, {});
-        toast(r.amount === "0" ? "info" : "good", r.amount === "0" ? `No reward today — ${p.name} drew a zero.` : `${p.name} earned ${fmt(r.amount)} from today's reward pool${r.poolExhausted ? " (pool ran low)" : ""}`);
-      } else {
-        parseTokens(amt);
-        await api(`/api/pets/${p.id}/${kind}`, { amount: amt, rid: rid() });
-        toast("good", kind === "fund" ? `Added ${amt} to ${p.name}` : `Moved ${amt} to your wallet`);
-        setAmt("");
-      }
+      parseTokens(amt);
+      await api(`/api/pets/${p.id}/${kind}`, { amount: amt, rid: rid() });
+      toast("good", kind === "fund" ? `Added ${amt} to ${p.name}` : `Moved ${amt} to your wallet`);
+      setAmt("");
       await refreshWallet();
     } catch (e) { toast("bad", (e as Error).message); } finally { setBusy(false); }
   };
@@ -187,11 +182,6 @@ export function WalletTab({ p }: { p: OwnPet }) {
           <button className="btn paper grow" disabled={busy || !amt || p.listed} onClick={() => act("withdraw")}>Withdraw to wallet</button>
         </div>
         {p.listed && <p className="small muted" style={{ margin: 0 }}>Withdrawals are locked while {p.name} is listed — buyers rely on the shown balance.</p>}
-      </div>
-      <div className="card col">
-        <h3>Daily reward</h3>
-        <p className="small muted" style={{ margin: 0 }}>Paid from HQ's funded daily pool (never more than what's in it). Requires {ECONOMY.rewards.minGatheredToday} resources gathered today and a pet at least one day old. Outcomes can be zero; rarity adds at most 5%.</p>
-        <button className="btn" disabled={busy} onClick={() => act("claim")}>Claim today's reward</button>
       </div>
       <div className="card col">
         <h3>Marketplace</h3>

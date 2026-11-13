@@ -55,8 +55,6 @@ export function AdminPage() {
           <dl className="kv">
             <dt>Merchant allowance</dt><dd>{t(data.treasuryDay.merchantAllowance)}</dd>
             <dt>Granted</dt><dd>{t(data.treasuryDay.merchantGranted)}</dd>
-            <dt>Reward pool</dt><dd>{t(data.treasuryDay.rewardPool)}</dd>
-            <dt>Paid</dt><dd>{t(data.treasuryDay.rewardPaid)}</dd>
             <dt>Treasury factor</dt><dd>{data.treasuryDay.factorBps / 100}%</dd>
           </dl>
           <h3 style={{ marginTop: 10 }}>HQ stock</h3>

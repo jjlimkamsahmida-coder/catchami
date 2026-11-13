@@ -29,7 +29,7 @@ export type EquipmentKind = (typeof EQUIPMENT_KINDS)[number];
 export const PPM = 1_000_000;
 
 export const ECONOMY = {
-  version: "2026-11-07.1",
+  version: "2026-11-13.1",
 
   allocation: {
     hqWhole: 40_000_000_000_000n,
@@ -51,7 +51,8 @@ export const ECONOMY = {
       premium: { common: 100_000, uncommon: 150_000, rare: 250_000, epic: 200_000, legendary: 180_000, mythic: 120_000 },
     } satisfies Record<CatchTier, Record<Rarity, number>>,
     /** Successful catch split (bps). */
-    successSplit: { pet: 8_000, hq: 1_800, team: 200 },
+    /** Successful catch split (bps): a starting purse for the pet, HQ (paid back out to players), the team. */
+    successSplit: { pet: 4_000, hq: 5_000, team: 1_000 },
     /** Valid detection but failed catch: everything to HQ. */
     failedSplit: { hq: 10_000 },
     maxCapturesPerUserPerDay: 30,
@@ -81,13 +82,10 @@ export const ECONOMY = {
     maxHp: 1000,
     maxEnergy: 1000,
     hungerMax: 1000,
-    /** Hunger gained per second (0 = full, 1000 = starving). ~45 min from full to starving (fast for the demo). */
-    hungerPerSec: 1000 / (45 * 60),
+    /** Hunger gained per second (0 = full, 1000 = starving). 5 hours from full to starving: ~6 meals a day of upkeep (~40–50% of a working pet's income in the simulation). */
+    hungerPerSec: 1000 / (5 * 3600),
     starvingEnergyDrainPerSec: 0.6,
     walkEnergyPerSec: 1,
-    gatherEnergyPerUnit: 3,
-    /** Hunger gained per unit gathered (hard work makes pets hungry). */
-    gatherHungerPerUnit: 1.5,
     /** Bags hold this many times their base carry stat ("earn more": every hit gives 10× units). */
     carryScale: 10,
     battleEnergyPerExchange: 12,
@@ -103,23 +101,30 @@ export const ECONOMY = {
     hungerRestore: 350,
     energyRestore: 220,
     fishPerMeal: 10,
+    /** HQ kitchen out of local fish? Meals are imported at this price multiple (bps), so pets never get stuck. */
+    importMultBps: 20_000,
     split: { hq: 9_000, team: 1_000 },
   },
   medicine: {
     price: tokens(60_000),
     herbsPerDose: 20,
+    importMultBps: 20_000,
     /** Heals this share of max HP (bps). Also required to revive after the KO cooldown. */
     healBps: 4_000,
     split: { hq: 9_000, team: 1_000 },
   },
 
-  /** Per-unit prices are tiny on purpose: each hit yields many units (see gather.unitsPerHit). */
+  /**
+   * Every resource is worth the same per bag slot (100 per weight) and costs
+   * energy/hunger in proportion to its weight (energy 1.5×, hunger 0.75×), so
+   * no resource is a "best" grind: pick by price/demand, merchant and species.
+   */
   resources: {
-    fish: { basePrice: tokens(200), weight: 2, gatherMs: 5_000, regenMs: 70_000 },
-    herbs: { basePrice: tokens(260), weight: 1, gatherMs: 4_200, regenMs: 80_000 },
-    wood: { basePrice: tokens(180), weight: 3, gatherMs: 5_500, regenMs: 60_000 },
-    minerals: { basePrice: tokens(320), weight: 4, gatherMs: 7_000, regenMs: 110_000 },
-  } satisfies Record<Resource, { basePrice: bigint; weight: number; gatherMs: number; regenMs: number }>,
+    fish: { basePrice: tokens(200), weight: 2, energy: 3, hunger: 1.5, gatherMs: 5_000, regenMs: 70_000 },
+    herbs: { basePrice: tokens(100), weight: 1, energy: 1.5, hunger: 0.75, gatherMs: 4_200, regenMs: 80_000 },
+    wood: { basePrice: tokens(300), weight: 3, energy: 4.5, hunger: 2.25, gatherMs: 5_500, regenMs: 60_000 },
+    minerals: { basePrice: tokens(400), weight: 4, energy: 6, hunger: 3, gatherMs: 7_000, regenMs: 110_000 },
+  } satisfies Record<Resource, { basePrice: bigint; weight: number; energy: number; hunger: number; gatherMs: number; regenMs: number }>,
 
   gather: {
     /** Units per successful hit (autopilot gathering, and a "good" minigame tap). */
@@ -143,9 +148,14 @@ export const ECONOMY = {
 
   hq: {
     reserveFloorBps: 500, // 5% of the original HQ allocation
-    dailyBudgetBpsOfAvailable: 5, // 0.05%
-    merchantShareBps: 8_500,
-    rewardShareBps: 1_500,
+    /**
+     * Daily merchant budget = min(0.01% × spendable reserve + 60% × 7-day average daily revenue,
+     *                             0.03% × spendable reserve). Spendable = HQ available − floor.
+     */
+    budgetReserveBps: 1,
+    budgetRevenueShareBps: 6_000,
+    budgetCapReserveBps: 3,
+    revenueWindowDays: 7,
     /** Above floor * this multiple, budgets run at 100%. Linearly scaled down to 0 at the floor. */
     taperStartMultiple: 3,
   },
@@ -153,8 +163,9 @@ export const ECONOMY = {
   merchants: {
     count: 4,
     inventoryCapacity: 4_000,
-    tripMinBudget: tokens(20_000_000),
-    tripMaxBudget: tokens(2_000_000_000),
+    /** A full cart (4,000 weight × ~100 per weight × max demand) is worth well under 1M: purses match that. */
+    tripMinBudget: tokens(200_000),
+    tripMaxBudget: tokens(2_000_000),
     speedPxPerSec: 52,
     interactRangePx: 72,
     restAtHqMs: 25_000,
@@ -165,6 +176,25 @@ export const ECONOMY = {
   battle: {
     maxExchanges: 8,
     theftMaxBps: 1_500,
+    /**
+     * Bubble Roulette spoils: the winner takes a random share of the loser's
+     * coins (above a protected purse) and of each resource in the loser's bag.
+     * share = base × (2·luckW / (luckW + luckL)) × random(0.5–1.5), clamped to [min, max].
+     * A fee on the coins taken goes to HQ/team.
+     */
+    stake: {
+      baseShareBps: 1_000,
+      minShareBps: 200,
+      maxShareBps: 1_500,
+      protectedCoins: tokens(50_000),
+      feeBps: 1_000,
+      feeSplit: { hq: 9_000, team: 1_000 },
+    },
+    /** Each match costs both pets this much energy and hunger (on top of the HP it costs). */
+    matchEnergy: 80,
+    matchHunger: 60,
+    minEnergy: 120,
+    maxHunger: 900,
     petCooldownSec: 90,
     sameOpponentCooldownSec: 30 * 60,
     challengeRangePx: 110,
@@ -187,18 +217,10 @@ export const ECONOMY = {
     rarityMultiplierBps: { common: 10_000, uncommon: 10_500, rare: 11_000, epic: 11_500, legendary: 12_000, mythic: 12_500 } satisfies Record<Rarity, number>,
   },
 
+  /** 5% on every pet/gear sale: half is the creator royalty (team), half goes to HQ. */
   marketplace: {
-    feeBps: 200,
-    feeSplit: { hq: 9_000, team: 1_000 },
-  },
-
-  rewards: {
-    zeroOutcomePpm: 300_000,
-    minReward: tokens(2_000),
-    maxReward: tokens(40_000),
-    minGatheredToday: 50,
-    minPetAgeSec: 24 * 3600,
-    rarityMultiplierBps: { common: 10_000, uncommon: 10_100, rare: 10_200, epic: 10_300, legendary: 10_400, mythic: 10_500 } satisfies Record<Rarity, number>,
+    feeBps: 500,
+    feeSplit: { hq: 5_000, team: 5_000 },
   },
 
   world: {

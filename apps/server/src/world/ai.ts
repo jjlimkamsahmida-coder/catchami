@@ -4,7 +4,7 @@
  * know (its own state, public merchant positions/preferences, global demand)
  * and only spends through the same authorized game actions a player uses.
  */
-import { carryCapacity, ECONOMY, inventoryWeight, RESOURCE_LABEL, RESOURCES, tileCenter, toTile, type Resource } from "@catchami/shared";
+import { carryCapacity, ECONOMY, inventoryWeight, RESOURCE_LABEL, RESOURCES, tileCenter, toTile, type Resource, shopPrice } from "@catchami/shared";
 import type { Game } from "./game.ts";
 import type { MerchantRt, PetRt } from "./types.ts";
 
@@ -17,19 +17,19 @@ export function decide(g: Game, p: PetRt, now: number, urgentOnly = false) {
 
   if (s.status === "knocked_out") {
     if (st.buyMedicine && s.koUntil && now >= s.koUntil) {
-      if (avail >= ECONOMY.medicine.price && g.hqStockCache.herbs >= ECONOMY.medicine.herbsPerDose) void g.buy(p, "medicine", `ai:${p.id}:${now}`).catch(fail);
-      else p.activity = avail < ECONOMY.medicine.price ? "Needs tokens for medicine" : "Waiting for HQ herb stock";
+      if (avail >= shopPrice("medicine", g.hqStockCache.herbs).price) void g.buy(p, "medicine", `ai:${p.id}:${now}`).catch(fail);
+      else p.activity = "Needs tokens for medicine";
     } else p.activity = "Recovering from a knockout";
     return;
   }
 
   // Hunger first.
-  const canBuyFood = avail >= ECONOMY.food.price && g.hqStockCache.fish >= ECONOMY.food.fishPerMeal;
+  const canBuyFood = avail >= shopPrice("food", g.hqStockCache.fish).price;
   if (s.hunger >= st.eatAtHunger || s.status === "inactive") {
     if (canBuyFood && s.hunger >= 50) { void g.buy(p, "food", `ai:${p.id}:${now}`).catch(fail); return; }
     if (s.status === "inactive") { p.activity = "Inactive: no money or food — deposit tokens to recover"; return; }
   }
-  if (st.buyMedicine && s.hp < p.stats.maxHp * 0.3 && avail >= ECONOMY.medicine.price && g.hqStockCache.herbs >= ECONOMY.medicine.herbsPerDose) {
+  if (st.buyMedicine && s.hp < p.stats.maxHp * 0.3 && avail >= shopPrice("medicine", g.hqStockCache.herbs).price) {
     void g.buy(p, "medicine", `ai:${p.id}:${now}`).catch(fail);
     return;
   }
@@ -47,23 +47,7 @@ export function decide(g: Game, p: PetRt, now: number, urgentOnly = false) {
     return;
   }
 
-  // Battles (only aggressive/balanced initiate).
-  if ((st.battle === "aggressive" || st.battle === "balanced") && !g.flags.pauseBattles && !g.canBattle(p, now)) {
-    const hpOk = s.hp * 10_000 >= p.stats.maxHp * Math.max(st.minHpBps, st.battle === "balanced" ? 7_000 : 0);
-    if (hpOk) {
-      const memo = challengeMemo.get(p) ?? new Map<string, number>();
-      challengeMemo.set(p, memo);
-      for (const t of g.pets.values()) {
-        if (t === p || t.ownerId === p.ownerId || t.busy) continue;
-        if (Math.hypot(t.s.x - s.x, t.s.y - s.y) > ECONOMY.battle.challengeRangePx) continue;
-        if ((memo.get(t.id) ?? 0) > now) continue;
-        if (st.battle === "balanced" && inventoryWeight(t.s.inventory) < 80) continue;
-        memo.set(t.id, now + 5 * 60_000);
-        void g.battle(p, t, "auto").catch(fail);
-        return;
-      }
-    }
-  }
+  // Battles are live Bubble Roulette matches between online players: autopilot never starts one.
 
   // Selling.
   const sellable = { ...s.inventory };

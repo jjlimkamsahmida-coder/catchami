@@ -12,7 +12,7 @@ import { join } from "node:path";
 import {
   CATCH_TIERS, dailyBudget, ECONOMY, EQUIPMENT, generateGenome, generateWorld, HQ_ALLOCATION, HQ_RESERVE_FLOOR,
   initialDemand, merchantPrice, RESOURCES, rollCatch, Rng, simulateBattle, splitBps, tokens, TOTAL_SUPPLY,
-  treasuryFactorBps, updateDemand, computeTheft, formatTokens, type CatchTier, type Inventory, type Rarity, type Resource, type Stats,
+  treasuryFactorBps, updateDemand, computeTheft, battleTakeBps, carryCapacity, formatTokens, type CatchTier, type Inventory, type Rarity, type Resource, type Stats,
 } from "@catchami/shared";
 
 type Archetype = "casual" | "grinder" | "whale" | "bot" | "dormant";
@@ -92,8 +92,8 @@ function runScenario(sc: Scenario, seed: string) {
 
   for (let day = 0; day < sc.days; day++) {
     const budget = dailyBudget(L.get("hq"));
-    let merchantAllowance = budget.merchants, rewardPool = budget.rewards;
-    let merchantSpent = 0n, rewardPaid = 0n, foodSold = 0, medSold = 0, stockouts = 0, crafted = 0, battles = 0, withdrawn = 0n, saleUnits = 0;
+    const merchantAllowance = budget.merchants;
+    let merchantSpent = 0n, foodSold = 0, medSold = 0, stockouts = 0, crafted = 0, battles = 0, withdrawn = 0n, saleUnits = 0;
     const incomeByPet = new Map<number, bigint>();
     if (day > 0) onboard(Math.round(sc.newPlayersPerDay * Math.pow(1 - sc.inflowDecay, day)), day);
     const shards = Math.max(1, Math.ceil(pets.length / sc.shardSize));
@@ -105,7 +105,7 @@ function runScenario(sc: Scenario, seed: string) {
       const consumed: Inventory = { fish: 0, herbs: 0, wood: 0, minerals: 0 };
       const supplied: Inventory = { fish: 0, herbs: 0, wood: 0, minerals: 0 };
       // World throughput per shard per step (node regrowth), and merchant cart capacity.
-      const supplyPerShard = Object.fromEntries(RESOURCES.map((r) => [r, NODES[r] * (STEP_S * 1000) / ECONOMY.resources[r].regenMs])) as Record<Resource, number>;
+      const supplyPerShard = Object.fromEntries(RESOURCES.map((r) => [r, NODES[r] * ECONOMY.gather.unitsPerHit * (STEP_S * 1000) / ECONOMY.resources[r].regenMs])) as Record<Resource, number>;
       const want: Record<Resource, number> = { fish: 0, herbs: 0, wood: 0, minerals: 0 };
       const best = [...RESOURCES].sort((a, b) => Number(merchantPrice(b, demand[b].indexBps, 10_000) / BigInt(ECONOMY.resources[b].weight) - merchantPrice(a, demand[a].indexBps, 10_000) / BigInt(ECONOMY.resources[a].weight)))[0]!;
 
@@ -113,27 +113,30 @@ function runScenario(sc: Scenario, seed: string) {
         if (p.koUntil > t) continue;
         const acct = `pet:${p.id}`;
         p.hunger = Math.min(1000, p.hunger + ECONOMY.stats.hungerPerSec * STEP_S);
-        if (p.hunger >= 1000) p.energy = Math.max(0, p.energy - ECONOMY.stats.starvingEnergyDrainPerSec * STEP_S);
-        // Eat.
-        if (p.hunger >= 600) {
-          if (stock.fish >= 1 && L.split(acct, ECONOMY.food.price, ECONOMY.food.split)) { stock.fish--; consumed.fish++; foodSold++; p.hunger -= ECONOMY.food.hungerRestore; p.energy = Math.min(p.stats.maxEnergy, p.energy + ECONOMY.food.energyRestore); }
-          else if (stock.fish < 1) stockouts++;
+        // Eat (autopilot buys as many meals as the step needs; each meal uses fishPerMeal real HQ fish).
+        const fpm = ECONOMY.food.fishPerMeal;
+        for (let k = 0; k < 6 && p.hunger >= 500; k++) {
+          const local = stock.fish >= fpm;
+          const price = local ? ECONOMY.food.price : (ECONOMY.food.price * BigInt(ECONOMY.food.importMultBps)) / 10_000n;
+          if (L.split(acct, price, ECONOMY.food.split)) { if (local) { stock.fish -= fpm; consumed.fish += fpm; } else stockouts++; foodSold++; p.hunger -= ECONOMY.food.hungerRestore; p.energy = Math.min(p.stats.maxEnergy, p.energy + ECONOMY.food.energyRestore); }
+          else break;
         }
+        if (p.hunger >= 1000) p.energy = Math.max(0, p.energy - ECONOMY.stats.starvingEnergyDrainPerSec * STEP_S);
         p.inactive = p.energy <= 0 && p.hunger >= 1000;
         if (p.inactive) continue;
         // Heal.
         if (p.hp < p.stats.maxHp * 0.3 || (p.hp <= 0 && p.koUntil <= t)) {
-          if (stock.herbs >= 2 && L.split(acct, ECONOMY.medicine.price, ECONOMY.medicine.split)) { stock.herbs -= 2; consumed.herbs += 2; medSold++; p.hp = Math.min(p.stats.maxHp, Math.max(0, p.hp) + p.stats.maxHp * 0.4); }
+          if (stock.herbs >= ECONOMY.medicine.herbsPerDose && L.split(acct, ECONOMY.medicine.price, ECONOMY.medicine.split)) { stock.herbs -= ECONOMY.medicine.herbsPerDose; consumed.herbs += ECONOMY.medicine.herbsPerDose; medSold++; p.hp = Math.min(p.stats.maxHp, Math.max(0, p.hp) + p.stats.maxHp * 0.4); }
         }
         if (p.hp <= 0) continue;
         // Work: dormant owners still run autopilot; effort by archetype.
         const effort = p.arche === "grinder" || p.arche === "bot" ? 0.75 : p.arche === "whale" ? 0.55 : 0.45;
         if (p.energy < 150) { p.energy = Math.min(p.stats.maxEnergy, p.energy + ECONOMY.stats.restEnergyPerSec * STEP_S * 0.8); continue; }
         p.target = rng.int(100) < 65 ? best : RESOURCES[rng.int(4)]!;
-        const units = (STEP_S * effort * 1000) / (ECONOMY.resources[p.target].gatherMs * (100 / p.stats.gather)) * 0.35; // 35%: walking, queuing, trading
+        const units = (STEP_S * effort * 1000) / (ECONOMY.resources[p.target].gatherMs * (100 / p.stats.gather)) * 0.35 * ECONOMY.gather.unitsPerHit; // 35%: walking, queuing, trading; each hit yields unitsPerHit
         want[p.target] += units;
         (p as SimPet & { want: number }).want = units;
-        p.energy = Math.max(0, p.energy - units * ECONOMY.stats.gatherEnergyPerUnit - ECONOMY.stats.walkEnergyPerSec * STEP_S * 0.3);
+        p.energy = Math.max(0, p.energy - units * ECONOMY.resources[p.target].energy - ECONOMY.stats.walkEnergyPerSec * STEP_S * 0.3);
       }
       // Allocate scarce node output across pets (shards multiply supply).
       for (const p of pets) {
@@ -141,7 +144,7 @@ function runScenario(sc: Scenario, seed: string) {
         if (!w) continue;
         const share = Math.min(1, (supplyPerShard[p.target] * shards) / Math.max(1e-9, want[p.target]));
         const got = Math.floor(w * share + rng.float());
-        const cap = Math.floor((p.stats.carry - RESOURCES.reduce((s, r) => s + p.inv[r] * ECONOMY.resources[r].weight, 0)) / ECONOMY.resources[p.target].weight);
+        const cap = Math.floor((carryCapacity(p.stats) - RESOURCES.reduce((s, r) => s + p.inv[r] * ECONOMY.resources[r].weight, 0)) / ECONOMY.resources[p.target].weight);
         const n = Math.max(0, Math.min(got, cap));
         p.inv[p.target] += n; p.gatheredToday += n;
         (p as SimPet & { want?: number }).want = 0;
@@ -152,7 +155,7 @@ function runScenario(sc: Scenario, seed: string) {
       for (const p of pets) {
         if (cartLeft <= 0) break;
         const carried = RESOURCES.reduce((s, r) => s + p.inv[r] * ECONOMY.resources[r].weight, 0);
-        if (carried < p.stats.carry * 0.7) continue;
+        if (carried < carryCapacity(p.stats) * 0.7) continue;
         for (const r of RESOURCES) {
           const keep = r === "fish" ? 1 : 0;
           let n = Math.max(0, p.inv[r] - keep);
@@ -188,23 +191,20 @@ function runScenario(sc: Scenario, seed: string) {
         for (const p of [a, b]) if (p.hp <= 0) p.koUntil = t + ECONOMY.stats.knockoutCooldownSec;
         if (res.winner !== null) {
           const [w, l] = res.winner === 0 ? [a, b] : [b, a];
-          const take = computeTheft(l.inv, w.inv, w.stats.carry);
+          const shareBps = battleTakeBps(w.stats.luck, l.stats.luck, rng.float());
+          const take = computeTheft(l.inv, w.inv, carryCapacity(w.stats), shareBps);
           for (const r of RESOURCES) { l.inv[r] -= take[r]; w.inv[r] += take[r]; }
+          // Coin spoils above the protected purse, minus the HQ/team fee.
+          const st = ECONOMY.battle.stake, lb = L.get(`pet:${l.id}`);
+          const coins = lb > st.protectedCoins ? ((lb - st.protectedCoins) * BigInt(shareBps)) / 10_000n : 0n;
+          const fee = (coins * BigInt(st.feeBps)) / 10_000n;
+          if (coins > 0n) { L.move(`pet:${l.id}`, `pet:${w.id}`, coins - fee); L.split(`pet:${l.id}`, fee, st.feeSplit); }
         }
       }
       for (const r of RESOURCES) demand[r] = updateDemand(demand[r], t * 1000, consumed[r], supplied[r]);
     }
 
-    // Daily rewards, withdrawals.
-    for (const p of pets) {
-      if (p.inactive || p.gatheredToday < ECONOMY.rewards.minGatheredToday || day - p.born < 1) continue;
-      const r = new Rng(seed, `reward:${sc.name}:${p.id}:${day}`);
-      if (r.chancePpm(ECONOMY.rewards.zeroOutcomePpm)) continue;
-      let amt = ECONOMY.rewards.minReward + ((ECONOMY.rewards.maxReward - ECONOMY.rewards.minReward) * BigInt(r.int(10_001))) / 10_000n;
-      amt = (amt * BigInt(ECONOMY.rewards.rarityMultiplierBps[p.rarity])) / 10_000n;
-      if (amt > rewardPool - rewardPaid) amt = rewardPool - rewardPaid;
-      if (amt > 0n && L.move("hq", `pet:${p.id}`, amt)) rewardPaid += amt;
-    }
+    // Withdrawals.
     for (const p of pets) {
       const b = L.get(`pet:${p.id}`);
       const pull = p.arche === "whale" && day % 7 === 6 ? b / 10n : p.arche === "bot" && b > tokens(1_200_000) ? b - tokens(800_000) : 0n;
@@ -216,7 +216,6 @@ function runScenario(sc: Scenario, seed: string) {
     for (const [k, v] of L.bal) if (k !== "chain" && v < 0n) violations.push(`day ${day}: ${k} negative`);
     if (-L.get("chain") > TOTAL_SUPPLY) violations.push(`day ${day}: claims exceed supply`);
     if (merchantSpent > merchantAllowance) violations.push(`day ${day}: merchants exceeded allowance`);
-    if (rewardPaid > rewardPool) violations.push(`day ${day}: rewards exceeded pool`);
     if (L.get("hq") < HQ_RESERVE_FLOOR) violations.push(`day ${day}: HQ below reserve floor`);
 
     const balances = pets.map((p) => L.get(`pet:${p.id}`)).sort((a, b) => (a < b ? -1 : 1));
@@ -228,7 +227,7 @@ function runScenario(sc: Scenario, seed: string) {
       inactivePct: Math.round((pets.filter((p) => p.inactive).length / pets.length) * 1000) / 10,
       hq: whole(L.get("hq")), team: whole(L.get("team")), medianPet: whole(balances[Math.floor(balances.length / 2)] ?? 0n),
       medianIncome: whole(incomes[Math.floor(incomes.length / 2)] ?? 0n), merchantSpent: whole(merchantSpent), merchantAllowance: whole(merchantAllowance),
-      rewardPaid: whole(rewardPaid), foodSold, medSold, stockouts, crafted, battles, saleUnits, withdrawn: whole(withdrawn),
+      foodSold, medSold, stockouts, crafted, battles, saleUnits, withdrawn: whole(withdrawn),
       fishIdx: demand.fish.indexBps, herbIdx: demand.herbs.indexBps, woodIdx: demand.wood.indexBps, minIdx: demand.minerals.indexBps,
     });
   }
@@ -249,16 +248,16 @@ const results = SCENARIOS.map((s) => { const r = runScenario(s, seed); console.l
 
 const fmtN = (n: number) => formatTokens(tokens(Math.round(n)));
 let md = `# Catchami economy simulation\n\nGenerated by \`pnpm sim\` on ${new Date().toISOString()} with economy config \`${ECONOMY.version}\`.\n\n`;
-md += `Model: 30-minute steps over 30 days. Same catch odds, splits, prices, demand index, treasury taper, battle engine and reward rules as the live server. Resource output is capped by the real map (${Object.entries(NODES).map(([k, v]) => `${v} ${k} nodes`).join(", ")}) and merchant cart capacity. Money uses an exact double-entry ledger; invariants are checked every simulated day.\n\n`;
+md += `Model: 30-minute steps over 30 days. Same catch odds, splits, prices, demand index, treasury taper, battle engine as the live server. Resource output is capped by the real map (${Object.entries(NODES).map(([k, v]) => `${v} ${k} nodes`).join(", ")}) and merchant cart capacity. Money uses an exact double-entry ledger; invariants are checked every simulated day.\n\n`;
 md += `Population mix: 50% casual, 22% grinders, 5% whales (bigger deposits, aggressive battles, weekly withdrawals), 8% bot-like farm accounts (minimum deposit, withdraw anything above 800K), 15% dormant owners (never return; autopilot keeps running).\n\n`;
 md += `## Invariants\n\n| Scenario | Violations | Catches ok / failed |\n|---|---:|---:|\n`;
 for (const r of results) md += `| ${r.sc.name} | ${r.violations.length ? "**" + r.violations.length + "** " + r.violations.slice(0, 2).join("; ") : "0"} | ${r.catchesOk} / ${r.catchesFail} |\n`;
-md += `\nChecked daily: ledger sums to zero; no negative non-external account; claims never exceed 100T supply; merchant spend within the daily allowance; rewards within the funded pool; HQ never below its 5% reserve floor.\n\n`;
+md += `\nChecked daily: ledger sums to zero; no negative non-external account; claims never exceed 100T supply; merchant spend within the daily allowance; HQ never below its 5% reserve floor.\n\n`;
 for (const r of results) {
   const first = r.daily[0]!, last = r.daily[r.daily.length - 1]!;
-  md += `## ${r.sc.name}\n\n${r.sc.note}\n\n| Day | Pets | Worlds | Active % | Inactive % | Median pet balance | Median daily income (active) | Merchant spend / allowance | Rewards | Meals | Stockouts | Battles |\n|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n`;
+  md += `## ${r.sc.name}\n\n${r.sc.note}\n\n| Day | Pets | Worlds | Active % | Inactive % | Median pet balance | Median daily income (active) | Merchant spend / allowance | Meals | Stockouts | Battles |\n|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n`;
   for (const d of r.daily.filter((x, i) => i % 5 === 0 || i === r.daily.length - 1)) {
-    md += `| ${d.day} | ${d.pets} | ${d.shards} | ${d.activePct} | ${d.inactivePct} | ${fmtN(d.medianPet as number)} | ${fmtN(d.medianIncome as number)} | ${fmtN(d.merchantSpent as number)} / ${fmtN(d.merchantAllowance as number)} | ${fmtN(d.rewardPaid as number)} | ${d.foodSold} | ${d.stockouts} | ${d.battles} |\n`;
+    md += `| ${d.day} | ${d.pets} | ${d.shards} | ${d.activePct} | ${d.inactivePct} | ${fmtN(d.medianPet as number)} | ${fmtN(d.medianIncome as number)} | ${fmtN(d.merchantSpent as number)} / ${fmtN(d.merchantAllowance as number)} | ${d.foodSold} | ${d.stockouts} | ${d.battles} |\n`;
   }
   md += `\nHQ ${fmtN(first.hq as number)} → ${fmtN(last.hq as number)}; team fee revenue ${fmtN(last.team as number)}.\n\n`;
 }

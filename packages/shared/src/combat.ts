@@ -110,15 +110,26 @@ export function inventoryWeight(inv: Inventory): number {
  * resource, limited by the winner's free carrying capacity. Protected
  * inventory is never passed in here.
  */
-export function computeTheft(loserCarried: Inventory, winnerCarried: Inventory, winnerCapacity: number): Inventory {
+export function computeTheft(loserCarried: Inventory, winnerCarried: Inventory, winnerCapacity: number, shareBps: number = ECONOMY.battle.theftMaxBps): Inventory {
   const take = emptyInventory();
   let free = winnerCapacity - inventoryWeight(winnerCarried);
   for (const r of RESOURCES) {
-    const max = Math.floor((loserCarried[r] * ECONOMY.battle.theftMaxBps) / 10_000);
+    const max = Math.floor((loserCarried[r] * shareBps) / 10_000);
     const w = ECONOMY.resources[r].weight;
     const n = Math.max(0, Math.min(max, Math.floor(free / w)));
     take[r] = n;
     free -= n * w;
   }
   return take;
+}
+
+/**
+ * Bubble Roulette spoils share (bps) from both pets' luck and a fair roll u in [0, 1].
+ * Equal luck: 5%–15% (average 10%). Luckier winners take more, luckier losers lose less.
+ */
+export function battleTakeBps(luckWinner: number, luckLoser: number, u: number): number {
+  const s = ECONOMY.battle.stake;
+  const edge = (2 * luckWinner) / Math.max(1, luckWinner + luckLoser);
+  const raw = s.baseShareBps * edge * (0.5 + Math.max(0, Math.min(1, u)));
+  return Math.round(Math.max(s.minShareBps, Math.min(s.maxShareBps, raw)));
 }

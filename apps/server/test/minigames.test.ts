@@ -1,10 +1,11 @@
 import { describe, expect, it, beforeAll } from "vitest";
 import {
   BUBBLE, chopMarker, ECONOMY, fishX, generateGenome, gradeRound, makeChamber, makeRound, mineAngle, MINIGAMES, randomSeedHex,
-  standSpot, tileCenter, toBattleHp, type ChopRound, type MineRound, type PullRound, type ServerMsg,
+  standSpot, tileCenter, toBattleHp, tokens, type ChopRound, type MineRound, type PullRound, type ServerMsg,
 } from "@catchami/shared";
 import { openDb, type Db } from "../src/db/index.ts";
 import { ensureGenesis } from "../src/ledger/treasury.ts";
+import { acct, balanceOf, post, transfer } from "../src/ledger/ledger.ts";
 import { createGuest, newId } from "../src/auth.ts";
 import { Game, type GameClient } from "../src/world/game.ts";
 import { freshPetState } from "../src/world/types.ts";
@@ -104,7 +105,7 @@ describe("gathering minigame (server-authoritative)", () => {
     const res = [...c.inbox].reverse().find((m) => m.t === "mg_result");
     expect(res).toMatchObject({ grade: "perfect", gained: MINIGAMES.yield.perfect });
     expect(p.s.inventory.wood).toBe(before + MINIGAMES.yield.perfect);
-    expect(p.s.energy).toBeCloseTo(energy - MINIGAMES.energyPerAttempt - ECONOMY.stats.gatherEnergyPerUnit * MINIGAMES.yield.perfect, 5);
+    expect(p.s.energy).toBeCloseTo(energy - MINIGAMES.energyPerAttempt - ECONOMY.resources.wood.energy * MINIGAMES.yield.perfect, 5);
     expect(game.nodes.get(node.id)!.remaining).toBe(remaining - MINIGAMES.yield.perfect);
     // Replay of the same round id does nothing.
     expect(() => game.minigameInput(u.userId, r2.round.id, best)).toThrow();
@@ -123,6 +124,12 @@ describe("Bubble Roulette", () => {
     const ua = await createGuest(db), ub = await createGuest(db);
     const hq = game.world.pois.find((q) => q.id === "forest")!; // battles are off in the village
     const a = await spawn(ua.userId, hq.tx, hq.ty), b = await spawn(ub.userId, hq.tx + 1, hq.ty);
+    for (const p of [a, b]) {
+      await db.tx((tx) => post(tx, { idem: `test-fund:${p.id}`, kind: "pet_fund", postings: transfer(acct.chain, acct.pet(p.id), tokens(1_000_000)) }));
+      await game.refreshBalance(p);
+      p.s.inventory.herbs = 100;
+      p.s.energy = 1000; p.s.hunger = 0;
+    }
     const ca = client(ua.userId), cb = client(ub.userId);
     game.join(ca); game.join(cb);
     await game.handle(ca, { t: "br_challenge", petId: a.id, targetId: b.id });
@@ -162,11 +169,26 @@ describe("Bubble Roulette", () => {
     const loser = m.winner === "a" ? b : a;
     expect(loser.s.hp).toBe(0);
     expect(loser.s.status).toBe("knocked_out");
+    await new Promise((r) => setTimeout(r, 500));
     expect(a.busy || b.busy).toBe(false);
     expect(a.matchId ?? b.matchId).toBeNull();
-    await new Promise((r) => setTimeout(r, 300));
     const row = await db.query(`SELECT mode, winner FROM battles WHERE id = $1`, [m.id]);
     expect(row.rows[0]).toMatchObject({ mode: "bubble" });
+    // Spoils: a share of the loser's coins above the protected purse (minus the HQ fee) and of its bag.
+    const winnerPet = m.winner === "a" ? a : b;
+    const loot = m.loot!;
+    expect(loot.shareBps).toBeGreaterThanOrEqual(ECONOMY.battle.stake.minShareBps);
+    expect(loot.shareBps).toBeLessThanOrEqual(ECONOMY.battle.stake.maxShareBps);
+    const take = ((tokens(1_000_000) - ECONOMY.battle.stake.protectedCoins) * BigInt(loot.shareBps)) / 10_000n;
+    const fee = (take * BigInt(ECONOMY.battle.stake.feeBps)) / 10_000n;
+    expect(BigInt(loot.coins)).toBe(take - fee);
+    expect(BigInt(loot.fee)).toBe(fee);
+    expect((await db.tx((tx) => balanceOf(tx, acct.pet(loser.id)))).balance).toBe(tokens(1_000_000) - take);
+    expect((await db.tx((tx) => balanceOf(tx, acct.pet(winnerPet.id)))).balance).toBe(tokens(1_000_000) + take - fee);
+    expect(loser.s.inventory.herbs + winnerPet.s.inventory.herbs).toBe(200);
+    expect(winnerPet.s.inventory.herbs - 100).toBe(Math.floor((100 * loot.shareBps) / 10_000));
+    // Both paid the match's energy and hunger.
+    expect(a.s.energy).toBeLessThanOrEqual(1000 - ECONOMY.battle.matchEnergy);
   }, 30_000);
 
   it("two missed turns forfeit; one missed turn just passes", async () => {
@@ -195,41 +217,9 @@ describe("Bubble Roulette", () => {
   }, 30_000);
 });
 
-describe("bandits", () => {
-  it("chase a loaded pet in the wild and steal its bag; ignore empty bags and the village", async () => {
-    const u = await createGuest(db);
-    const forest = game.world.pois.find((q) => q.id === "forest")!;
-    const p = await spawn(u.userId, forest.tx, forest.ty);
-    const b = game.bandits.list.find((x) => x.home === "forest")!;
-    b.x = p.s.x + 20; b.y = p.s.y; b.state = "wander"; b.calmUntil = 0; b.nextThink = 0; b.path = [];
-    // Empty bag: ignored.
-    game.bandits.step(0.1, t);
-    expect(b.state).toBe("wander");
-    p.s.inventory.wood = 120;
-    b.nextThink = 0;
-    const rnd = Math.random;
-    Math.random = () => 0.99; // force the bandit to win the scuffle
-    for (let i = 0; i < 20 && (b.state as string) !== "duel"; i++) { t += 100; game.bandits.step(0.1, t); }
-    expect(b.state).toBe("duel"); // caught: the battle minigame starts
-    t += 15_000; game.bandits.step(0.1, t); // nobody played it: resolves with no hits
-    Math.random = rnd;
-    expect(p.s.inventory.wood).toBe(0);
-    expect(b.state).toBe("flee");
-    // A brave challenge the pet wins keeps the bag.
-    p.s.inventory.herbs = 40;
-    b.state = "wander"; b.x = p.s.x + 10; b.y = p.s.y;
-    Math.random = () => 0.01;
-    game.bandits.challenge(p, b.id, t);
-    expect(b.state).toBe("duel");
-    t += 15_000; game.bandits.step(0.1, t);
-    Math.random = rnd;
-    expect(p.s.inventory.herbs).toBe(40);
-    // A pet in Paw Village is safe even right next to a bandit.
-    const hq = game.world.pois.find((q) => q.id === "hq")!;
-    const q = await spawn(u.userId, hq.tx, hq.ty + 4);
-    q.s.inventory.fish = 50;
-    b.x = q.s.x + 10; b.y = q.s.y; b.state = "wander"; b.calmUntil = 0; b.nextThink = 0;
-    for (let i = 0; i < 10; i++) { t += 100; game.bandits.step(0.1, t); }
-    expect(q.s.inventory.fish).toBe(50);
-  }, 30_000);
+describe("rivals", () => {
+  it("there are no wild rivals — only the tutorial's practice coach", () => {
+    expect(game.bandits.list.map((b) => b.id)).toEqual(["bandit-practice"]);
+    expect(game.bandits.list[0]!.practice).toBe(true);
+  });
 });

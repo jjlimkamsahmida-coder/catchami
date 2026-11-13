@@ -120,7 +120,7 @@ export function WalletScreen() {
             <dt>HQ treasury</dt><dd className="num">{fmt(econ.data.hq.balance)}</dd>
             <dt>Reserve floor</dt><dd className="num">{fmt(econ.data.hq.reserveFloor)}</dd>
             <dt>Today's merchant budget</dt><dd className="num">{fmt(econ.data.today.merchantGranted)} / {fmt(econ.data.today.merchantAllowance)}</dd>
-            <dt>Today's reward pool</dt><dd className="num">{fmt(econ.data.today.rewardPaid)} / {fmt(econ.data.today.rewardPool)}</dd>
+            <dt>7-day avg daily revenue</dt><dd className="num">{fmt(econ.data.hq.avgDailyRevenue)}</dd>
             <dt>Team fee revenue</dt><dd className="num">{fmt(econ.data.team.revenueBalance)}</dd>
             <dt>Config version</dt><dd>{econ.data.version}</dd>
           </dl>

@@ -6,8 +6,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import {
   carryCapacity, ECONOMY, formatTokens, inventoryWeight, RARITIES, RARITY_LABEL, RESOURCE_LABEL, RESOURCES, tokens,
-  type OwnPet, type Rarity, type Species,
-} from "@catchami/shared";
+  type OwnPet, type Rarity, type Species, shopPrice } from "@catchami/shared";
 import { controlledPet, store, toast, useStore } from "../net/store.ts";
 import { api, refreshWallet, rid, send } from "../net/api.ts";
 import { fmt, fmtQty, PetArt, useAsync } from "./common.tsx";
@@ -58,7 +57,7 @@ export function BagScreen({ p }: { p: OwnPet }) {
         </div>
       </div>
       <div className="gtabs">
-        {(["bag", "strategy", "wallet"] as const).map((t) => <button key={t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>{{ bag: "🎒 Bag", strategy: "🤖 Autopilot", wallet: "🪙 Piggy bank", gear: "🛡️ Gear" }[t]}</button>)}
+        {(["bag", "strategy", "wallet", "gear"] as const).map((t) => <button key={t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>{{ bag: "🎒 Bag", strategy: "🤖 Autopilot", wallet: "🪙 Piggy bank", gear: "🛡️ Gear" }[t]}</button>)}
       </div>
       {tab === "bag" && (
         <>
@@ -78,8 +77,8 @@ export function BagScreen({ p }: { p: OwnPet }) {
           </div>
           <div className="bag-cap"><span>Bag space</span><i><b style={{ width: `${Math.min(100, (w / cap) * 100)}%` }} /></i><em>{fmtQty(w)} / {fmtQty(cap)}</em></div>
           <div className="bag-actions">
-            <button className="gbig sun" disabled={p.hunger < 50 || (ticker?.hqStock.fish ?? 0) < ECONOMY.food.fishPerMeal} onClick={() => send({ t: "buy", petId: p.id, item: "food", rid: rid() })}>🍖 Buy meal · {fmt(ECONOMY.food.price)}</button>
-            <button className="gbig coral" disabled={p.status !== "knocked_out" && p.hp >= p.stats.maxHp} onClick={() => send({ t: "buy", petId: p.id, item: "medicine", rid: rid() })}>💊 Medicine · {fmt(ECONOMY.medicine.price)}</button>
+            <button className="gbig sun" disabled={p.hunger < 50} onClick={() => send({ t: "buy", petId: p.id, item: "food", rid: rid() })}>🍖 {shopPrice("food", ticker?.hqStock.fish ?? 0).imported ? "Imported meal" : "Buy meal"} · {fmt(shopPrice("food", ticker?.hqStock.fish ?? 0).price)}</button>
+            <button className="gbig coral" disabled={p.status !== "knocked_out" && p.hp >= p.stats.maxHp} onClick={() => send({ t: "buy", petId: p.id, item: "medicine", rid: rid() })}>💊 Medicine · {fmt(shopPrice("medicine", ticker?.hqStock.herbs ?? 0).price)}</button>
             <button className="gbig sky" disabled={p.status === "knocked_out"} onClick={() => send({ t: "rest", petId: p.id })}>💤 Take a nap</button>
           </div>
           <p className="gpage-tip">Tip: sell your loot to travelling merchants — and watch out for other Keepers challenging you in the wild!</p>

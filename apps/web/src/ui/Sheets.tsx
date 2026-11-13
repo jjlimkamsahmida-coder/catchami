@@ -1,4 +1,4 @@
-import { AREA_BOUNDS, ECONOMY, nodeStock, RESOURCE_LABEL, RESOURCES, inventoryWeight, type Resource } from "@catchami/shared";
+import { AREA_BOUNDS, ECONOMY, nodeStock, RESOURCE_LABEL, RESOURCES, inventoryWeight, type Resource, toWire } from "@catchami/shared";
 import { controlledPet, entities, store, useStore } from "../net/store.ts";
 import { rid, send } from "../net/api.ts";
 import { fmt, fmtQty, PetArt, RarityTag, ResIcon, Sheet } from "./common.tsx";
@@ -121,12 +121,9 @@ function PetSheet({ id }: { id: string }) {
             <button className="btn coral block" disabled={!controlled || safe || dist > ECONOMY.battle.challengeRangePx} onClick={() => { send({ t: "br_challenge", petId: controlled!.id, targetId: id }); close(); }}>
               {!controlled ? "Catch a pet first" : safe ? "No battles in Paw Village" : dist > ECONOMY.battle.challengeRangePx ? "Get closer to challenge" : `Bubble Roulette with ${controlled.name}`}
             </button>
-            <button className="btn paper block sm" disabled={!controlled || safe || dist > ECONOMY.battle.challengeRangePx} onClick={() => { send({ t: "challenge", petId: controlled!.id, targetId: id }); close(); }}>
-              Quick scuffle (auto battle)
-            </button>
             <p className="small muted" style={{ margin: 0 }}>Bubble Roulette is a live turn-based match — the other owner must be online and accept. HP is the score; a splash costs 20.</p>
             <p className="small muted" style={{ margin: 0 }}>
-              Battles here are <b>non-redeemable</b>: no tokens are at stake. HP damage persists, and the winner can take up to 15% of the loser's carried resources. The other owner's battle settings decide whether they accept.
+              The winner takes {ECONOMY.battle.stake.minShareBps / 100}–{ECONOMY.battle.stake.maxShareBps / 100}% of the loser's coins (the first {fmt(toWire(ECONOMY.battle.stake.protectedCoins))} are always safe) and bag — luck decides how much. A match costs {ECONOMY.battle.matchEnergy} energy, {ECONOMY.battle.matchHunger} hunger, and the loser is knocked out.
             </p>
           </>
         )}

@@ -51,7 +51,7 @@ export function EconomyGuide({ onClose }: { onClose: () => void }) {
           <div className="econ-art"><img src={g("merchant-finn")} alt="" /></div>
           <div>
             <h3>Sell to travelling merchants</h3>
-            <p>Merchants wander the world with a real coin purse from HQ. Prices follow <b>demand</b>: when lots of pets eat, fish gets pricier; when everyone sells wood, wood gets cheaper. A merchant with an empty purse or a full cart heads home to restock.</p>
+            <p>Merchants wander the world with a real coin purse from HQ. Every resource is worth about the same per bag slot, and prices follow <b>demand</b>: more meals eaten → fish pays more, more medicine → herbs, more crafting → wood and stone. When everyone sells the same thing, its price drops. A merchant with an empty purse or a full cart heads home to restock.</p>
           </div>
         </section>
 
@@ -60,7 +60,7 @@ export function EconomyGuide({ onClose }: { onClose: () => void }) {
           <div className="econ-art"><img src={g("icon-fish")} alt="" /><img src={g("prop-crate")} alt="" /></div>
           <div>
             <h3>Keep your pet happy</h3>
-            <p>Meals cost <b>{t(ECONOMY.food.price)}</b>, medicine <b>{t(ECONOMY.medicine.price)}</b>, gear needs wood + minerals + a fee. That money flows back to HQ (90%) and the team (10%). Meals only exist if merchants delivered real fish — no fish in the kitchen, no meal!</p>
+            <p>Meals cost <b>{t(ECONOMY.food.price)}</b> (the only food), medicine <b>{t(ECONOMY.medicine.price)}</b>, gear needs wood + stone + a fee. That money flows back to HQ (90%) and the team (10%). Meals are cooked from real fish merchants delivered (medicine from real herbs). If the kitchen runs out, imported meals cost double — so fishing pays more.</p>
           </div>
         </section>
 
@@ -69,7 +69,7 @@ export function EconomyGuide({ onClose }: { onClose: () => void }) {
           <div className="econ-art"><img src={g("prop-castle")} alt="" /></div>
           <div>
             <h3>HQ, the big piggy bank</h3>
-            <p>HQ started with <b>{t(tokens(ECONOMY.allocation.hqWhole))}</b>. Each day it may spend just <b>{pct(ECONOMY.hq.dailyBudgetBpsOfAvailable)}</b> of what it holds — {pct(ECONOMY.hq.merchantShareBps)} for merchants, {pct(ECONOMY.hq.rewardShareBps)} for daily rewards. If HQ ever gets close to its safety floor ({pct(ECONOMY.hq.reserveFloorBps)} of the start), spending shrinks automatically instead of inventing coins.</p>
+            <p>HQ started with <b>{t(tokens(ECONOMY.allocation.hqWhole))}</b>. Each day merchants may spend <b>{pct(ECONOMY.hq.budgetReserveBps)}</b> of HQ's spendable reserve plus <b>{pct(ECONOMY.hq.budgetRevenueShareBps)}</b> of what players spent per day over the last week — but never more than {pct(ECONOMY.hq.budgetCapReserveBps)} of the reserve. Busy world, bigger purses; HQ can't run dry, and it never goes below its safety floor ({pct(ECONOMY.hq.reserveFloorBps)} of the start).</p>
           </div>
         </section>
 
@@ -78,14 +78,14 @@ export function EconomyGuide({ onClose }: { onClose: () => void }) {
           <div className="econ-art"><img src={g("cube-wobble")} alt="" /><img src={g("ui-trophy")} alt="" /></div>
           <div>
             <h3>Trade &amp; play</h3>
-            <p>Sell a pet or gear on the market — its piggy bank goes with it. The market keeps a {pct(ECONOMY.marketplace.feeBps)} fee. Bubble Roulette uses HP as the score ({BUBBLE.splashHp} per splash) and puts <b>no coins at stake</b>.</p>
+            <p>Sell a pet or gear on the market — its piggy bank goes with it. The market keeps a {pct(ECONOMY.marketplace.feeBps)} fee. In Bubble Roulette ({BUBBLE.splashHp} HP per splash) the winner takes <b>{pct(ECONOMY.battle.stake.minShareBps)}–{pct(ECONOMY.battle.stake.maxShareBps)}</b> of the loser's coins and bag — luck decides how much — but every match costs energy, hunger and HP.</p>
           </div>
         </section>
 
         <div className="econ-facts">
           <div><b>{t(tokens(100_000_000_000_000))}</b><span>total coins, ever. No minting.</span></div>
           <div><b>40 / 55 / 5</b><span>HQ / market / team split at launch</span></div>
-          <div><b>Fair rolls</b><span>every catch & reward is checkable afterwards</span></div>
+          <div><b>Fair rolls</b><span>every catch & battle is checkable afterwards</span></div>
         </div>
         <button className="game-btn start" style={{ minHeight: 66, fontSize: 26 }} onClick={onClose}><span className="gb-label">Got it!</span></button>
       </div>

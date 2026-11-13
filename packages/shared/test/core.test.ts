@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ECONOMY, TOTAL_SUPPLY, tokens, splitBps, parseTokens, toDecimalString, formatTokens,
   Rng, commitmentOf, verifyCommitment, randomSeedHex, rollCatch, generateGenome, effectiveStats,
-  simulateBattle, computeTheft, emptyInventory, dailyBudget, HQ_ALLOCATION, HQ_RESERVE_FLOOR,
+  simulateBattle, computeTheft, battleTakeBps, emptyInventory, dailyBudget, HQ_ALLOCATION, HQ_RESERVE_FLOOR,
   treasuryFactorBps, merchantTripBudget, updateDemand, initialDemand, merchantPrice,
   generateWorld, findPath, walkable, CATCH_TIERS, STAT_KEYS, type Rarity,
 } from "../src/index.ts";
@@ -15,7 +15,7 @@ describe("money", () => {
   });
   it("catch split matches the spec example and never loses dust", () => {
     const s = splitBps(tokens(1_000_000), ECONOMY.catch.successSplit, "hq");
-    expect(s).toEqual({ pet: tokens(800_000), hq: tokens(180_000), team: tokens(20_000) });
+    expect(s).toEqual({ pet: tokens(400_000), hq: tokens(500_000), team: tokens(100_000) });
     for (const amt of [1n, 7n, 999_999n, 10n ** 30n + 3n]) {
       const p = splitBps(amt, ECONOMY.catch.successSplit, "hq");
       expect(p.pet + p.hq + p.team).toBe(amt);
@@ -123,11 +123,24 @@ describe("battles", () => {
 });
 
 describe("treasury", () => {
-  it("daily budget is 0.05% of available, 85/15", () => {
-    const b = dailyBudget(HQ_ALLOCATION);
-    expect(b.total).toBe(HQ_ALLOCATION / 2000n);
-    expect(b.merchants + b.rewards).toBe(b.total);
-    expect(b.merchants).toBe((b.total * 8500n) / 10000n);
+  it("daily budget = min(0.01% spendable + 60% avg revenue, 0.03% spendable)", () => {
+    const spendable = HQ_ALLOCATION - HQ_RESERVE_FLOOR;
+    expect(dailyBudget(HQ_ALLOCATION).total).toBe(spendable / 10_000n);
+    const rev = tokens(1_000_000_000);
+    expect(dailyBudget(HQ_ALLOCATION, rev).total).toBe(spendable / 10_000n + (rev * 6n) / 10n);
+    expect(dailyBudget(HQ_ALLOCATION, tokens(1_000_000_000_000)).total).toBe((spendable * 3n) / 10_000n); // capped
+    expect(dailyBudget(HQ_ALLOCATION).merchants).toBe(dailyBudget(HQ_ALLOCATION).total);
+  });
+  it("battle spoils share follows luck and stays within 2%–15%", () => {
+    expect(battleTakeBps(100, 100, 0)).toBe(500);
+    expect(battleTakeBps(100, 100, 0.5)).toBe(1000);
+    expect(battleTakeBps(100, 100, 1)).toBe(1500);
+    expect(battleTakeBps(120, 90, 0.5)).toBeGreaterThan(battleTakeBps(90, 120, 0.5));
+    for (const [a, b, u] of [[1, 500, 0], [500, 1, 1], [100, 100, 7]] as const) {
+      const s = battleTakeBps(a, b, u);
+      expect(s).toBeGreaterThanOrEqual(ECONOMY.battle.stake.minShareBps);
+      expect(s).toBeLessThanOrEqual(ECONOMY.battle.stake.maxShareBps);
+    }
   });
   it("tapers to zero at the reserve floor and never dips below it", () => {
     expect(treasuryFactorBps(HQ_RESERVE_FLOOR)).toBe(0);

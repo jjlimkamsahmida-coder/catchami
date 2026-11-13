@@ -4,7 +4,7 @@
  * (CHECK constraints in treasury_days) and by the reserve floor.
  */
 import {
-  dailyBudget, ECONOMY, HQ_ALLOCATION, merchantTripBudget, RESOURCES, splitBps, type Resource,
+  dailyBudget, ECONOMY, HQ_ALLOCATION, merchantTripBudget, RESOURCES, REVENUE_KINDS, splitBps, type Resource,
 } from "@catchami/shared";
 import type { Db, Tx } from "../db/index.ts";
 import { env } from "../env.ts";
@@ -17,9 +17,19 @@ export interface TreasuryDay {
   hqAvailableStart: bigint;
   merchantAllowance: bigint;
   merchantGranted: bigint;
-  rewardPool: bigint;
-  rewardPaid: bigint;
   factorBps: number;
+}
+
+/** Average daily HQ revenue over the last revenueWindowDays (only coins players spent). */
+export async function avgDailyRevenue(tx: Tx, now = Date.now()): Promise<bigint> {
+  const days = ECONOMY.hq.revenueWindowDays;
+  const since = new Date(now - days * 86_400_000).toISOString();
+  const r = await tx.query<{ s: string }>(
+    `SELECT COALESCE(SUM(p.amount), 0)::text AS s FROM postings p JOIN journal j ON j.id = p.journal_id
+     WHERE p.account_id = $1 AND p.amount > 0 AND j.kind = ANY($2) AND j.created_at >= $3`,
+    [acct.hq, [...REVENUE_KINDS], since],
+  );
+  return BigInt(r.rows[0]?.s ?? "0") / BigInt(days);
 }
 
 export async function treasuryDay(tx: Tx, now = Date.now()): Promise<TreasuryDay> {
@@ -27,10 +37,10 @@ export async function treasuryDay(tx: Tx, now = Date.now()): Promise<TreasuryDay
   let r = await tx.query<Record<string, string>>(`SELECT day::text, hq_available_start::text, merchant_allowance::text, merchant_granted::text, reward_pool::text, reward_paid::text, factor_bps FROM treasury_days WHERE day = $1`, [day]);
   if (!r.rows.length) {
     const hq = await balanceOf(tx, acct.hq);
-    const b = dailyBudget(hq.available);
+    const b = dailyBudget(hq.available, await avgDailyRevenue(tx, now));
     await tx.query(
-      `INSERT INTO treasury_days (day, hq_available_start, merchant_allowance, reward_pool, factor_bps) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (day) DO NOTHING`,
-      [day, hq.available.toString(), b.merchants.toString(), b.rewards.toString(), b.factorBps],
+      `INSERT INTO treasury_days (day, hq_available_start, merchant_allowance, reward_pool, factor_bps) VALUES ($1,$2,$3,0,$4) ON CONFLICT (day) DO NOTHING`,
+      [day, hq.available.toString(), b.merchants.toString(), b.factorBps],
     );
     r = await tx.query(`SELECT day::text, hq_available_start::text, merchant_allowance::text, merchant_granted::text, reward_pool::text, reward_paid::text, factor_bps FROM treasury_days WHERE day = $1`, [day]);
   }
@@ -40,8 +50,6 @@ export async function treasuryDay(tx: Tx, now = Date.now()): Promise<TreasuryDay
     hqAvailableStart: BigInt(x.hq_available_start!),
     merchantAllowance: BigInt(x.merchant_allowance!),
     merchantGranted: BigInt(x.merchant_granted!),
-    rewardPool: BigInt(x.reward_pool!),
-    rewardPaid: BigInt(x.reward_paid!),
     factorBps: Number(x.factor_bps),
   };
 }
@@ -90,7 +98,7 @@ export async function ensureGenesis(db: Db) {
   });
 }
 
-/** Fee split helper used by food, medicine, crafting and marketplace. */
+/** Fee split helper used by food, medicine, crafting, marketplace and battle fees. */
 export function feePostings(payer: string, amount: bigint, split: { hq: number; team: number }) {
   const s = splitBps(amount, split, "hq");
   return [

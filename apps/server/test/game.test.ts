@@ -80,9 +80,10 @@ describe("capture flow (real detector, real ledger)", () => {
     const hqAfter = (await db.tx((tx) => balanceOf(tx, acct.hq))).balance;
     const teamAfter = (await db.tx((tx) => balanceOf(tx, acct.team))).balance;
     if (res.success) {
-      expect(hqAfter - hqBefore).toBe((cost * 1800n) / 10000n);
-      expect(teamAfter - teamBefore).toBe((cost * 200n) / 10000n);
-      expect((await db.tx((tx) => balanceOf(tx, acct.pet(res.petId!)))).balance).toBe((cost * 8000n) / 10000n);
+      const sp = splitBps(cost, ECONOMY.catch.successSplit, "hq");
+      expect(hqAfter - hqBefore).toBe(sp.hq);
+      expect(teamAfter - teamBefore).toBe(sp.team);
+      expect((await db.tx((tx) => balanceOf(tx, acct.pet(res.petId!)))).balance).toBe(sp.pet);
       expect(game.pets.get(res.petId!)?.species).toBe("cat");
     } else {
       expect(hqAfter - hqBefore).toBe(cost);
@@ -125,9 +126,11 @@ describe("gameplay economy loop", () => {
     expect((await db.tx((tx) => balanceOf(tx, acct.pet(p1.id)))).balance).toBe(balBefore + sale.total);
     expect((await db.tx((tx) => balanceOf(tx, acct.merchant(m.id)))).balance).toBe(ECONOMY.merchants.tripMaxBudget - sale.total);
 
-    // Food is impossible until fish physically reaches HQ.
+    // Local meals need fish that physically reached HQ.
     p2.s.hunger = 700;
-    await expect(game.buy(p2, "food")).rejects.toMatchObject({ code: "sold_out" });
+    const imported = await game.buy(p2, "food", "imp1"); // no local fish yet: imported at a premium
+    expect(imported).toEqual({ price: (ECONOMY.food.price * BigInt(ECONOMY.food.importMultBps)) / 10_000n, imported: true });
+    expect(game.hqStockCache.fish).toBe(0);
     m.state = "at_hq";
     await game.merchantAtHq(m, t);
     expect(game.hqStockCache.fish).toBe(caught);
@@ -137,19 +140,6 @@ describe("gameplay economy loop", () => {
     expect(p2.s.hunger).toBe(700 - ECONOMY.food.hungerRestore);
     expect((await db.tx((tx) => balanceOf(tx, acct.team))).balance - teamBefore).toBe(ECONOMY.food.price / 10n);
     expect(game.hqStockCache.fish).toBe(caught - ECONOMY.food.fishPerMeal);
-
-    // Battles need consent from the defender's strategy.
-    p1.s.inventory.wood = 10;
-    p2.s.x = p1.s.x + 30; p2.s.y = p1.s.y;
-    await expect(game.battle(p2, p1, "manual")).rejects.toMatchObject({ code: "declined" });
-    p1.s.strategy.battle = "balanced";
-    p2.s.energy = 1000; p1.s.energy = 1000;
-    const ev = await game.battle(p2, p1, "manual");
-    expect(p1.s.hp).toBeLessThan(p1.stats.maxHp);
-    if (ev.winner === p2.id) expect(ev.stolen.wood).toBeLessThanOrEqual(1);
-    await expect(game.battle(p2, p1, "manual")).rejects.toMatchObject({ code: "not_eligible" }); // cooldown
-    const row = await db.query(`SELECT mode FROM battles WHERE id = $1`, [ev.id]);
-    expect(row.rows[0]).toMatchObject({ mode: "nonredeemable" });
 
     // Marketplace: atomic sale with stale-balance protection.
     const price = tokens(500_000);
@@ -161,7 +151,7 @@ describe("gameplay economy loop", () => {
     await svc.buyListing(db, game, u2.userId, listingId, petBal);
     expect(game.pets.get(p1.id)!.ownerId).toBe(u2.userId);
     expect((await db.tx((tx) => balanceOf(tx, acct.pet(p1.id)))).balance).toBe(petBal); // balance travels with the NFT
-    expect((await db.tx((tx) => balanceOf(tx, acct.user(u1.userId)))).balance - sellerBefore).toBe(price - (price * 200n) / 10000n);
+    expect((await db.tx((tx) => balanceOf(tx, acct.user(u1.userId)))).balance - sellerBefore).toBe(price - (price * BigInt(ECONOMY.marketplace.feeBps)) / 10000n);
     await expect(svc.buyListing(db, game, u2.userId, listingId, null)).rejects.toMatchObject({ code: "gone" }); // no double-sale
 
     const rec = await svc.reconcile(db);

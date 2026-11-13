@@ -11,14 +11,20 @@
  *  - 15 s per turn. A missed turn passes to the opponent. Two missed turns in a
  *    row forfeits the match. Disconnecting doesn't pause the clock; reconnecting
  *    restores the match from the server.
- *  - Matches are non-redeemable (no tokens at stake). Real-token stakes stay
- *    disabled behind the legal gate (ECONOMY.battle.realTokenPvp + REAL_PVP_APPROVED).
+ *  - Spoils: the winner takes a luck-weighted random share (2%–15%) of the
+ *    loser's coins above a protected purse and of each resource in their bag;
+ *    a fee on the coins goes to HQ/team. Each match costs both pets energy and
+ *    hunger, and the loser's HP drops to 0 (knockout).
  *  - An unfinished match is voided (no HP change) if the server restarts.
  */
-import { battlesAllowed, BUBBLE, ECONOMY, fromBattleHp, makeChamber, Rng, toBattleHp, type BubbleMatchView, type BubbleSide } from "@catchami/shared";
+import {
+  battlesAllowed, battleTakeBps, BUBBLE, carryCapacity, computeTheft, ECONOMY, emptyInventory, formatTokens, fromBattleHp, makeChamber, RESOURCES, Rng,
+  splitBps, toBattleHp, toWire, type BubbleMatchView, type BubbleSide,
+} from "@catchami/shared";
+import { acct, balanceOf, post } from "../ledger/ledger.ts";
 import { newId } from "../auth.ts";
 import type { Game, GameClient } from "./game.ts";
-import { GameError } from "./game.ts";
+import { describeInv, GameError } from "./game.ts";
 import type { PetRt } from "./types.ts";
 
 type SideKey = "a" | "b";
@@ -46,6 +52,7 @@ interface Match {
   doneAt: number;
   /** Demo rival / tutorial coach: takes its own turns; the result goes back to the rival logic. */
   bot?: { banditId: string; practice: boolean; side: SideKey; actAt: number };
+  loot?: BubbleMatchView["loot"];
 }
 
 const other = (s: SideKey): SideKey => (s === "a" ? "b" : "a");
@@ -70,7 +77,7 @@ export class BubbleArena {
       id: m.id, state: m.state, a: side("a"), b: side("b"), you: userId ? this.sideOf(m, userId) : null,
       turn: m.turn, turnNo: m.turnNo, turnEndsAt: m.turnEndsAt, chamberNo: m.chamberNo,
       slotsLeft: m.chamber.length - m.pos, splashesLeft: m.chamber.slice(m.pos).filter(Boolean).length,
-      last: m.last, winner: m.winner, reason: m.reason, epoch: m.epoch.id, commitment: m.epoch.commitment, mode: "nonredeemable",
+      last: m.last, winner: m.winner, reason: m.reason, epoch: m.epoch.id, commitment: m.epoch.commitment, mode: m.bot?.practice ? "practice" : "stakes", loot: m.loot ?? null,
     };
   }
 
@@ -98,6 +105,9 @@ export class BubbleArena {
     if (p.s.status !== "active" && p.s.status !== "sleeping") return "not active";
     if (toBattleHp(p.s.hp, p.stats.maxHp) < BUBBLE.minHp) return "too low on HP";
     if (now - p.s.lastBattleAt < ECONOMY.battle.petCooldownSec * 1000) return "catching breath";
+    if (p.s.energy < ECONOMY.battle.minEnergy) return "too tired — needs a meal or a nap";
+    if (p.s.hunger >= ECONOMY.battle.maxHunger) return "too hungry to battle";
+    if (p.listed) return "listed for sale";
     if (!battlesAllowed(this.game.world, p.s.x, p.s.y)) return "in Paw Village — battles only happen in the Forest and Mining Valley";
     return null;
   }
@@ -150,7 +160,13 @@ export class BubbleArena {
       if (why) return this.cancel(m, `${p.name} is ${why}`);
     }
     // Lock both pets in place for the match.
-    for (const p of [m.pets.a, m.pets.b]) { p.busy = true; p.path = []; p.moveDir = null; p.task = null; p.round = null; p.activity = "Playing Bubble Roulette"; }
+    for (const p of [m.pets.a, m.pets.b]) {
+      p.busy = true; p.path = []; p.moveDir = null; p.task = null; p.round = null; p.activity = "Playing Bubble Roulette";
+      // Battling is hard work: energy and hunger, on top of the HP it costs.
+      p.s.energy = Math.max(0, p.s.energy - ECONOMY.battle.matchEnergy);
+      p.s.hunger = Math.min(ECONOMY.stats.hungerMax, p.s.hunger + ECONOMY.battle.matchHunger);
+      p.dirty = true; p.metaDirty = true;
+    }
     m.hp = { a: toBattleHp(m.pets.a.s.hp, m.pets.a.stats.maxHp), b: toBattleHp(m.pets.b.s.hp, m.pets.b.stats.maxHp) };
     m.startHp = { ...m.hp };
     m.turn = new Rng(m.epoch.seed, `bubble:${m.id}:first`).int(2) === 0 ? "a" : "b";
@@ -279,21 +295,50 @@ export class BubbleArena {
       this.game.bandits.botMatchDone(m.bot.banditId, m.pets[player].id, winner === player);
       return;
     }
-    m.pets[winner].s.wins++;
-    m.pets[loser].s.losses++;
-    m.pets[winner].activity = `Won Bubble Roulette vs ${m.pets[loser].name}`;
-    m.pets[loser].activity = `Got soaked by ${m.pets[winner].name}`;
-    this.unlock(m);
-    this.push(m);
-    const inputs = { a: m.pets.a.id, b: m.pets.b.id, startHp: m.startHp, epoch: m.epoch.id, commitment: m.epoch.commitment, rule: BUBBLE };
+    const W = m.pets[winner], L = m.pets[loser];
+    W.s.wins++;
+    L.s.losses++;
+    W.activity = `Won Bubble Roulette vs ${L.name}`;
+    L.activity = `Got soaked by ${W.name}`;
+    // Spoils: a luck-weighted, fair-rolled share of the loser's bag and coins.
+    const shareBps = battleTakeBps(W.stats.luck, L.stats.luck, new Rng(m.epoch.seed, `bubble:${m.id}:spoils`).int(10_001) / 10_000);
+    const items = computeTheft(L.s.inventory, W.s.inventory, carryCapacity(W.stats), shareBps);
+    for (const r of RESOURCES) { L.s.inventory[r] -= items[r]; W.s.inventory[r] += items[r]; }
+    const st = ECONOMY.battle.stake;
+    let coins = 0n, fee = 0n;
+    const inputs = { a: m.pets.a.id, b: m.pets.b.id, startHp: m.startHp, epoch: m.epoch.id, commitment: m.epoch.commitment, rule: BUBBLE, shareBps };
     void this.game.db.tx(async (tx) => {
+      const bal = await balanceOf(tx, acct.pet(L.id));
+      const stakeable = bal.available > st.protectedCoins ? bal.available - st.protectedCoins : 0n;
+      const take = (stakeable * BigInt(shareBps)) / 10_000n;
+      if (take > 0n) {
+        const f = (take * BigInt(st.feeBps)) / 10_000n;
+        const fs = splitBps(f, st.feeSplit, "hq");
+        const postings = [
+          { account: acct.pet(L.id), amount: -take },
+          { account: acct.pet(W.id), amount: take - f },
+          { account: acct.hq, amount: fs.hq },
+          { account: acct.team, amount: fs.team },
+        ].filter((x) => x.amount !== 0n);
+        await post(tx, { idem: `bubble-win:${m.id}`, kind: "battle_win", postings, meta: { matchId: m.id, winner: W.id, loser: L.id, shareBps } });
+        coins = take - f; fee = f;
+      }
       await tx.query(
-        `INSERT INTO battles (id, a_pet, b_pet, winner, epoch_id, label, inputs, result, stolen, mode) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'{}','bubble') ON CONFLICT (id) DO NOTHING`,
-        [m.id, m.pets.a.id, m.pets.b.id, m.pets[winner].id, m.epoch.id, `bubble:${m.id}`, JSON.stringify(inputs), JSON.stringify({ log: m.log, finalHp: m.hp, reason })],
+        `INSERT INTO battles (id, a_pet, b_pet, winner, epoch_id, label, inputs, result, stolen, mode) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'bubble') ON CONFLICT (id) DO NOTHING`,
+        [m.id, m.pets.a.id, m.pets.b.id, W.id, m.epoch.id, `bubble:${m.id}`, JSON.stringify(inputs), JSON.stringify({ log: m.log, finalHp: m.hp, reason }), JSON.stringify({ ...items, coins: coins.toString(), fee: fee.toString(), shareBps })],
       );
       for (const p of [m.pets.a, m.pets.b]) await tx.query(`UPDATE pets SET state = $2, updated_at = now() WHERE id = $1`, [p.id, JSON.stringify(p.s)]);
-    }).catch((e) => console.error("bubble settle failed", m.id, e));
-    for (const k of ["a", "b"] as const) this.game.toastOwner(m.pets[k], k === winner ? "good" : "info", k === winner ? `${m.pets[k].name} won Bubble Roulette!` : `${m.pets[k].name} got soaked — good game!`);
+    }).catch((e) => { console.error("bubble settle failed", m.id, e); coins = 0n; fee = 0n; })
+      .finally(async () => {
+        m.loot = { coins: toWire(coins), fee: toWire(fee), items, shareBps };
+        this.unlock(m); // pets stay locked until the spoils are settled
+        this.push(m);
+        await Promise.all([this.game.refreshBalance(W), this.game.refreshBalance(L)]).catch(() => {});
+        const got = [coins > 0n ? `${formatTokens(coins)} coins` : "", RESOURCES.some((r) => items[r]) ? describeInv(items) : ""].filter(Boolean).join(" + ");
+        this.game.toastOwner(W, "good", got ? `${W.name} won Bubble Roulette and took ${got}!` : `${W.name} won Bubble Roulette!`);
+        this.game.toastOwner(L, "bad", got ? `${L.name} got soaked — ${W.name} took ${got}` : `${L.name} got soaked — good game!`);
+      });
+    void emptyInventory;
   }
 
   /**

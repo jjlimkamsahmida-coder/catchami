@@ -102,43 +102,6 @@ export async function requestChainWithdrawal(db: Db, game: Game, userId: string,
   return { holdId };
 }
 
-// --------------------------------------------------------- daily rewards --
-
-export async function claimDailyReward(db: Db, game: Game, userId: string, petId: string) {
-  const p = ownedPet(game, userId, petId);
-  const now = Date.now();
-  const cfg = ECONOMY.rewards;
-  const today = dayKey(now);
-  if (now - p.createdAt < cfg.minPetAgeSec * 1000) throw new ServiceError("too_new", `${p.name} can claim daily rewards after its first full day`);
-  const gathered = p.s.gatherDay === today ? p.s.gatheredToday : 0;
-  if (gathered < cfg.minGatheredToday) throw new ServiceError("inactive_today", `Gather ${cfg.minGatheredToday - gathered} more resources today to qualify`);
-  if (p.s.status !== "active" && p.s.status !== "sleeping") throw new ServiceError("not_active", `${p.name} must be active to claim`);
-  const epoch = await currentEpoch(db, now);
-  const rng = new Rng(epoch.seed, `reward:${petId}:${today}`);
-  const zero = rng.chancePpm(cfg.zeroOutcomePpm);
-  const span = cfg.maxReward - cfg.minReward;
-  const conditionBps = Math.round(5_000 + 5_000 * (p.s.hp / p.stats.maxHp) * (1 - p.s.hunger / ECONOMY.stats.hungerMax));
-  let amount = zero ? 0n : cfg.minReward + (span * BigInt(rng.int(10_001))) / 10_000n;
-  amount = (amount * BigInt(cfg.rarityMultiplierBps[p.rarity])) / 10_000n;
-  amount = (amount * BigInt(conditionBps)) / 10_000n;
-  const result = await db.tx(async (tx) => {
-    const d = await treasuryDay(tx, now);
-    const left = d.rewardPool - d.rewardPaid;
-    const pay = amount > left ? left : amount; // never exceeds the funded pool
-    const ins = await tx.query(`INSERT INTO daily_claims (pet_id, day, amount, draws) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING pet_id`, [
-      petId, today, pay.toString(), JSON.stringify({ epoch: epoch.id, zero, conditionBps, rolled: amount.toString() }),
-    ]);
-    if (!ins.rows.length) throw new ServiceError("claimed", `${p.name} already claimed today`);
-    if (pay > 0n) {
-      await post(tx, { idem: `reward:${petId}:${today}`, kind: "reward", postings: transfer(acct.hq, acct.pet(petId), pay), meta: { petId, epoch: epoch.id } });
-      await tx.query(`UPDATE treasury_days SET reward_paid = reward_paid + $1::numeric WHERE day = $2`, [pay.toString(), d.day]);
-    }
-    return { amount: pay, poolExhausted: pay < amount };
-  });
-  await game.refreshBalance(p);
-  return { amount: toWire(result.amount), poolExhausted: result.poolExhausted, epoch: epoch.id };
-}
-
 // -------------------------------------------------------------- crafting --
 
 const EQUIP_RARITY_PPM: Record<Rarity, number> = { common: 700_000, uncommon: 200_000, rare: 80_000, epic: 17_000, legendary: 2_500, mythic: 500 };

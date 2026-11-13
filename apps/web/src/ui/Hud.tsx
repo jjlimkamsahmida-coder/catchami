@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { carryCapacity, ECONOMY, inventoryWeight, RESOURCES, type OwnPet } from "@catchami/shared";
+import { carryCapacity, ECONOMY, inventoryWeight, RESOURCES, type OwnPet, shopPrice } from "@catchami/shared";
 import { controlledPet, entities, store, useStore } from "../net/store.ts";
 import { api, forgetDevice, refreshWallet, send, rid } from "../net/api.ts";
 import { toast } from "../net/store.ts";
@@ -232,9 +232,9 @@ export function ActionBar() {
   // The tutorial teaches one thing per stage: only selling and gathering show up there.
   if (tut) return btns.length ? <div className="actions">{btns}</div> : null;
   if (p.hunger > 300 && !ko) {
-    btns.push(<button key="food" className="btn paper" disabled={(ticker?.hqStock.fish ?? 0) < 1} title={(ticker?.hqStock.fish ?? 0) < 1 ? "HQ kitchen is out of fish" : ""} onClick={() => send({ t: "buy", petId: p.id, item: "food", rid: rid() })}>Buy meal · {fmt(ECONOMY.food.price)}</button>);
+    { const sp = shopPrice("food", ticker?.hqStock.fish ?? 0); btns.push(<button key="food" className="btn paper" title={sp.imported ? "HQ kitchen is out of local fish — imported meals cost more" : ""} onClick={() => send({ t: "buy", petId: p.id, item: "food", rid: rid() })}>{sp.imported ? "Imported meal" : "Buy meal"} · {fmt(sp.price)}</button>); }
   }
-  if ((ko && koReady) || (!ko && p.hp < p.stats.maxHp * 0.6)) btns.push(<button key="med" className="btn coral" disabled={(ticker?.hqStock.herbs ?? 0) < ECONOMY.medicine.herbsPerDose} onClick={() => send({ t: "buy", petId: p.id, item: "medicine", rid: rid() })}>Medicine · {fmt(ECONOMY.medicine.price)}</button>);
+  if ((ko && koReady) || (!ko && p.hp < p.stats.maxHp * 0.6)) btns.push(<button key="med" className="btn coral" onClick={() => send({ t: "buy", petId: p.id, item: "medicine", rid: rid() })}>Medicine · {fmt(shopPrice("medicine", ticker?.hqStock.herbs ?? 0).price)}</button>);
   if (ko && !koReady && p.koUntil) btns.push(<div key="ko" className="panel small" style={{ padding: "6px 10px" }}>Recovering · {Math.ceil((p.koUntil - Date.now()) / 60000)} min</div>);
   if (!ko && p.energy < p.stats.maxEnergy * 0.5 && p.status !== "sleeping") btns.push(<button key="rest" className="btn paper" onClick={() => send({ t: "rest", petId: p.id })}>Nap</button>);
   return btns.length ? <div className="actions">{btns.slice(0, 3)}</div> : null;

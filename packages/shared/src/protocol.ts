@@ -217,7 +217,9 @@ export interface BubbleMatchView {
   reason: string;
   epoch: number;
   commitment: string;
-  mode: "nonredeemable";
+  mode: "stakes" | "practice";
+  /** What the winner took from the loser (set once the match is settled). */
+  loot: { coins: Amount; fee: Amount; items: Inventory; shareBps: number } | null;
 }
 
 export interface CatchQuote {

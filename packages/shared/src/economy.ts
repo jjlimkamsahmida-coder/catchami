@@ -81,21 +81,27 @@ export function treasuryFactorBps(hqAvailable: bigint): number {
 export interface DailyBudget {
   total: bigint;
   merchants: bigint;
-  rewards: bigint;
   factorBps: number;
+  spendable: bigint;
+  avgRevenue: bigint;
 }
 
+/** Journal kinds that count as HQ revenue: coins players spent on the game (never grants, deposits or gifts). */
+export const REVENUE_KINDS = ["catch_success", "catch_failed", "food", "medicine", "craft", "nft_sale", "battle_win"] as const;
+
 /**
- * The day's spend budget: 0.05% of available HQ funds, tapered near the
- * reserve floor, and never more than what sits above the floor.
+ * The day's merchant budget:
+ *   min(0.01% × spendable + 60% × 7-day average daily revenue, 0.03% × spendable)
+ * where spendable = HQ available − reserve floor. With no revenue HQ halves in
+ * ~19 years; HQ grows whenever revenue is above 0.025% of spendable per day.
  */
-export function dailyBudget(hqAvailableAtDayStart: bigint): DailyBudget {
+export function dailyBudget(hqAvailableAtDayStart: bigint, avgDailyRevenue = 0n): DailyBudget {
+  const h = ECONOMY.hq;
   const factorBps = treasuryFactorBps(hqAvailableAtDayStart);
-  const raw = bps(hqAvailableAtDayStart, ECONOMY.hq.dailyBudgetBpsOfAvailable);
-  const aboveFloor = hqAvailableAtDayStart > HQ_RESERVE_FLOOR ? hqAvailableAtDayStart - HQ_RESERVE_FLOOR : 0n;
-  const total = minBig(bps(raw, factorBps), aboveFloor);
-  const merchants = bps(total, ECONOMY.hq.merchantShareBps);
-  return { total, merchants, rewards: total - merchants, factorBps };
+  const spendable = hqAvailableAtDayStart > HQ_RESERVE_FLOOR ? hqAvailableAtDayStart - HQ_RESERVE_FLOOR : 0n;
+  const avgRevenue = avgDailyRevenue > 0n ? avgDailyRevenue : 0n;
+  const total = minBig(bps(spendable, h.budgetReserveBps) + bps(avgRevenue, h.budgetRevenueShareBps), bps(spendable, h.budgetCapReserveBps));
+  return { total, merchants: total, factorBps, spendable, avgRevenue };
 }
 
 /**
@@ -117,4 +123,12 @@ export function merchantTripBudget(opts: {
   const grant = minBig(topUp, opts.merchantAllowanceRemaining, aboveFloor);
   if (opts.merchantCash + grant < tripMinBudget) return { grant: 0n, available: false };
   return { grant, available: true };
+}
+
+/** Shop price for a meal / medicine dose: local (uses real HQ stock) or imported at a premium when HQ is out. */
+export function shopPrice(item: "food" | "medicine", hqStock: number): { price: bigint; imported: boolean } {
+  const cfg = item === "food" ? ECONOMY.food : ECONOMY.medicine;
+  const need = item === "food" ? ECONOMY.food.fishPerMeal : ECONOMY.medicine.herbsPerDose;
+  if (hqStock >= need) return { price: cfg.price, imported: false };
+  return { price: (cfg.price * BigInt(cfg.importMultBps)) / 10_000n, imported: true };
 }

@@ -45,14 +45,7 @@ export class Bandits {
   private game: Game;
   constructor(game: Game) {
     this.game = game;
-    let n = 0;
-    for (const [area, count] of Object.entries(PER_AREA) as Array<[AreaId, number]>) {
-      for (let i = 0; i < count; i++) {
-        const [x, y] = this.randomSpot(area);
-        this.list.push({ id: `bandit-${n}`, name: NAMES[n % NAMES.length]!, home: area, x, y, facing: 1, path: [], state: "wander", target: null, nextThink: 0, calmUntil: 0 });
-        n++;
-      }
-    }
+    // There are no wild rivals: battles are PvP. Only the tutorial's Coach Kiki lives here.
     const g = this.game.world.pois.find((p) => p.id === "glade_bandit");
     if (g) {
       const x = tileCenter(g.tx), y = tileCenter(g.ty);

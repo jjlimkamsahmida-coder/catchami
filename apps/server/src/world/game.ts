@@ -343,8 +343,8 @@ export class Game {
     node.remaining -= units;
     if (node.nextRegen === 0 || node.nextRegen < now) node.nextRegen = now + ECONOMY.resources[node.resource].regenMs;
     s.inventory[node.resource] += units;
-    s.energy = Math.max(0, s.energy - ECONOMY.stats.gatherEnergyPerUnit * units);
-    s.hunger = Math.min(ECONOMY.stats.hungerMax, s.hunger + ECONOMY.stats.gatherHungerPerUnit * units);
+    s.energy = Math.max(0, s.energy - ECONOMY.resources[node.resource].energy * units);
+    s.hunger = Math.min(ECONOMY.stats.hungerMax, s.hunger + ECONOMY.resources[node.resource].hunger * units);
     const today = dayKey(now);
     if (s.gatherDay !== today) { s.gatherDay = today; s.gatheredToday = 0; }
     s.gatheredToday += units;
@@ -409,8 +409,8 @@ export class Game {
       if (node.id.startsWith("glade-") && node.remaining <= 0) node.nextRegen = now + 15_000;
       if (node.nextRegen === 0 || node.nextRegen < now) node.nextRegen = now + ECONOMY.resources[node.resource].regenMs;
       p.s.inventory[node.resource] += gained;
-      p.s.energy = Math.max(0, p.s.energy - ECONOMY.stats.gatherEnergyPerUnit * gained);
-      p.s.hunger = Math.min(ECONOMY.stats.hungerMax, p.s.hunger + ECONOMY.stats.gatherHungerPerUnit * gained);
+      p.s.energy = Math.max(0, p.s.energy - ECONOMY.resources[node.resource].energy * gained);
+      p.s.hunger = Math.min(ECONOMY.stats.hungerMax, p.s.hunger + ECONOMY.resources[node.resource].hunger * gained);
       const today = dayKey(now);
       if (p.s.gatherDay !== today) { p.s.gatherDay = today; p.s.gatheredToday = 0; }
       p.s.gatheredToday += gained;
@@ -660,11 +660,13 @@ export class Game {
         next.hp = Math.min(p.stats.maxHp, next.hp + Math.floor((p.stats.maxHp * ECONOMY.medicine.healBps) / 10_000));
         if (next.status === "knocked_out") { next.status = "active"; next.koUntil = null; }
       }
+      let price = cfg.price, local = true;
       try {
         await this.db.tx(async (tx) => {
-          const ok = inGlade || (await consumeHqStock(tx, resource, qty, `${item}:${rid}`));
-          if (!ok) throw new GameError("sold_out", item === "food" ? "HQ kitchen is out of fish — merchants need fish deliveries" : "HQ clinic is out of herbs — merchants need herb deliveries");
-          await post(tx, { idem: `${item}:${rid}`, kind: item, postings: feePostings(acct.pet(p.id), cfg.price, cfg.split), meta: { petId: p.id } });
+          local = inGlade || (await consumeHqStock(tx, resource, qty, `${item}:${rid}`));
+          // No local stock: imported at a premium (no HQ stock used, so no local demand either).
+          if (!local) price = (cfg.price * BigInt(cfg.importMultBps)) / 10_000n;
+          await post(tx, { idem: `${item}:${rid}`, kind: item, postings: feePostings(acct.pet(p.id), price, cfg.split), meta: { petId: p.id, imported: !local } });
           await tx.query(`UPDATE pets SET state = $2, updated_at = now() WHERE id = $1`, [p.id, JSON.stringify(next)]);
         });
       } catch (e) {
@@ -672,98 +674,16 @@ export class Game {
         throw e;
       }
       p.s.hunger = next.hunger; p.s.energy = next.energy; p.s.hp = next.hp; p.s.status = next.status; p.s.koUntil = next.koUntil;
-      p.balance -= cfg.price;
-      if (!inGlade) {
+      p.balance -= price;
+      if (!inGlade && local) {
         this.pendingConsume[resource] += qty;
         this.hqStockCache[resource] = Math.max(0, this.hqStockCache[resource] - qty);
       }
       p.anim = "eat"; p.animUntil = now + 1500;
-      p.activity = item === "food" ? "Had a meal" : "Took medicine";
+      p.activity = item === "food" ? (local ? "Had a meal" : "Had an imported meal") : "Took medicine";
       p.metaDirty = true;
-      return { price: cfg.price };
+      return { price, imported: !local };
     });
-  }
-
-  canBattle(p: PetRt, now: number): string | null {
-    if (p.busy) return "busy";
-    if (p.s.status !== "active") return "not active";
-    if (p.s.energy < ECONOMY.stats.exhaustedEnergy * 2) return "too tired";
-    if (now - p.s.lastBattleAt < ECONOMY.battle.petCooldownSec * 1000) return "catching breath";
-    if (!battlesAllowed(this.world, p.s.x, p.s.y)) return "in Paw Village — battles only happen in the Forest and Mining Valley";
-    return null;
-  }
-
-  /** Non-redeemable battle (no tokens move). Real-token wagers live in pvp.ts behind the legal gate. */
-  async battle(a: PetRt, b: PetRt, initiatedBy: "manual" | "auto") {
-    if (this.flags.pauseBattles) throw new GameError("paused", "Battles are paused by operations");
-    const now = this.now();
-    if (a.ownerId === b.ownerId) throw new GameError("same_owner", "Your own pets can't battle each other");
-    const ra = this.canBattle(a, now), rb = this.canBattle(b, now);
-    if (ra) throw new GameError("not_eligible", `${a.name}: ${ra}`);
-    if (rb) throw new GameError("not_eligible", `${b.name} is ${rb}`);
-    if (Math.hypot(a.s.x - b.s.x, a.s.y - b.s.y) > ECONOMY.battle.challengeRangePx) throw new GameError("too_far", `Get closer to ${b.name}`);
-    const repeat = Math.max(a.s.recentOpponents[b.id] ?? 0, b.s.recentOpponents[a.id] ?? 0);
-    if (now - repeat < ECONOMY.battle.sameOpponentCooldownSec * 1000) throw new GameError("repeat", `${a.name} fought ${b.name} recently`);
-    // Consent: the defender's owner-configured battle strategy.
-    const bs = b.s.strategy;
-    if (bs.battle === "avoid") throw new GameError("declined", `${b.name} avoids battles`);
-    if (b.s.hp * 10_000 < b.stats.maxHp * bs.minHpBps) throw new GameError("declined", `${b.name} declined the challenge`);
-    if (initiatedBy === "manual" && a.s.hp * 10_000 < a.stats.maxHp * 1_000) throw new GameError("low_hp", `${a.name} is too hurt to fight`);
-
-    a.busy = true; b.busy = true;
-    try {
-      const epoch = await currentEpoch(this.db, now);
-      const id = newId("bt");
-      const inputs = {
-        a: { id: a.id, stats: a.stats, hp: Math.round(a.s.hp), energy: Math.round(a.s.energy) },
-        b: { id: b.id, stats: b.stats, hp: Math.round(b.s.hp), energy: Math.round(b.s.energy) },
-      };
-      const res = simulateBattle(inputs.a, inputs.b, epoch.seed, id);
-      const winner = res.winner === null ? null : res.winner === 0 ? a : b;
-      const loser = res.winner === null ? null : res.winner === 0 ? b : a;
-      const stolen = winner && loser ? computeTheft(loser.s.inventory, winner.s.inventory, carryCapacity(winner.stats)) : emptyInventory();
-      const sa = { ...a.s, inventory: { ...a.s.inventory }, recentOpponents: { ...a.s.recentOpponents, [b.id]: now } };
-      const sb = { ...b.s, inventory: { ...b.s.inventory }, recentOpponents: { ...b.s.recentOpponents, [a.id]: now } };
-      const [sw, sl] = winner === a ? [sa, sb] : [sb, sa];
-      sa.hp = res.hp[0]; sb.hp = res.hp[1]; sa.energy = res.energy[0]; sb.energy = res.energy[1];
-      sa.lastBattleAt = now; sb.lastBattleAt = now;
-      for (const st of [sa, sb]) {
-        for (const k of Object.keys(st.recentOpponents)) if (now - st.recentOpponents[k]! > ECONOMY.battle.sameOpponentCooldownSec * 1000) delete st.recentOpponents[k];
-        if (st.hp <= 0) { st.status = "knocked_out"; st.koUntil = now + ECONOMY.stats.knockoutCooldownSec * 1000; }
-      }
-      if (winner) {
-        for (const r of RESOURCES) { sl.inventory[r] -= stolen[r]; sw.inventory[r] += stolen[r]; }
-        sw.wins++; sl.losses++;
-        sw.stolenTotal += RESOURCES.reduce((s, r) => s + stolen[r], 0);
-      }
-      await this.db.tx(async (tx) => {
-        await tx.query(
-          `INSERT INTO battles (id, a_pet, b_pet, winner, epoch_id, label, inputs, result, stolen, mode) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'nonredeemable')`,
-          [id, a.id, b.id, winner?.id ?? null, epoch.id, id, JSON.stringify(inputs), JSON.stringify(res), JSON.stringify(stolen)],
-        );
-        await tx.query(`UPDATE pets SET state = $2, updated_at = now() WHERE id = $1`, [a.id, JSON.stringify(sa)]);
-        await tx.query(`UPDATE pets SET state = $2, updated_at = now() WHERE id = $1`, [b.id, JSON.stringify(sb)]);
-      });
-      a.s = sa; b.s = sb;
-      for (const p of [a, b]) { p.task = null; p.path = []; p.metaDirty = true; p.anim = p.s.status === "knocked_out" ? "ko" : "attack"; p.animUntil = now + 2500; }
-      a.facing = b.s.x >= a.s.x ? 1 : -1; b.facing = (-a.facing) as 1 | -1;
-      const ev: BattleEvent = {
-        id, a: a.id, b: b.id, winner: winner?.id ?? null, stolen,
-        exchanges: res.exchanges.map((e) => ({ attacker: e.attacker, hit: e.hit, crit: e.crit, damage: e.damage })),
-        x: (a.s.x + b.s.x) / 2, y: (a.s.y + b.s.y) / 2,
-      };
-      for (const c of this.clients) {
-        const center = this.clientCenter(c);
-        if (Math.hypot(center.x - ev.x, center.y - ev.y) < ECONOMY.world.viewRadiusPx) c.send({ t: "battle", battle: ev });
-      }
-      const verdict = winner ? `${winner.name} beat ${loser!.name}${RESOURCES.some((r) => stolen[r]) ? ` and took ${describeInv(stolen)}` : ""}` : `${a.name} and ${b.name} drew`;
-      a.activity = b.activity = verdict;
-      this.toastOwner(a, winner === a ? "good" : "bad", verdict);
-      this.toastOwner(b, winner === b ? "good" : "bad", verdict);
-      return ev;
-    } finally {
-      a.busy = false; b.busy = false;
-    }
   }
 
   // ------------------------------------------------------------- clients --
@@ -863,7 +783,7 @@ export class Game {
         const t = this.pets.get(msg.targetId);
         if (!t) throw new GameError("not_found", "That pet is gone");
         manual(p);
-        await this.battle(p, t, "manual");
+        this.arena.challenge(c, p, t); // the one battle game is Bubble Roulette
         return;
       }
       case "mg_input": { this.minigameInput(c.userId, msg.roundId, msg.ms); return; }

@@ -11,7 +11,7 @@ import { env } from "./env.ts";
 import { createGuest, getUser, verifyToken } from "./auth.ts";
 import { publicEpochs } from "./fairness.ts";
 import { acct, balanceOf } from "./ledger/ledger.ts";
-import { treasuryDay } from "./ledger/treasury.ts";
+import { avgDailyRevenue, treasuryDay } from "./ledger/treasury.ts";
 import { CaptureError, quotes, resolveAttempt, validateCapture } from "./capture/capture.ts";
 import type { Detector } from "./capture/detector.ts";
 import { GameError, type Game, type GameClient } from "./world/game.ts";
@@ -90,13 +90,14 @@ export function startHttp(db: Db, game: Game, detector: () => Detector | null, s
   // Economy transparency (public).
   route("GET", "/api/economy", async () => {
     const day = await db.tx((tx) => treasuryDay(tx));
+    const revenue = await db.tx((tx) => avgDailyRevenue(tx));
     const hq = await db.tx((tx) => balanceOf(tx, acct.hq));
     const team = await db.tx((tx) => balanceOf(tx, acct.team));
     return {
       version: ECONOMY.version, network: env.network,
-      hq: { balance: toWire(hq.balance), reserveFloor: toWire(HQ_RESERVE_FLOOR), nextDailyBudget: toWire(dailyBudget(hq.available).total) },
+      hq: { balance: toWire(hq.balance), reserveFloor: toWire(HQ_RESERVE_FLOOR), nextDailyBudget: toWire(dailyBudget(hq.available, revenue).total), avgDailyRevenue: toWire(revenue) },
       team: { revenueBalance: toWire(team.balance) },
-      today: { merchantAllowance: toWire(day.merchantAllowance), merchantGranted: toWire(day.merchantGranted), rewardPool: toWire(day.rewardPool), rewardPaid: toWire(day.rewardPaid), factorBps: day.factorBps },
+      today: { merchantAllowance: toWire(day.merchantAllowance), merchantGranted: toWire(day.merchantGranted), factorBps: day.factorBps },
       ticker: game.ticker(),
       catch: quotes(),
       fees: { food: toWire(ECONOMY.food.price), medicine: toWire(ECONOMY.medicine.price), marketplaceBps: ECONOMY.marketplace.feeBps },
@@ -133,7 +134,6 @@ export function startHttp(db: Db, game: Game, detector: () => Detector | null, s
   // Pets.
   route("POST", "/api/pets/:id/fund", async (c) => svc.fundPet(db, game, uid(c), c.params.id!, amountOf(c.body.amount), rid(c.body.rid)), { auth: true });
   route("POST", "/api/pets/:id/withdraw", async (c) => svc.withdrawFromPet(db, game, uid(c), c.params.id!, amountOf(c.body.amount), rid(c.body.rid)), { auth: true });
-  route("POST", "/api/pets/:id/claim", async (c) => svc.claimDailyReward(db, game, uid(c), c.params.id!), { auth: true });
   route("POST", "/api/pets/:id/craft", async (c) => svc.craft(db, game, uid(c), c.params.id!, c.body.kind as EquipmentKind, Boolean(c.body.buyMissing), rid(c.body.rid)), { auth: true });
   route("GET", "/api/craft", async () => ({ recipes: EQUIPMENT_KINDS.map((k) => svc.craftQuote(game, k)) }));
   route("GET", "/api/pets/:id/history", async (c) => {

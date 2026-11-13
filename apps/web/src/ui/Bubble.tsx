@@ -3,10 +3,10 @@
  * state: the client never knows which slots are loaded, only how many are left.
  */
 import { useEffect, useRef, useState } from "react";
-import { BUBBLE, type BubbleMatchView } from "@catchami/shared";
+import { BUBBLE, ECONOMY, RESOURCES, RESOURCE_LABEL, type BubbleMatchView } from "@catchami/shared";
 import { store, useStore } from "../net/store.ts";
 import { send, serverNow } from "../net/api.ts";
-import { PetArt } from "./common.tsx";
+import { fmt, PetArt } from "./common.tsx";
 import { sfx } from "./sfx.ts";
 import { genUrl } from "../game/assets.ts";
 import { Ribbon } from "./Ribbon.tsx";
@@ -26,7 +26,7 @@ export function BubbleInvite() {
       <div style={{ width: 64, height: 64, flex: "none" }}><PetArt sticker={inv.sticker} species={inv.species} look={inv.look} /></div>
       <div className="col grow" style={{ gap: 6 }}>
         <b>{inv.fromName} challenges you to Bubble Roulette!</b>
-        <span className="small muted">from {inv.ownerName} · harmless splash bubbles, HP is the score · {left}s</span>
+        <span className="small muted">from {inv.ownerName} · winner takes {ECONOMY.battle.stake.minShareBps / 100}–{ECONOMY.battle.stake.maxShareBps / 100}% of the loser's coins and bag · {left}s</span>
         <div className="row">
           <button className="btn sm paper grow" onClick={() => answer(false)}>Not now</button>
           <button className="btn sm leaf grow" onClick={() => answer(true)}>Play!</button>
@@ -132,11 +132,12 @@ export function BubbleScreen() {
             ? <Ribbon className="br-ribbon" tone={won ? "gold" : "purple"} crown={won} text={won ? "You win!" : `${m[m.winner ?? them].name} wins`} />
             : <b style={{ fontSize: 20 }}>No match</b>}
           <span className="small">{m.reason}</span>
+          {m.state === "finished" && m.mode === "stakes" && (m.loot ? <Loot m={m} won={won} /> : <span className="small muted">Counting the spoils…</span>)}
           {m.state === "finished" && <span className="small muted">{theirs.ownerId === "bot:bandit-practice" ? (won ? "Great job! Practice complete." : "Practice match — no HP lost. Coach Kiki will challenge you again in a moment!") : `Battle HP carries back to your pet. Match #${m.id.slice(3, 9)}`}</span>}
           <button className="br-btn them" onClick={close}><b>Back to the world</b></button>
         </div>
       )}
-      <p className="br-rules small">6 bubbles, 2 loaded, order hidden. A loaded bubble soaks for {BUBBLE.splashHp} HP and the launcher reloads. {BUBBLE.turnMs / 1000}s per turn.</p>
+      <p className="br-rules small">6 bubbles, 2 loaded, order hidden. A loaded bubble soaks for {BUBBLE.splashHp} HP. The winner takes {ECONOMY.battle.stake.minShareBps / 100}–{ECONOMY.battle.stake.maxShareBps / 100}% of the loser's coins and bag (luck helps). Each match costs {ECONOMY.battle.matchEnergy} energy and {ECONOMY.battle.matchHunger} hunger.</p>
     </div>
   );
 }
@@ -154,6 +155,19 @@ function Launcher({ m, fx }: { m: BubbleMatchView; fx: Fx | null }) {
       {fx?.kind === "splash" && <img key={fx.id} className={`shot ${shoot}`} src={art("br-bubble")} alt="" />}
       {fx?.kind === "puff" && <img key={fx.id} className={`shot puff ${shoot}`} src={art("br-puff")} alt="" />}
       {fx?.reload && <span key={`r${fx.id}`} className="reload">reloaded!</span>}
+    </div>
+  );
+}
+
+function Loot({ m, won }: { m: BubbleMatchView; won: boolean }) {
+  const l = m.loot!;
+  const items = RESOURCES.filter((r) => l.items[r] > 0);
+  const nothing = l.coins === "0" && !items.length;
+  return (
+    <div className={`br-loot ${won ? "won" : "lost"}`}>
+      <b>{nothing ? "Nothing to take this time" : won ? "Spoils!" : "They took…"}</b>
+      {!nothing && <span>{l.coins !== "0" && <em>🪙 {fmt(l.coins)}</em>}{items.map((r) => <em key={r}>{l.items[r]} {RESOURCE_LABEL[r].toLowerCase()}</em>)}</span>}
+      <small>{(l.shareBps / 100).toFixed(1)}% share{l.fee !== "0" ? ` · ${fmt(l.fee)} fee to HQ` : ""}</small>
     </div>
   );
 }
