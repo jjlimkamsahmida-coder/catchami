@@ -206,8 +206,13 @@ describe("Bubble Roulette", () => {
     expect(m.turn).toBe(me);
     expect(m.last).toMatchObject({ again: true, loaded: false });
     expect(m.actionsLeft).toBe(2); // 2 extra shots
+    // Another empty self-splash in the same turn doesn't add more (no stacking): 3 shots max per turn.
+    m.chamber = [false, false, true, true, true, false]; m.pos = 0;
+    game.arena.action(me === "a" ? ca : cb, m.id, "self", m.turnNo);
+    expect(m.turn).toBe(me);
+    expect(m.actionsLeft).toBe(1);
     // Use both extra shots on the rival (two loaded bubbles: the rival is soaked out).
-    for (let k = 0; k < 2 && m.state === "active"; k++) game.arena.action(me === "a" ? ca : cb, m.id, "opponent", m.turnNo);
+    for (let k = 0; k < 2 && m.state === "active" && m.turn === me; k++) game.arena.action(me === "a" ? ca : cb, m.id, "opponent", m.turnNo);
     if (m.state === "active") advance(BUBBLE.turnMs + 200); // otherwise the first side's second timeout forfeits
     expect(m.state).toBe("finished");
     expect(m.winner).not.toBe(first);

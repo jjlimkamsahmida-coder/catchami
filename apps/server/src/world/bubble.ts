@@ -55,8 +55,10 @@ interface Match {
   doneAt: number;
   /** Demo rival / tutorial coach: takes its own turns; the result goes back to the rival logic. */
   bot?: { banditId: string; practice: boolean; side: SideKey; actAt: number; firstAt?: number };
-  /** Shots left this turn (1; an empty self-splash adds 2). */
+  /** Shots left this turn (1; the first empty self-splash of a turn adds 2). */
   actionsLeft: number;
+  /** The 2 extra shots were already given this turn (they don't stack). */
+  bonusUsed?: boolean;
   loot?: BubbleMatchView["loot"];
 }
 
@@ -237,10 +239,11 @@ export class BubbleArena {
     }
     m.log.push({ turnNo: m.turnNo, by, target, chamberNo: reloaded ? m.chamberNo - 1 : m.chamberNo, slot, loaded, hp: { ...m.hp } });
     const again = target === by && !loaded; // brave self-splash that came up empty: 2 extra shots
-    m.actionsLeft = m.actionsLeft - 1 + (again ? 2 : 0);
+    m.actionsLeft -= 1;
+    if (again && !m.bonusUsed) { m.actionsLeft += 2; m.bonusUsed = true; } // once per turn: max 3 shots
     m.last = { by, target, loaded, reloaded, again, turnNo: m.turnNo };
     if (m.hp[target] <= 0) return this.finish(m, other(target), `${m.pets[target].name} got soaked!`);
-    if (m.actionsLeft <= 0) { m.turn = other(m.turn); m.actionsLeft = 1; }
+    if (m.actionsLeft <= 0) { m.turn = other(m.turn); m.actionsLeft = 1; m.bonusUsed = false; }
     m.turnNo++;
     m.turnEndsAt = this.game.now() + BUBBLE.turnMs;
     this.push(m);
@@ -280,6 +283,7 @@ export class BubbleArena {
         m.reason = `${m.pets[late].name} missed a turn`;
         m.turn = other(late);
         m.actionsLeft = 1;
+        m.bonusUsed = false;
         m.turnNo++;
         m.turnEndsAt = now + BUBBLE.turnMs;
         this.push(m);
