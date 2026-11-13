@@ -169,7 +169,7 @@ export type ServerMsg =
       controlled: string | null;
     }
   | { t: "snap"; tick: number; p: PetPos[]; m: MerchantPublic[]; b?: BanditRow[] }
-  | { t: "bandit_fight"; banditId: string; banditName: string; petId: string; petName: string; won: boolean; stolen: string; brave: boolean }
+  | { t: "bandit_fight"; banditId: string; banditName: string; petId: string; petName: string; won: boolean; stolen: string; brave: boolean; quiet?: boolean }
   /** A bandit battle begins: play the attack minigame, then send duel_input. */
   | { t: "bandit_duel"; duelId: string; banditId: string; banditName: string; petId: string; petName: string; brave: boolean; practice: boolean; rounds: number; deadlineMs: number }
   | { t: "meta"; pets: PublicPet[]; nodes: NodeState[] }

@@ -50,7 +50,7 @@ export function BanditFightPopup() {
 
   // The result arrives (from a battle we played, or one that resolved on its own).
   useEffect(() => {
-    if (!fight) return;
+    if (!fight || fight.quiet) return; // Bubble Roulette already showed this result
     setPhase("result");
     if (fight.won) sfx.fanfare(); else sfx.bad();
     const t = setTimeout(() => { setPhase(null); store.set({ banditDuel: null }); }, 3400);

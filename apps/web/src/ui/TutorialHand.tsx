@@ -43,6 +43,7 @@ function findTarget(goal: string | undefined): Pt | null {
   const card = btn(".stage-card", /Let's go|Next stage|Got it|Enter Paw Village/);
   if (card) return card;
   if (document.querySelector(".bduel")) return btn(".bduel", "ATTACK");
+  if (document.querySelector(".br")) return btn(".br", "Back to the world") ?? btn(".br-actions", /Splash (?!myself)/);
   if (document.querySelector(".mg-overlay")) return btn(".mg-overlay", /Close/) ?? el(".mg-tap:not(:disabled)");
   const s = store.get();
   if (s.sheet?.kind === "merchant") {

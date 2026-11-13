@@ -41,7 +41,7 @@ export interface State {
   toasts: Toast[];
   sheet: null | { kind: "merchant"; id: string } | { kind: "pet"; id: string } | { kind: "node"; id: string } | { kind: "bandit"; id: string };
   /** Last bandit scuffle result, for the battle popup. */
-  banditFight: { banditId?: string; banditName: string; petName: string; won: boolean; stolen: string; brave: boolean; at: number } | null;
+  banditFight: { quiet?: boolean; banditId?: string; banditName: string; petName: string; won: boolean; stolen: string; brave: boolean; at: number } | null;
   /** A bandit battle waiting for the attack minigame. */
   banditDuel: { duelId: string; banditId: string; banditName: string; petName: string; brave: boolean; practice: boolean; rounds: number; deadlineMs: number; at: number } | null;
   screen: "world" | "catch" | "pets" | "market" | "ranks" | "wallet" | "fairness" | "map";

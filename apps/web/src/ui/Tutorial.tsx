@@ -88,10 +88,10 @@ const STAGES: Stage[] = [
     ],
   },
   {
-    name: "Battles", icon: "⚔️", learn: ["Battling other Keepers", "Battle minigame"],
+    name: "Battles", icon: "⚔️", learn: ["Battling other Keepers", "Bubble Roulette"],
     steps: [
       {
-        title: "Battle time!", pose: "point", text: (n) => `Out in the wild, other Keepers' pets can challenge you to a battle — the winner takes the loser's bag! Coach Kiki is here to practise with. When she challenges you, tap ATTACK while the marker is in the red zone. Show her what ${n} can do!`,
+        title: "Battle time!", pose: "point", text: (n) => `Out in the wild, other Keepers' pets challenge you to Bubble Roulette — the winner takes the loser's bag! The launcher holds 6 bubbles and 2 of them are loaded. Take turns: splash your rival, or risk splashing yourself. A loaded bubble soaks for 20 HP. Coach Kiki is here to practise — show her what ${n} can do!`,
         goal: "fight", goalText: "Win the practice battle", target: trainingBandit,
         extra: () => <div className="tut-bandit"><b>⚔️ PvP battle</b></div>,
       },

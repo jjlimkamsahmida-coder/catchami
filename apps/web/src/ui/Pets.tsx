@@ -49,7 +49,7 @@ function PetDetail({ p }: { p: OwnPet }) {
         </div>
       </div>
       <div className="seg" style={{ marginBottom: 12 }}>
-        {(["status", "strategy", "wallet", "gear"] as Tab[]).map((t) => <button key={t} className={tab === t ? "on" : ""} onClick={() => setTab(t)} style={{ textTransform: "capitalize" }}>{t}</button>)}
+        {(["status", "strategy", "wallet"] as Tab[]).map((t) => <button key={t} className={tab === t ? "on" : ""} onClick={() => setTab(t)} style={{ textTransform: "capitalize" }}>{t}</button>)}
       </div>
       {tab === "status" && <StatusTab p={p} />}
       {tab === "strategy" && <StrategyTab p={p} />}

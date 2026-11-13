@@ -81,13 +81,13 @@ export const ECONOMY = {
     maxHp: 1000,
     maxEnergy: 1000,
     hungerMax: 1000,
-    /** Hunger gained per second (0 = full, 1000 = starving). ~8h from full to starving. */
-    hungerPerSec: 1000 / (8 * 3600),
-    starvingEnergyDrainPerSec: 0.25,
-    walkEnergyPerSec: 0.35,
-    gatherEnergyPerUnit: 1.2,
+    /** Hunger gained per second (0 = full, 1000 = starving). ~45 min from full to starving (fast for the demo). */
+    hungerPerSec: 1000 / (45 * 60),
+    starvingEnergyDrainPerSec: 0.6,
+    walkEnergyPerSec: 1,
+    gatherEnergyPerUnit: 3,
     /** Hunger gained per unit gathered (hard work makes pets hungry). */
-    gatherHungerPerUnit: 0.6,
+    gatherHungerPerUnit: 1.5,
     /** Bags hold this many times their base carry stat ("earn more": every hit gives 10× units). */
     carryScale: 10,
     battleEnergyPerExchange: 12,

@@ -44,6 +44,8 @@ interface Match {
   log: Array<{ turnNo: number; by: SideKey; target: SideKey | "timeout"; chamberNo: number; slot: number; loaded: boolean; hp: Record<SideKey, number> }>;
   settled: boolean;
   doneAt: number;
+  /** Demo rival / tutorial coach: takes its own turns; the result goes back to the rival logic. */
+  bot?: { banditId: string; practice: boolean; side: SideKey; actAt: number };
 }
 
 const other = (s: SideKey): SideKey => (s === "a" ? "b" : "a");
@@ -53,7 +55,7 @@ export class BubbleArena {
   game: Game;
   constructor(game: Game) { this.game = game; }
 
-  private online(userId: string) { for (const c of this.game.clients) if (c.userId === userId) return true; return false; }
+  private online(userId: string) { if (userId.startsWith("bot:")) return true; for (const c of this.game.clients) if (c.userId === userId) return true; return false; }
 
   private sideOf(m: Match, userId: string): SideKey | null {
     return m.pets.a.ownerId === userId ? "a" : m.pets.b.ownerId === userId ? "b" : null;
@@ -207,6 +209,17 @@ export class BubbleArena {
 
   tick(now: number) {
     for (const m of this.matches.values()) {
+      if (m.bot && m.state === "active" && m.turn === m.bot.side) {
+        if (!m.bot.actAt) m.bot.actAt = now + 1400 + Math.random() * 900; // "thinking"
+        if (now >= m.bot.actAt) {
+          m.bot.actAt = 0;
+          const slots = m.chamber.length - m.pos, splashes = m.chamber.slice(m.pos).filter(Boolean).length;
+          // Simple, readable play: no splashes left → safe self-shot; otherwise usually aim at you.
+          const target = splashes === 0 ? m.bot.side : splashes / slots >= 0.5 || Math.random() < 0.75 ? other(m.bot.side) : m.bot.side;
+          this.resolve(m, m.bot.side, target);
+        }
+        continue;
+      }
       if (m.state === "invited" && now > m.inviteExpiresAt) this.cancel(m, "The invitation expired");
       else if (m.state === "active" && now > m.turnEndsAt) {
         const late = m.turn;
@@ -250,12 +263,21 @@ export class BubbleArena {
     const loser = other(winner);
     for (const k of ["a", "b"] as const) {
       const p = m.pets[k];
+      if (m.bot && (m.bot.practice || k === m.bot.side)) { p.s.lastBattleAt = m.bot.practice ? 0 : now; continue; }
       // A match can only lower HP, never heal.
       p.s.hp = Math.min(p.s.hp, fromBattleHp(m.hp[k], p.stats.maxHp));
       p.s.lastBattleAt = now;
       p.s.recentOpponents = { ...p.s.recentOpponents, [m.pets[other(k)].id]: now };
       if (p.s.hp <= 0) { p.s.hp = 0; p.s.status = "knocked_out"; p.s.koUntil = now + ECONOMY.stats.knockoutCooldownSec * 1000; p.anim = "ko"; }
       p.dirty = true; p.metaDirty = true;
+    }
+    if (m.bot) {
+      const player = other(m.bot.side);
+      if (!m.bot.practice) { m.pets[player].s[winner === player ? "wins" : "losses"]++; }
+      this.unlock(m);
+      this.push(m);
+      this.game.bandits.botMatchDone(m.bot.banditId, m.pets[player].id, winner === player);
+      return;
     }
     m.pets[winner].s.wins++;
     m.pets[loser].s.losses++;
@@ -272,6 +294,37 @@ export class BubbleArena {
       for (const p of [m.pets.a, m.pets.b]) await tx.query(`UPDATE pets SET state = $2, updated_at = now() WHERE id = $1`, [p.id, JSON.stringify(p.s)]);
     }).catch((e) => console.error("bubble settle failed", m.id, e));
     for (const k of ["a", "b"] as const) this.game.toastOwner(m.pets[k], k === winner ? "good" : "info", k === winner ? `${m.pets[k].name} won Bubble Roulette!` : `${m.pets[k].name} got soaked — good game!`);
+  }
+
+  /**
+   * A demo rival (or the tutorial's Coach Kiki) challenges a player's pet:
+   * the match starts right away and the bot plays its own turns.
+   */
+  startBot(p: PetRt, bot: { banditId: string; name: string; ownerName: string; art: string; practice: boolean }): boolean {
+    const now = this.game.now();
+    if (p.matchId || p.busy || p.s.status === "knocked_out") return false;
+    if (!this.online(p.ownerId)) return false;
+    const epoch = this.game.epochNow();
+    if (!epoch) return false;
+    const fake = {
+      id: `bot-${bot.banditId}`, ownerId: `bot:${bot.banditId}`, ownerName: bot.ownerName, name: bot.name, species: "cat", rarity: "rare",
+      sticker: `/assets/gen/${bot.art}.png`, genome: { look: { hue: 30, outline: 0, pattern: 0, bounce: 100 } },
+      stats: { maxHp: 1000 }, s: { hp: 1000, lastBattleAt: 0, recentOpponents: {}, wins: 0, losses: 0, status: "active" },
+      matchId: null, busy: true, activity: "", anim: "idle", dirty: false, metaDirty: false,
+    } as unknown as PetRt;
+    const id = newId("br");
+    const playerHp = bot.practice ? 100 : Math.max(BUBBLE.minHp, toBattleHp(p.s.hp, p.stats.maxHp));
+    const m: Match = {
+      id, state: "active", pets: { a: p, b: fake }, hp: { a: playerHp, b: 100 }, startHp: { a: playerHp, b: 100 },
+      turn: "a", turnNo: 1, turnEndsAt: now + BUBBLE.turnMs, chamberNo: 0, chamber: makeChamber(epoch.seed, id, 0), pos: 0,
+      missed: { a: 0, b: 0 }, last: null, winner: null, reason: "", epoch: { id: epoch.id, seed: epoch.seed, commitment: epoch.commitment },
+      inviteExpiresAt: now, log: [], settled: false, doneAt: 0, bot: { banditId: bot.banditId, practice: bot.practice, side: "b", actAt: 0 },
+    };
+    this.matches.set(id, m);
+    p.matchId = id; p.busy = true; p.path = []; p.moveDir = null; p.task = null; p.round = null; p.activity = `Bubble Roulette vs ${bot.name}`;
+    p.dirty = true;
+    this.push(m);
+    return true;
   }
 
   /** Test/inspection helper. */

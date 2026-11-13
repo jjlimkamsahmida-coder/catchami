@@ -58,7 +58,7 @@ export function BagScreen({ p }: { p: OwnPet }) {
         </div>
       </div>
       <div className="gtabs">
-        {(["bag", "strategy", "wallet", "gear"] as const).map((t) => <button key={t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>{{ bag: "🎒 Bag", strategy: "🤖 Autopilot", wallet: "🪙 Piggy bank", gear: "🛡️ Gear" }[t]}</button>)}
+        {(["bag", "strategy", "wallet"] as const).map((t) => <button key={t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>{{ bag: "🎒 Bag", strategy: "🤖 Autopilot", wallet: "🪙 Piggy bank", gear: "🛡️ Gear" }[t]}</button>)}
       </div>
       {tab === "bag" && (
         <>

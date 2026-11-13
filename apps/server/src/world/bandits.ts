@@ -16,7 +16,7 @@ export interface BanditRt {
   path: Array<[number, number]>; state: BanditState; target: string | null;
   nextThink: number; calmUntil: number;
   /** Tutorial training bandit: idle, never chases, never steals. */
-  practice?: boolean; homeX?: number; homeY?: number;
+  practice?: boolean; homeX?: number; homeY?: number; brave?: boolean;
 }
 
 /** Demo rivals: pets of other (simulated) Keepers that roam the wild and challenge you. */
@@ -28,6 +28,9 @@ const CATCH = 30;       // px: close enough to steal
 const CALM_MS = 22_000; // after a theft, ignores pets for a while
 const PER_AREA: Partial<Record<AreaId, number>> = { forest: 4, mines: 3 };
 const DUEL_ROUNDS = 3;
+/** Same sticker choice as the client (apps/web/src/game/assets.ts banditArt). */
+const BANDIT_ART = ["bandit-1", "bandit-2", "bandit-3"];
+const hashId = (id: string) => { let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0; return h; };
 const DUEL_MS = 14_000; // the player has this long to play the attack minigame
 interface Duel { id: string; banditId: string; petId: string; ownerId: string; brave: boolean; deadline: number }
 
@@ -155,11 +158,29 @@ export class Bandits {
   /** Freeze both fighters and ask the owner to play the attack minigame. */
   private startDuel(b: BanditRt, p: PetRt, now: number, brave: boolean) {
     if (this.duelFor(p.id)) return;
+    // The one battle game is Bubble Roulette: the rival plays its own turns.
+    const art = BANDIT_ART[hashId(b.id) % BANDIT_ART.length]!;
+    const owner = b.practice ? "Coach" : b.name.split("'")[0]!;
+    if (this.game.arena.startBot(p, { banditId: b.id, name: b.name, ownerName: owner, art, practice: !!b.practice })) {
+      b.state = "duel"; b.path = []; b.target = p.id; b.brave = brave;
+      return;
+    }
+    if (b.practice) return; // couldn't start (busy / offline): try again later
+
     const id = `duel_${++this.duelSeq}_${now}`;
     this.duels.set(id, { id, banditId: b.id, petId: p.id, ownerId: p.ownerId, brave, deadline: now + DUEL_MS });
     b.state = "duel"; b.path = []; b.target = p.id;
     p.path = []; p.moveDir = null; p.task = null; p.round = null; p.dirty = true;
     this.game.toOwner(p, { t: "bandit_duel", duelId: id, banditId: b.id, banditName: b.name, petId: p.id, petName: p.name, brave, practice: !!b.practice, rounds: DUEL_ROUNDS, deadlineMs: DUEL_MS - 2_000 });
+  }
+
+  /** A Bubble Roulette match against this rival ended. */
+  botMatchDone(banditId: string, petId: string, playerWon: boolean) {
+    const b = this.list.find((x) => x.id === banditId);
+    const p = this.game.pets.get(petId);
+    if (!b) return;
+    if (!p) { b.state = "wander"; b.target = null; return; }
+    this.fight(b, p, this.game.now(), !!b.brave, 0, playerWon);
   }
 
   /** The owner finished the minigame. */
@@ -198,16 +219,17 @@ export class Bandits {
    * Settle a battle. Each landed attack (0-3) adds to the odds. Win: the bandit
    * flees empty-handed. Lose: it steals the whole bag.
    */
-  private fight(b: BanditRt, p: PetRt, now: number, brave: boolean, hits = 0) {
+  private fight(b: BanditRt, p: PetRt, now: number, brave: boolean, hits = 0, forced?: boolean) {
     const s = p.stats;
     const hpShare = p.s.hp / s.maxHp;
     const chance = b.practice
       ? [0.15, 0.55, 0.95, 1][hits]!
       : Math.max(0.1, Math.min(0.95, 0.2 + hits * 0.17 + (s.attack + s.defense - 200) / 400 + (brave ? 0.08 : 0) + (hpShare - 0.5) * 0.2));
-    const won = Math.random() < chance;
+    const won = forced ?? Math.random() < chance;
+    const quiet = forced !== undefined; // Bubble Roulette already showed the result
     if (b.practice) {
-      this.game.toastOwner(p, won ? "good" : "info", won ? `${p.name} won the practice battle!` : "Coach Kiki won this one — practise again, no loot lost.");
-      this.game.toOwner(p, { t: "bandit_fight", banditId: b.id, banditName: b.name, petId: p.id, petName: p.name, won, stolen: "", brave });
+      if (!quiet) this.game.toastOwner(p, won ? "good" : "info", won ? `${p.name} won the practice battle!` : "Coach Kiki won this one — practise again, no loot lost.");
+      this.game.toOwner(p, { t: "bandit_fight", banditId: b.id, banditName: b.name, petId: p.id, petName: p.name, won, stolen: "", brave, quiet });
       b.state = won ? "flee" : "wander"; b.target = null; b.calmUntil = now + (won ? 6_000 : 5_000);
       if (!won) { b.x = b.homeX!; b.y = b.homeY!; } // back off, then try again
       return;
@@ -216,7 +238,7 @@ export class Bandits {
     if (won) {
       p.anim = "attack"; p.animUntil = now + 900;
       p.activity = `Chased off ${b.name}!`;
-      this.game.toastOwner(p, "good", `${p.name} beat ${b.name} in battle!`);
+      if (!quiet) this.game.toastOwner(p, "good", `${p.name} beat ${b.name} in battle!`);
     } else {
       const loot = { ...p.s.inventory };
       stolen = RESOURCES.filter((r) => loot[r] > 0).map((r) => `${loot[r]} ${r === "minerals" ? "stone" : r}`).join(", ");
@@ -224,10 +246,10 @@ export class Bandits {
       p.s.hp = Math.max(1, p.s.hp - Math.round(s.maxHp * 0.15));
       p.anim = "hurt"; p.animUntil = now + 900;
       p.activity = `Robbed by ${b.name}!`;
-      this.game.toastOwner(p, "bad", stolen ? `${b.name} won the battle and took ${stolen}!` : `${b.name} won the battle — luckily ${p.name}'s bag was empty!`);
+      this.game.toastOwner(p, "bad", stolen && quiet ? `${b.name} took ${stolen} from your bag!` : stolen ? `${b.name} won the battle and took ${stolen}!` : `${b.name} won the battle — luckily ${p.name}'s bag was empty!`);
     }
     p.dirty = true; p.metaDirty = true;
-    this.game.toOwner(p, { t: "bandit_fight", banditId: b.id, banditName: b.name, petId: p.id, petName: p.name, won, stolen, brave });
+    this.game.toOwner(p, { t: "bandit_fight", banditId: b.id, banditName: b.name, petId: p.id, petName: p.name, won, stolen, brave, quiet });
     b.state = "flee"; b.target = null; b.calmUntil = now + CALM_MS;
     const [x, y] = this.randomSpot(b.home, b, 20);
     this.pathTo(b, x, y);

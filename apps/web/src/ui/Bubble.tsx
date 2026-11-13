@@ -81,13 +81,19 @@ export function BubbleScreen() {
   const won = m.state === "finished" && m.winner === me;
 
   return (
-    <div className="br">
+    <div className={`br ${myTurn ? "my-turn" : ""}`}>
+      <div className="br-bubbles" aria-hidden>{Array.from({ length: 12 }, (_, i) => <i key={i} style={{ left: `${(i * 8.7) % 100}%`, animationDelay: `${(i % 6) * 0.7}s`, width: 14 + (i % 4) * 8, height: 14 + (i % 4) * 8 }} />)}</div>
       <div className="br-top">
         <span className="br-title">Bubble Roulette</span>
-        {m.state === "active" && <span className={`br-turn ${myTurn ? "mine" : ""}`}><img className="br-clock" src={art("br-timer")} alt="" />{myTurn ? "Your turn" : `${theirs.name}'s turn`} · {secs}s</span>}
         {!finished && <button className="btn sm paper" onClick={() => { if (confirm(m.state === "invited" ? "Withdraw the challenge?" : "Leave the match? Leaving counts as a loss.")) send({ t: "br_forfeit", matchId: m.id }); }}>{m.state === "invited" ? "Cancel" : "Leave"}</button>}
       </div>
 
+      {m.state === "active" && (
+        <div key={m.turnNo} className={`br-banner ${myTurn ? "mine" : ""}`}>
+          <b>{myTurn ? "YOUR TURN!" : `${theirs.name}'s turn`}</b>
+          <span className="br-secs"><img className="br-clock" src={art("br-timer")} alt="" />{secs}s</span>
+        </div>
+      )}
       <div className="br-arena">
         {(["mine", "theirs"] as const).map((who) => {
           const side = who === "mine" ? me : them;
@@ -97,7 +103,8 @@ export function BubbleScreen() {
           const winner = m.state === "finished" && m.winner === side;
           return (
             <div key={who} className={`br-pet ${who} ${m.turn === side && m.state === "active" ? "active" : ""}`}>
-              <div className="br-hp"><b>{s.name}</b><span>{hp[side]}</span><i><em style={{ width: `${hp[side]}%` }} /></i>{!s.connected && m.state === "active" && <small>reconnecting…</small>}</div>
+              <div className="br-hp"><b>{s.name}</b><span>❤ {hp[side]}</span><i><em style={{ width: `${hp[side]}%` }} /></i>{!s.connected && m.state === "active" && <small>reconnecting…</small>}</div>
+              {m.state === "active" && m.turn === side && side === them && !fx && <span className="br-think">🤔 thinking…</span>}
               <div className={`br-sticker ${hit && fx?.kind === "splash" ? "soaked" : ""} ${hit && fx?.kind === "puff" ? "giggle" : ""} ${winner ? "cheer" : ""}`}>
                 <PetArt sticker={s.sticker} species={s.species} look={s.look} />
                 {hit && fx?.kind === "splash" && <img key={fx.id} className="br-fx pop" src={art("br-pop")} alt="" />}
@@ -114,8 +121,8 @@ export function BubbleScreen() {
 
       {m.state === "active" && (
         <div className="br-actions">
-          <button className="btn paper" disabled={!myTurn || busy} onClick={() => act("self")}>Splash myself</button>
-          <button className="btn coral" disabled={!myTurn || busy} onClick={() => act("opponent")}>Splash {theirs.name}</button>
+          <button className="br-btn me" disabled={!myTurn || busy} onClick={() => act("self")}><b>🎲 Splash myself</b><small>Risky! Safe if it's empty</small></button>
+          <button className="br-btn them" disabled={!myTurn || busy} onClick={() => act("opponent")}><b>💦 Splash {theirs.name}!</b><small>{m.splashesLeft} loaded of {m.slotsLeft} left</small></button>
         </div>
       )}
       {m.state === "invited" && <div className="br-note panel">Waiting for {theirs.name}'s owner to accept…</div>}
@@ -125,11 +132,11 @@ export function BubbleScreen() {
             ? <Ribbon className="br-ribbon" tone={won ? "gold" : "purple"} crown={won} text={won ? "You win!" : `${m[m.winner ?? them].name} wins`} />
             : <b style={{ fontSize: 20 }}>No match</b>}
           <span className="small">{m.reason}</span>
-          {m.state === "finished" && <span className="small muted">Battle HP carries back to your pet. Match #{m.id.slice(3, 9)} · fair-roll epoch {m.epoch}</span>}
-          <button className="btn" onClick={close}>Back to the world</button>
+          {m.state === "finished" && <span className="small muted">{theirs.ownerId === "bot:bandit-practice" ? (won ? "Great job! Practice complete." : "Practice match — no HP lost. Coach Kiki will challenge you again in a moment!") : `Battle HP carries back to your pet. Match #${m.id.slice(3, 9)}`}</span>}
+          <button className="br-btn them" onClick={close}><b>Back to the world</b></button>
         </div>
       )}
-      <p className="br-rules small">6 slots, 2 splash bubbles, positions hidden. A splash costs {BUBBLE.splashHp} HP and reloads the launcher. {BUBBLE.turnMs / 1000}s per turn; two missed turns forfeit. No tokens at stake.</p>
+      <p className="br-rules small">6 bubbles, 2 loaded, order hidden. A loaded bubble soaks for {BUBBLE.splashHp} HP and the launcher reloads. {BUBBLE.turnMs / 1000}s per turn.</p>
     </div>
   );
 }
