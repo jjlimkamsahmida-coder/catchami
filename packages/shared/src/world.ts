@@ -196,7 +196,7 @@ export function generateWorld(seed = WORLD_SEED): WorldDef {
   for (let y = 2; y < 36; y++) { const sx = 24 + Math.round((n1(30, y) - 0.5) * 8); set(sx, y, T.water); set(sx + 1, y, T.shallow); set(sx - 1, y, T.shallow); }
   blob(52, 10, 5, 3);
   blob(96, 47, 4, 2, false);
-  blob(GLADE_X0 + 34, 53, 3, 2, false); // Gathering arena pond (practice fishing)
+  blob(GLADE_X0 + 34, 52, 3, 2, false); // Gathering arena pond (practice fishing)
 
   // Village plaza (cobblestone); HQ castle on its north side.
   const hq = { tx: 96, ty: 20 };
@@ -343,7 +343,10 @@ export function generateWorld(seed = WORLD_SEED): WorldDef {
     } else if (a === A.glade) {
       // Arenas stay open: a few trees hugging the cliffs, a sprinkle of flowers.
       // (Own random stream, so changing the tutorial glade never reshuffles the rest of the world.)
-      if (nextToRock(x, y) && r < 0.35) { if (canPlace(r < 0.12 ? "pine" : "tree", x, y)) { const k = r < 0.12 ? "pine" : "tree"; for (let j = 0; j < PROP_SIZE[k].h; j++) for (let i = 0; i < PROP_SIZE[k].w; i++) if (inb(x + i, y + j)) occupied[idx(x + i, y + j)] = 1; props.push({ kind: k, tx: x, ty: y, v: grng.int(4) }); } }
+      // No trees along the bottom of a tutorial scene: they grow upward and would hide spots and buttons.
+      const arenaHere = GLADE_ARENAS.find(([x0, y0, x1, y1]) => x >= x0 && x <= x1 && y >= y0 && y <= y1);
+      const bottomRows = !!arenaHere && y >= arenaHere[3] - 2;
+      if (nextToRock(x, y) && r < 0.35 && !bottomRows) { if (canPlace(r < 0.12 ? "pine" : "tree", x, y)) { const k = r < 0.12 ? "pine" : "tree"; for (let j = 0; j < PROP_SIZE[k].h; j++) for (let i = 0; i < PROP_SIZE[k].w; i++) if (inb(x + i, y + j)) occupied[idx(x + i, y + j)] = 1; props.push({ kind: k, tx: x, ty: y, v: grng.int(4) }); } }
       else if ((t === T.grass || t === T.meadow) && gv > 0.62 && r < 0.08) props.push({ kind: "flower", tx: x, ty: y, v: grng.int(4) });
     } else if (a === A.village) {
       // Only gentle flower patches in the open lawns — streets stay clear.
@@ -414,7 +417,7 @@ export function generateWorld(seed = WORLD_SEED): WorldDef {
   addNodes("fish", 8, A.forest, (x, y, t) => ground(t) && nextToWater(x, y));
   addNodes("minerals", 15, A.mines, (_x, _y, t) => t === T.highland);
   // Gathering arena: one spot of each resource.
-  for (const [resource, x, y] of [["wood", GLADE_X0 + 27, 49], ["herbs", GLADE_X0 + 33, 49], ["minerals", GLADE_X0 + 27, 53], ["fish", GLADE_X0 + 30, 53]] as const) {
+  for (const [resource, x, y] of [["wood", GLADE_X0 + 27, 48], ["herbs", GLADE_X0 + 33, 48], ["minerals", GLADE_X0 + 26, 51], ["fish", GLADE_X0 + 30, 51]] as const) {
     // Clear the tile and its neighbours so the spot is always reachable.
     for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) if (get(x + i, y + j) !== T.water && get(x + i, y + j) !== T.shallow) { set(x + i, y + j, T.grass); blocked[idx(x + i, y + j)] = 0; }
     for (let k = props.length - 1; k >= 0; k--) { const q = props[k]!; if (Math.abs(q.tx - x) <= 1 && Math.abs(q.ty - y) <= 1 && PROP_SIZE[q.kind].w === 1) props.splice(k, 1); }

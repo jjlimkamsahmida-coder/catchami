@@ -1725,3 +1725,15 @@ html.has-touch .joystick { display: block !important; }
 
 .autopilot-intro { background: linear-gradient(#e7f6ff, #fff); }
 .autopilot-intro ul { margin: 0; padding-left: 4px; list-style: none; display: grid; gap: 4px; font-weight: 600; }
+
+/* ---- tutorial spotlight: dim everything except one element ---- */
+.tut-spot { position: fixed; inset: 0; z-index: 190; cursor: pointer; animation: fade 250ms; }
+.tut-spot-hole { position: fixed; border-radius: 14px; box-shadow: 0 0 0 4px #ffd166, 0 0 24px 6px rgba(255, 209, 102, 0.8), 0 0 0 200vmax rgba(15, 8, 26, 0.72); pointer-events: none; transition: left 120ms, top 120ms; animation: spotpulse 1s ease-in-out infinite alternate; }
+@keyframes spotpulse { from { box-shadow: 0 0 0 3px #ffd166, 0 0 14px 4px rgba(255, 209, 102, 0.6), 0 0 0 200vmax rgba(15, 8, 26, 0.72); } to { box-shadow: 0 0 0 6px #ffd166, 0 0 30px 10px rgba(255, 209, 102, 0.9), 0 0 0 200vmax rgba(15, 8, 26, 0.72); } }
+.tut-spot-caption { position: fixed; display: flex; flex-direction: column; gap: 2px; padding: 8px 14px; border-radius: 16px; background: #fff6e5; border: 3px solid var(--ink); box-shadow: 0 4px 0 var(--ink); font: 700 18px Fredoka, sans-serif; color: var(--ink); animation: pop 300ms cubic-bezier(.2,1.4,.5,1); }
+.tut-spot-caption small { font-size: 12px; font-weight: 600; color: var(--ink-soft, #6b5b7a); }
+
+/* PC: the 0 HP alert sits right under the profile badge (top-left). */
+@media (hover: hover) and (pointer: fine) {
+  .bagfull.ko { left: calc(8px + var(--safe-left)); top: calc(128px + var(--safe-top)); transform: none; width: auto; max-width: 270px; animation: none; }
+}

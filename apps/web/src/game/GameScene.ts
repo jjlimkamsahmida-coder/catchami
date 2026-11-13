@@ -413,7 +413,9 @@ export class GameScene extends Phaser.Scene {
             // Tutorial arenas get their own tight bounds (cliff edge included).
             const g = arena >= 0 ? GLADE_ARENAS[arena]! : null;
             const [bx0, by0, bx1, by1] = g ? [g[0] - 2, g[1] - 2, g[2] + 3, g[3] + 3] : AREA_BOUNDS[a.id];
-            const enter = () => { cam.setBounds(bx0 * TILE, by0 * TILE, (bx1 - bx0) * TILE, (by1 - by0) * TILE); cam.centerOn(x, y); };
+            // Tutorial scenes are pinned to the top of the screen, so nothing hides under the tutorial card.
+            const pinTop = !!g && s.onboarding?.stage === "tutorial";
+            const enter = () => { const h = (by1 - by0) * TILE; cam.setBounds(bx0 * TILE, by0 * TILE, (bx1 - bx0) * TILE, pinTop ? Math.max(h, this.scale.height / cam.zoom) : h); cam.centerOn(x, y); };
             enter();
             if (!first) { cam.resetFX(); cam.fadeIn(420, 43, 29, 58); }
             if (a.id !== this.lastAreaId) { this.lastAreaId = a.id; window.dispatchEvent(new CustomEvent("catchami:area", { detail: a })); }

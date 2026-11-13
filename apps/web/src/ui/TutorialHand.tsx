@@ -91,6 +91,8 @@ function findTargets(goal: string | undefined): Pt[] {
 
 export function TutorialHand({ goal, active }: { goal: string | undefined; active: boolean }) {
   const refs = [useRef<HTMLDivElement>(null), useRef<HTMLDivElement>(null)];
+  const spot = useRef<HTMLDivElement>(null);
+  const spotHole = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!active) return;
     let raf = 0;
@@ -98,6 +100,10 @@ export function TutorialHand({ goal, active }: { goal: string | undefined; activ
     // Each hand eases toward its target (pulsing buttons don't make it shake) and stays a
     // moment when a target blinks out between minigame rounds (no flicker).
     const st = [0, 1].map(() => ({ x: 0, y: 0, shown: false, seen: 0 }));
+    // Spotlight: the first time a bar is highlighted, dim everything else for a moment (tap to skip).
+    let spotUntil = 0, spotDone = false;
+    const dismiss = () => { spotUntil = 0; spotDone = true; };
+    spot.current?.addEventListener("pointerdown", dismiss);
     const loop = () => {
       const all = findTargets(goal);
       const ts = all.filter((t) => !t.noHand).slice(0, 2);
@@ -118,6 +124,18 @@ export function TutorialHand({ goal, active }: { goal: string | undefined; activ
         h.dataset.dir = below ? "up" : "down";
       });
       const tsAll = all.slice(0, 3);
+      const bar = all.find((t) => t.noHand);
+      const sp = spot.current, hole = spotHole.current;
+      if (sp && hole) {
+        if (bar?.el && !spotDone && !spotUntil) spotUntil = now + 3500;
+        if (bar?.el && now < spotUntil) {
+          const r = bar.el.getBoundingClientRect();
+          sp.style.display = "block";
+          Object.assign(hole.style, { left: `${r.left - 8}px`, top: `${r.top - 8}px`, width: `${r.width + 16}px`, height: `${r.height + 16}px` });
+          (sp.lastChild as HTMLElement).style.top = `${r.bottom + 14}px`;
+          (sp.lastChild as HTMLElement).style.left = `${Math.max(12, r.left - 8)}px`;
+        } else { sp.style.display = "none"; if (spotUntil && now >= spotUntil) spotDone = true; }
+      }
       const els = tsAll.map((t) => t.el).filter((e): e is Element => !!e);
       for (const e of lit) if (!els.includes(e)) e.classList.remove("tut-target");
       for (const e of els) e.classList.add("tut-target");
@@ -125,8 +143,12 @@ export function TutorialHand({ goal, active }: { goal: string | undefined; activ
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
-    return () => { cancelAnimationFrame(raf); for (const e of lit) e.classList.remove("tut-target"); };
+    return () => { cancelAnimationFrame(raf); spot.current?.removeEventListener("pointerdown", dismiss); for (const e of lit) e.classList.remove("tut-target"); };
   }, [goal, active]);
   if (!active) return null;
-  return createPortal(<>{refs.map((r, i) => <div key={i} ref={r} className="tut-hand" style={{ display: "none" }}><span>👆</span></div>)}</>, document.body);
+  const caption = goal === "meal" ? "🍖 Your food bar is empty!" : goal === "medicine" ? "❤️ Your HP is 0!" : "";
+  return createPortal(<>
+    <div ref={spot} className="tut-spot" style={{ display: "none" }}><div ref={spotHole} className="tut-spot-hole" /><div className="tut-spot-caption">{caption}<small>tap to continue</small></div></div>
+    {refs.map((r, i) => <div key={i} ref={r} className="tut-hand" style={{ display: "none" }}><span>👆</span></div>)}
+  </>, document.body);
 }
