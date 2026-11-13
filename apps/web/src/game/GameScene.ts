@@ -337,11 +337,8 @@ export class GameScene extends Phaser.Scene {
       const label = this.add.text(0, -60, "", { fontFamily: "Fredoka", fontSize: "12px", color: "#ffffff", stroke: "#2b1d3a", strokeThickness: 4 }).setOrigin(0.5).setDepth(LABEL_DEPTH);
       const root = this.add.container(0, 0, [shadow, ring, body]);
       root.setSize(52, 56).setInteractive(new Phaser.Geom.Rectangle(0, -24, 52, 56), Phaser.Geom.Rectangle.Contains);
-      // Your own pets: a tap just walks there (no slide-up). Other Keepers' pets still open their card (for challenges).
-      root.on("pointerup", (p: Phaser.Input.Pointer) => {
-        if (store.get().own.some((o) => o.id === e.id)) { const wp = this.cameras.main.getWorldPoint(p.x, p.y); send({ t: "goto", x: wp.x, y: wp.y }); this.tapMarker(wp.x, wp.y); return; }
-        store.set({ sheet: { kind: "pet", id: e.id } });
-      });
+      // Tapping any pet just walks there (no slide-up); near another Keeper's pet the ⚔️ Battle button appears.
+      root.on("pointerup", (p: Phaser.Input.Pointer) => { const wp = this.cameras.main.getWorldPoint(p.x, p.y); send({ t: "goto", x: wp.x, y: wp.y }); this.tapMarker(wp.x, wp.y); });
       ps = { root, body, shadow, label, ring, tex: "", phase: Math.random() * 10, hurtUntil: 0, lungeUntil: 0, lungeDir: 1 };
       this.pets.set(e.id, ps);
     }
@@ -489,7 +486,8 @@ export class GameScene extends Phaser.Scene {
         const alert = this.add.text(0, -MERCHANT_HEIGHT - 28, "!", { fontFamily: "Fredoka", fontSize: "26px", color: "#ff4d4d", stroke: "#2b1d3a", strokeThickness: 6 }).setOrigin(0.5).setAlpha(0);
         const c = this.add.container(bx, by, [ring, img, mask, label, alert]);
         c.setSize(56, 64).setInteractive(new Phaser.Geom.Rectangle(0, -30, 56, 66), Phaser.Geom.Rectangle.Contains);
-        c.on("pointerup", () => store.set({ sheet: { kind: "bandit", id } }));
+        // Tap a rival / Coach Kiki: walk up to them (the ⚔️ Battle button appears when close).
+        c.on("pointerup", () => { const cc = this.bandits.get(id)?.c; if (cc) { send({ t: "goto", x: cc.x - 36, y: cc.y }); this.tapMarker(cc.x - 36, cc.y); } });
         b = { c, img, alert, ring };
         this.bandits.set(id, b);
       }
