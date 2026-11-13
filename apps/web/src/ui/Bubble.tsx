@@ -45,6 +45,8 @@ export function BubbleScreen() {
   const [, tick] = useState(0);
   const lastTurn = useRef(0);
   const acted = useRef(0);
+  const root = useRef<HTMLDivElement>(null);
+  const land = useLandLayout(root);
   const [rulesFor, setRulesFor] = useState<string | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
   // Explain the rules at the start of every match (the first turn has extra time for this).
@@ -87,7 +89,7 @@ export function BubbleScreen() {
   const won = m.state === "finished" && m.winner === me;
 
   return (
-    <div className={`br ${myTurn ? "my-turn" : ""}`}>
+    <div ref={root} className={`br ${myTurn ? "my-turn" : ""} ${land ? "land" : ""}`} style={land ? ({ "--stk": `${land.stk}px`, "--gun": `${land.gunW}px` } as React.CSSProperties) : undefined}>
       <div className="br-bubbles" aria-hidden>{Array.from({ length: 12 }, (_, i) => <i key={i} style={{ left: `${(i * 8.7) % 100}%`, animationDelay: `${(i % 6) * 0.7}s`, width: 14 + (i % 4) * 8, height: 14 + (i % 4) * 8 }} />)}</div>
       <div className="br-top">
         <span className="br-title">Bubble Roulette</span>
@@ -109,7 +111,7 @@ export function BubbleScreen() {
           const lost = m.state === "finished" && m.winner !== side;
           const winner = m.state === "finished" && m.winner === side;
           return (
-            <div key={who} className={`br-pet ${who} ${m.turn === side && m.state === "active" ? "active" : ""}`}>
+            <div key={who} className={`br-pet ${who} ${m.turn === side && m.state === "active" ? "active" : ""}`} style={land ? { left: (who === "mine" ? land.l : land.r)[0], top: (who === "mine" ? land.l : land.r)[1] } : undefined}>
               <div className="br-hp"><b>{s.name}</b><span>❤ {hp[side]}</span><i><em style={{ width: `${hp[side]}%` }} /></i>{!s.connected && m.state === "active" && <small>reconnecting…</small>}</div>
               {m.state === "active" && m.turn === side && side === them && !fx && <span className="br-think">🤔 thinking…</span>}
               <div className={`br-sticker ${hit && fx?.kind === "splash" ? "soaked" : ""} ${hit && fx?.kind === "puff" ? "giggle" : ""} ${winner ? "cheer" : ""}`}>
@@ -122,7 +124,7 @@ export function BubbleScreen() {
           );
         })}
 
-        <Launcher m={m} fx={fx} />
+        <Launcher m={m} fx={fx} at={land?.g} />
         {won && <div className="confetti">{Array.from({ length: 14 }, (_, i) => <i key={i} style={{ left: `${(i * 7.3) % 100}%`, animationDelay: `${(i % 7) * 120}ms` }} />)}</div>}
       </div>
 
@@ -150,11 +152,11 @@ export function BubbleScreen() {
   );
 }
 
-function Launcher({ m, fx }: { m: BubbleMatchView; fx: Fx | null }) {
+function Launcher({ m, fx, at }: { m: BubbleMatchView; fx: Fx | null; at?: [number, number] }) {
   const used = BUBBLE.slots - m.slotsLeft;
   const shoot = fx ? (fx.target === (m.you ?? "a") ? "left" : "right") : null;
   return (
-    <div className={`launcher ${fx ? "firing" : ""}`}>
+    <div className={`launcher ${fx ? "firing" : ""}`} style={at ? { left: at[0], top: at[1] } : undefined}>
       <img className="launcher-art" src={art("br-launcher-idle")} alt="Bubble launcher" draggable={false} />
       <div className="chambers" aria-label={`${m.slotsLeft} slots left`}>
         {Array.from({ length: BUBBLE.slots }, (_, i) => <img key={i} src={art(i < used ? "br-empty" : "br-loaded")} alt="" className={i < used ? "gone" : ""} />)}
@@ -201,4 +203,32 @@ function RulesCard({ m, onClose }: { m: BubbleMatchView; onClose: () => void }) 
       </div>
     </div>
   );
+}
+
+/**
+ * PC / landscape: the arena picture (1600×900, drawn with background-size: cover) has two
+ * pedestals and a paw circle in the middle. Map those picture points to screen pixels so the
+ * pets stand on the pedestals and the launcher sits on the paw circle at any window size.
+ */
+const LAND = { w: 1600, h: 900, left: [267, 522], right: [1351, 522], gun: [800, 700] } as const;
+function useLandLayout(ref: React.RefObject<HTMLDivElement | null>) {
+  const [lay, setLay] = useState<{ l: [number, number]; r: [number, number]; g: [number, number]; stk: number; gunW: number } | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const calc = () => {
+      const W = el.clientWidth, H = el.clientHeight;
+      if (W < H || W < 640) { setLay(null); return; }
+      const s = Math.max(W / LAND.w, H / LAND.h), ox = (W - LAND.w * s) / 2, oy = (H - LAND.h * s) / 2;
+      const stk = Math.round(Math.min(220, 190 * s)), gunW = Math.round(Math.min(260, 210 * s));
+      const pt = (p: readonly [number, number]): [number, number] => [Math.round(ox + p[0] * s), Math.round(oy + p[1] * s)];
+      const clampX = (p: [number, number]): [number, number] => [Math.max(stk / 2 + 10, Math.min(W - stk / 2 - 10, p[0])), p[1]];
+      setLay({ l: clampX(pt(LAND.left)), r: clampX(pt(LAND.right)), g: pt(LAND.gun), stk, gunW });
+    };
+    calc();
+    const ro = new ResizeObserver(calc);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref]);
+  return lay;
 }

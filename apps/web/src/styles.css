@@ -1737,3 +1737,16 @@ html.has-touch .joystick { display: block !important; }
 @media (hover: hover) and (pointer: fine) {
   .bagfull.ko { left: calc(8px + var(--safe-left)); top: calc(128px + var(--safe-top)); transform: none; width: auto; max-width: 270px; animation: none; }
 }
+
+/* ---- Bubble Roulette on PC: pets on the pedestals, launcher on the paw circle ---- */
+.br.land > .br-arena { position: static !important; }
+.br.land .br-pet { position: absolute; transform: translate(-50%, -100%); width: calc(var(--stk) + 20px); z-index: 2; }
+.br.land .br-sticker { width: var(--stk); }
+.br.land .br-hp { max-width: calc(var(--stk) + 10px); }
+.br.land .launcher { position: absolute; transform: translate(-50%, -100%); z-index: 2; }
+.br.land .launcher-art { width: var(--gun); }
+
+/* Profile avatar: the pet always fits inside its circle (tall pets used to spill out). */
+.bag-avatar { position: relative; overflow: hidden; }
+.bag-avatar > :first-child { position: absolute; inset: 7%; width: 86% !important; height: 86% !important; margin: 0; object-fit: contain; }
+@media (hover: hover) and (pointer: fine) { .bag-avatar { width: 80px; height: 80px; } }
