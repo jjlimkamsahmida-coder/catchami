@@ -1798,3 +1798,4 @@ html.has-touch .joystick { display: block !important; }
   .album.wide .album-slot.empty small { font-size: 16px; }
   .album.wide .album-active { font-size: 14px; padding: 2px 10px; bottom: -12px; }
 }
+.vault-tile.claimed { background: #eaf7e4; }

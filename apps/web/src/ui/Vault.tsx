@@ -85,6 +85,15 @@ export function WalletScreen() {
     } catch (e) { toast("bad", (e as Error).message); }
   };
   const history: Array<{ id: string; kind: string; amount: string; created_at: string }> = me.data?.wallet?.history ?? [];
+  // The network can arrive late on first load: fall back to what the server reports.
+  const net = network || me.data?.wallet?.network || econ.data?.network || "";
+  // Faucet days are UTC days on the server.
+  const dayKey = new Date().toISOString().slice(0, 10);
+  const claimedToday = history.some((h) => {
+    if (h.kind !== "dev_faucet") return false;
+    const t = new Date(h.created_at.replace(" ", "T").replace(/([+-]\d{2})$/, "$1:00"));
+    return Number.isFinite(t.getTime()) && t.toISOString().slice(0, 10) === dayKey;
+  });
   const hq = econ.data?.hq, today = econ.data?.today;
   const pct = (a?: string, b?: string) => (a && b && BigInt(b) > 0n ? Math.min(100, Number((BigInt(a) * 1000n) / BigInt(b)) / 10) : 0);
 
@@ -102,13 +111,15 @@ export function WalletScreen() {
         <div className="vault-chips">
           <span>🐷 In pets: <b>{fmt(inPets)}</b></span>
           {wallet && wallet.held !== "0" && <span>⏳ On hold: <b>{fmt(wallet.held)}</b></span>}
-          {network !== "mainnet" && <span className="test">🧪 Test coins</span>}
+          {net !== "mainnet" && <span className="test">🧪 Test coins</span>}
         </div>
       </section>
 
       {/* Actions */}
       <section className="vault-tiles">
-        {network === "dev" && <button className="vault-tile faucet" onClick={faucet}><span>🚰</span><b>Free coins</b><small>once a day</small></button>}
+        {net === "dev" && (claimedToday
+          ? <button className="vault-tile claimed" onClick={() => toast("info", "You already took today's free coins — come back tomorrow!")}><span>✅</span><b>Free coins</b><small>claimed · back tomorrow</small></button>
+          : <button className="vault-tile faucet" onClick={faucet}><span>🚰</span><b>Free coins</b><small>tap to claim · once a day</small></button>)}
         <button className="vault-tile" onClick={() => store.set({ screen: "pets", petScreen: store.get().controlled, profileTab: "wallet" })}><span>🐷</span><b>Piggy banks</b><small>fund your pets</small></button>
         <button className="vault-tile locked" onClick={() => toast("info", "Deposits open when the $CATCHAMI contracts go live on NEAR.")}><span>📥</span><b>Deposit</b><small>coming soon</small></button>
         <button className="vault-tile locked" onClick={() => toast("info", "Withdrawals open when the $CATCHAMI contracts go live on NEAR.")}><span>📤</span><b>Withdraw</b><small>coming soon</small></button>
