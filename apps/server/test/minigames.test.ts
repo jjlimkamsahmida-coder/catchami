@@ -286,3 +286,38 @@ describe("knockout (0 HP)", () => {
     expect(p.s.hp).toBeGreaterThan(0);
   }, 30_000);
 });
+
+describe("Coach Kiki (tutorial practice)", () => {
+  it("challenges once you're in her arena, and leaves you alone after you beat her", async () => {
+    const u = await createGuest(db);
+    const s4 = game.world.pois.find((q) => q.id === "glade_s4")!;
+    const p = await spawn(u.userId, s4.tx, s4.ty);
+    const c = client(u.userId);
+    game.join(c);
+    c.controlled = p.id;
+    const kiki = game.bandits.list.find((b) => b.id === "bandit-practice")!;
+    kiki.state = "wander"; kiki.calmUntil = 0; kiki.x = kiki.homeX!; kiki.y = kiki.homeY!;
+    for (let i = 0; i < 200 && !p.matchId; i++) { t += 100; game.bandits.step(0.1, t); }
+    const m = game.arena.get(p.matchId!)!;
+    expect(m.bot?.practice).toBe(true);
+    // Play until someone wins; replay until the player wins.
+    for (let round = 0; round < 10; round++) {
+      const cur = game.arena.get(p.matchId ?? "") ?? null;
+      if (cur) for (let i = 0; i < 400 && cur.state === "active"; i++) {
+        if (cur.turn === "a") game.arena.action(c, cur.id, "opponent", cur.turnNo);
+        t += 1000; game.arena.tick(t);
+      }
+      if (cur?.winner === "a") break;
+      for (let i = 0; i < 200 && !p.matchId; i++) { t += 100; game.bandits.step(0.1, t); } // she challenges again after a loss
+    }
+    expect(p.matchId).toBeNull();
+    // After the win she never starts another match with this pet.
+    for (let i = 0; i < 300; i++) { t += 100; game.bandits.step(0.1, t); }
+    expect(p.matchId).toBeNull();
+    // Replaying the battle tutorial lets her challenge again.
+    game.tutorialMove(u.userId, p.id, "enter", 4);
+    kiki.calmUntil = 0;
+    for (let i = 0; i < 200 && !p.matchId; i++) { t += 100; game.bandits.step(0.1, t); }
+    expect(p.matchId).not.toBeNull();
+  }, 30_000);
+});

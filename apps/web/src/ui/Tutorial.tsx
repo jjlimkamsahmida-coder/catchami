@@ -131,6 +131,9 @@ export function tutorialShowsNav(step: number | undefined) {
   return !!s && s.stage >= STAGES.findIndex((x) => x.name === "Marketplace");
 }
 
+/** Which glade arena each tutorial plays in (Profile happens on a page, so it stays at the market stall). */
+const ARENA = [1, 2, 3, 4, 5, 5, 6];
+
 const STEPS = STAGES.flatMap((st, si) => st.steps.map((s, k) => ({ ...s, stage: si, k, first: k === 0, last: k === st.steps.length - 1 })));
 
 // Survives the coach unmounting while the marketplace page is open.
@@ -189,7 +192,7 @@ export function TutorialCoach() {
   };
   const startStage = () => {
     if (!cur) return;
-    if (pet) send({ t: "tutorial", petId: pet.id, action: "stage", stage: cur.stage + 1 });
+    if (pet) send({ t: "tutorial", petId: pet.id, action: "stage", stage: ARENA[cur.stage] });
     store.set({ minigame: null, mgSession: null, sheet: null, screen: "world", petScreen: null, profileTab: "bag" }); // leave the last stage behind
     base.current = null; readyAt.current = Date.now() + 900; stepStart.current = Date.now();
     setPhase("play"); sfx.whoosh();
@@ -206,7 +209,7 @@ export function TutorialCoach() {
     if (step < 0 || !pet || enteredOnce) return;
     const t = setTimeout(() => {
       enteredOnce = true;
-      if (!inGlade(petPos()) && cur) { send({ t: "tutorial", petId: pet.id, action: "stage", stage: cur.stage + 1 }); readyAt.current = Date.now() + 900; base.current = null; }
+      if (!inGlade(petPos()) && cur) { send({ t: "tutorial", petId: pet.id, action: "stage", stage: ARENA[cur.stage] }); readyAt.current = Date.now() + 900; base.current = null; }
     }, 600);
     return () => clearTimeout(t);
   }, [step, pet?.id]);

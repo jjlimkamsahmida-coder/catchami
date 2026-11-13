@@ -41,6 +41,8 @@ export class Bandits {
   private duels = new Map<string, Duel>();
   /** When each pet entered the training arena (the Training Bandit lets them settle in first). */
   private arrived = new Map<string, number>();
+  /** Pets that already beat Coach Kiki: she leaves them alone (until they replay the battle tutorial). */
+  private beaten = new Set<string>();
   private duelSeq = 0;
   /** When each player pet was last challenged by a rival. */
   private challengedAt = new Map<string, number>();
@@ -147,7 +149,7 @@ export class Bandits {
     const arena = gladeArenaAt(toTile(b.homeX!), toTile(b.homeY!));
     let target: PetRt | null = null, bd = Infinity;
     if (now >= b.calmUntil) for (const p of this.game.pets.values()) {
-      if (p.s.status === "knocked_out" || this.duelFor(p.id)) continue;
+      if (p.s.status === "knocked_out" || this.duelFor(p.id) || this.beaten.has(p.id)) continue;
       if (gladeArenaAt(toTile(p.s.x), toTile(p.s.y)) !== arena) { this.arrived.delete(p.id); continue; }
       if (!this.arrived.has(p.id)) this.arrived.set(p.id, now);
       if (now - this.arrived.get(p.id)! < 3_000) continue;
@@ -164,6 +166,9 @@ export class Bandits {
       b.x += ((gx - b.x) / d) * step; b.y += ((gy - b.y) / d) * step;
     }
   }
+
+  /** Starting the battle tutorial (again): Coach Kiki may challenge this pet. */
+  resetPractice(petId: string) { this.beaten.delete(petId); this.arrived.delete(petId); }
 
   /** Send a Bubble Roulette invite from this rival. */
   private invite(b: BanditRt, p: PetRt, now: number) {
@@ -269,6 +274,7 @@ export class Bandits {
     if (b.practice) {
       if (!quiet) this.game.toastOwner(p, won ? "good" : "info", won ? `${p.name} won the practice battle!` : "Coach Kiki won this one — practise again, no loot lost.");
       this.game.toOwner(p, { t: "bandit_fight", banditId: b.id, banditName: b.name, petId: p.id, petName: p.name, won, stolen: "", brave, quiet });
+      if (won) this.beaten.add(p.id);
       b.state = won ? "flee" : "wander"; b.target = null; b.calmUntil = now + (won ? 6_000 : 5_000);
       if (!won) { b.x = b.homeX!; b.y = b.homeY!; } // back off, then try again
       return;

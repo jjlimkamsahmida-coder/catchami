@@ -481,6 +481,7 @@ export class Game {
     if (where === "exit") { const sp = this.spawnSpot(); p.s.x = sp.x; p.s.y = sp.y; }
     else {
       const id = stage && stage >= 1 && stage <= 6 ? `glade_s${stage}` : "glade_spawn";
+      if (stage === 4) this.bandits.resetPractice(p.id);
       const poi = this.world.pois.find((q) => q.id === id) ?? this.world.pois.find((q) => q.id === "glade_spawn")!;
       p.s.x = tileCenter(poi.tx) + (Math.random() - 0.5) * 20; p.s.y = tileCenter(poi.ty) + Math.random() * 10;
     }
