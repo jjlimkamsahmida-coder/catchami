@@ -1750,3 +1750,8 @@ html.has-touch .joystick { display: block !important; }
 .bag-avatar { position: relative; overflow: hidden; }
 .bag-avatar > :first-child { position: absolute; inset: 7%; width: 86% !important; height: 86% !important; margin: 0; object-fit: contain; }
 @media (hover: hover) and (pointer: fine) { .bag-avatar { width: 80px; height: 80px; } }
+
+/* Collection on PC: a big album. */
+.t-album .gpage-body > .album.wide, .t-album .gpage-body > .album-filters { width: min(1080px, 100%); }
+.album.wide { padding: 24px 22px; gap: 22px 16px; }
+.t-album .album-filters button { font-size: 13px; padding: 4px 12px; }

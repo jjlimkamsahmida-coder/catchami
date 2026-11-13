@@ -93,15 +93,18 @@ export function CollectionScreen() {
   const [filter, setFilter] = useState<Rarity | "all">("all");
   const counts = useMemo(() => Object.fromEntries(RARITIES.map((r) => [r, own.filter((p) => p.rarity === r).length])) as Record<Rarity, number>, [own]);
   const list = own.filter((p) => filter === "all" || p.rarity === filter).sort((a, b) => RARITIES.indexOf(b.rarity) - RARITIES.indexOf(a.rarity));
-  const empty = Math.max(0, (list.length < 6 ? 6 : 3) - (list.length % 3 === 0 && list.length >= 6 ? 3 : list.length % 3));
-  const cardW = Math.min(112, Math.floor((Math.min(window.innerWidth, 520) - 60) / 3));
+  // PC: a wide album with big cards (4 per row); phones: 3 per row.
+  const wide = window.innerWidth >= 900;
+  const cols = wide ? 4 : 3;
+  const empty = list.length < cols * 2 ? cols * 2 - list.length : (cols - (list.length % cols)) % cols;
+  const cardW = wide ? Math.min(210, Math.floor((Math.min(window.innerWidth, 1080) - 140) / cols)) : Math.min(112, Math.floor((Math.min(window.innerWidth, 520) - 60) / 3));
   return (
     <PageFrame title="Collection" icon="ui-heart" theme="t-album" right={<span className="album-count">{own.length} caught</span>}>
       <div className="album-filters">
         <button className={filter === "all" ? "on" : ""} onClick={() => setFilter("all")}>All <b>{own.length}</b></button>
         {RARITIES.filter((r) => counts[r]).map((r) => <button key={r} className={`${filter === r ? "on" : ""} ${r}`} onClick={() => setFilter(r)}>{RARITY_LABEL[r]} <b>{counts[r]}</b></button>)}
       </div>
-      <div className="album">
+      <div className={`album ${wide ? "wide" : ""}`} style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
         {list.map((p, i) => (
           <button key={p.id} className="album-slot" style={{ animationDelay: `${i * 50}ms` }} onClick={() => store.set({ petScreen: p.id })}>
             <CollectorCard card={cardFromPet(p)} width={cardW} />
