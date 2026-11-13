@@ -229,26 +229,33 @@ export function CraftPanel({ p }: { p: OwnPet }) {
       recipes.reload();
     } catch (e) { toast("bad", (e as Error).message); } finally { setBusy(false); }
   };
+  const ICON: Record<string, string> = { boots: "🥾", gloves: "🧤", armor: "🛡️", heavy_armor: "🪨", tool: "⛏️", weapon: "🏹" };
   return (
-    <div className="col" style={{ gap: 8 }}>
-      <p className="small muted" style={{ margin: 0 }}>Uses wood and stone from {p.name}'s bag first; missing materials can be bought from HQ's stock. The fee is paid from {p.name}'s piggy bank.</p>
-      {recipes.data?.recipes?.map((r: { kind: EquipmentKind; label: string; fee: string; wood: number; minerals: number; bonusBps: Record<string, number>; hqStock: { wood: number; minerals: number }; hqUnitPrice: { wood: string; minerals: string } }) => {
-        const needW = Math.max(0, r.wood - p.carried.wood), needM = Math.max(0, r.minerals - p.carried.minerals);
-        const canBuy = needW <= r.hqStock.wood && needM <= r.hqStock.minerals;
-        const extra = BigInt(r.hqUnitPrice.wood) * BigInt(needW) + BigInt(r.hqUnitPrice.minerals) * BigInt(needM);
-        return (
-          <div key={r.kind} className="col" style={{ gap: 4, borderTop: "2px dashed var(--paper-3)", paddingTop: 8 }}>
-            <div className="row"><b className="grow">{r.label}</b><span className="small">{Object.entries(r.bonusBps).map(([k, v]) => `${v > 0 ? "+" : ""}${v / 100}% ${k}`).join(", ")}</span></div>
-            <div className="row small"><ResIcon r="wood" size={16} /> {r.wood} <ResIcon r="minerals" size={16} /> {r.minerals} <span className="muted">+ {fmt(r.fee)} fee</span></div>
-            <div className="row">
-              <button className="btn sm grow" disabled={busy || needW > 0 || needM > 0} onClick={() => craft(r.kind, false)}>Craft from bag</button>
-              <button className="btn sm paper grow" disabled={busy || (!needW && !needM) || !canBuy} title={!canBuy ? "HQ doesn't have enough real stock" : ""} onClick={() => craft(r.kind, true)}>
-                {needW || needM ? (canBuy ? `Buy missing · ${fmt(extra)}` : "HQ stock too low") : "Have materials"}
-              </button>
+    <div className="gear-bench">
+      <p className="gear-lead">Turn wood and stone into gear! Materials come from {p.name}'s bag (missing ones can be bought); the fee comes from the piggy bank.</p>
+      <div className="gear-grid">
+        {recipes.data?.recipes?.map((r: { kind: EquipmentKind; label: string; fee: string; wood: number; minerals: number; bonusBps: Record<string, number>; hqStock: { wood: number; minerals: number }; hqUnitPrice: { wood: string; minerals: string } }) => {
+          const needW = Math.max(0, r.wood - p.carried.wood), needM = Math.max(0, r.minerals - p.carried.minerals);
+          const ready = !needW && !needM;
+          const canBuy = needW <= r.hqStock.wood && needM <= r.hqStock.minerals;
+          const extra = BigInt(r.hqUnitPrice.wood) * BigInt(needW) + BigInt(r.hqUnitPrice.minerals) * BigInt(needM);
+          return (
+            <div key={r.kind} className={`gear-card ${ready ? "ready" : ""}`}>
+              <span className="gear-ico">{ICON[r.kind] ?? "🛠️"}</span>
+              <b className="gear-name">{r.label}</b>
+              <span className="gear-bonus">{Object.entries(r.bonusBps).map(([k, v]) => <i key={k} className={v > 0 ? "up" : "down"}>{v > 0 ? "+" : ""}{v / 100}% {k}</i>)}</span>
+              <span className="gear-mats">
+                <i className={needW ? "short" : "ok"}><ResIcon r="wood" size={16} /> {p.carried.wood}/{r.wood}</i>
+                <i className={needM ? "short" : "ok"}><ResIcon r="minerals" size={16} /> {p.carried.minerals}/{r.minerals}</i>
+                <i className="fee">🪙 {fmt(r.fee)}</i>
+              </span>
+              {ready
+                ? <button className="gear-btn" disabled={busy} onClick={() => craft(r.kind, false)}>Craft from bag</button>
+                : <button className="gear-btn alt" disabled={busy || !canBuy} title={!canBuy ? "HQ doesn't have enough real stock" : ""} onClick={() => craft(r.kind, true)}>{canBuy ? `Buy missing · ${fmt(extra)}` : "Not enough stock"}</button>}
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }

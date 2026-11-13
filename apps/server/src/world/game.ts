@@ -812,6 +812,8 @@ export class Game {
       case "talk": {
         const m = this.merchants.find((x) => x.id === msg.merchantId);
         if (m && m.state !== "at_hq" && m.state !== "unavailable") m.talkUntil = now + 4_000;
+        const shopper = c.controlled ? this.pets.get(c.controlled) : null;
+        if (shopper && shopper.ownerId === c.userId) shopper.shoppingUntil = now + 4_000; // no battles while shopping
         return;
       }
       case "rest": { const p = own(msg.petId); p.task = { kind: "rest" }; p.path = []; manual(p); return; }

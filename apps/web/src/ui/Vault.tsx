@@ -89,7 +89,9 @@ export function WalletScreen() {
   const net = network || me.data?.wallet?.network || econ.data?.network || "";
   // Faucet days are UTC days on the server.
   const dayKey = new Date().toISOString().slice(0, 10);
-  const claimedToday = history.some((h) => {
+  void faucet;
+  // (Free test coins were removed from the vault.)
+  const _claimedToday = history.some((h) => {
     if (h.kind !== "dev_faucet") return false;
     const t = new Date(h.created_at.replace(" ", "T").replace(/([+-]\d{2})$/, "$1:00"));
     return Number.isFinite(t.getTime()) && t.toISOString().slice(0, 10) === dayKey;
@@ -117,9 +119,6 @@ export function WalletScreen() {
 
       {/* Actions */}
       <section className="vault-tiles">
-        {net === "dev" && (claimedToday
-          ? <button className="vault-tile claimed" onClick={() => toast("info", "You already took today's free coins — come back tomorrow!")}><span>✅</span><b>Free coins</b><small>claimed · back tomorrow</small></button>
-          : <button className="vault-tile faucet" onClick={faucet}><span>🚰</span><b>Free coins</b><small>tap to claim · once a day</small></button>)}
         <button className="vault-tile" onClick={() => store.set({ screen: "pets", petScreen: store.get().controlled, profileTab: "wallet" })}><span>🐷</span><b>Piggy banks</b><small>fund your pets</small></button>
         <button className="vault-tile locked" onClick={() => toast("info", "Deposits open when the $CATCHAMI contracts go live on NEAR.")}><span>📥</span><b>Deposit</b><small>coming soon</small></button>
         <button className="vault-tile locked" onClick={() => toast("info", "Withdrawals open when the $CATCHAMI contracts go live on NEAR.")}><span>📤</span><b>Withdraw</b><small>coming soon</small></button>

@@ -235,8 +235,13 @@ describe("rivals", () => {
     b.x = p.s.x + 20; b.y = p.s.y; b.state = "wander"; b.calmUntil = 0; b.nextThink = 0; b.path = [];
     for (let i = 0; i < 10; i++) { t += 100; game.bandits.step(0.1, t); }
     expect(p.matchId).toBeNull();
-    // Idle: it challenges — a forced battle that starts right away.
+    // Shopping at a merchant: also left alone.
     p.task = null;
+    await game.handle(c, { t: "talk", merchantId: "finn" });
+    for (let i = 0; i < 10; i++) { t += 100; game.bandits.step(0.1, t); }
+    expect(p.matchId).toBeNull();
+    p.shoppingUntil = 0;
+    // Idle: it challenges — a forced battle that starts right away.
     for (let i = 0; i < 20 && !p.matchId; i++) { t += 100; game.bandits.step(0.1, t); }
     expect(b.state).toBe("duel");
     const m = game.arena.get(p.matchId!)!;

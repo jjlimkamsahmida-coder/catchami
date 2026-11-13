@@ -34,6 +34,8 @@ export type Task =
   | null;
 
 export interface PetRt {
+  /** Shop open at a merchant until then: can't be challenged to a battle. */
+  shoppingUntil?: number;
   id: string;
   ownerId: string;
   ownerName: string;

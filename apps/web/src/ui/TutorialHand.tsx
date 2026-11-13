@@ -64,7 +64,7 @@ function findTargets(goal: string | undefined): Pt[] {
     if (goal === "craft") return some(btn(".sheet", "Craft from bag"));
     if (goal === "sell") return some(btn(".sheet", "Sell everything"));
     if (goal === "meal") return some(btn(".sheet", "Buy meal"));
-    if (goal === "medicine") return some(btn(".sheet", "Medicine"));
+    if (goal === "medicine") return some(btn(".sheet", "Buy Medicine"));
   }
   if (goal === "gather4") {
     const b = btn(".actions", "Gather");

@@ -88,6 +88,7 @@ export class Bandits {
     if (p.s.energy < ECONOMY.battle.minEnergy || p.s.hunger >= ECONOMY.battle.maxHunger || p.listed) return false;
     if (now - (this.challengedAt.get(p.id) ?? 0) < PET_COOLDOWN_MS) return false;
     if (now - p.s.lastBattleAt < ECONOMY.battle.petCooldownSec * 1000) return false;
+    if (now < (p.shoppingUntil ?? 0) || p.task?.kind === "gather" || p.round) return false; // busy shopping or gathering
     return [...this.game.clients].some((c) => c.userId === p.ownerId);
   }
 

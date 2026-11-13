@@ -4,7 +4,7 @@ import { CraftPanel } from "./Pets.tsx";
 import { controlledPet, entities, store, useStore } from "../net/store.ts";
 import { rid, send } from "../net/api.ts";
 import { fmt, fmtQty, PetArt, RarityTag, ResIcon, Sheet } from "./common.tsx";
-import { banditArt, genUrl } from "../game/assets.ts";
+import { banditArt, genUrl, MERCHANT_ART } from "../game/assets.ts";
 
 const close = () => store.set({ sheet: null });
 
@@ -46,7 +46,8 @@ function MerchantSheet({ id }: { id: string }) {
   const p = useStore(controlledPet);
   const tut = useStore((s) => s.onboarding?.stage === "tutorial");
   const ticker = useStore((s) => s.ticker);
-  const [crafting, setCrafting] = useState(id === "smith");
+  const gearOk = !tut || id === "smith";
+  const [tab, setTab] = useState<"shop" | "gear">(id === "smith" ? "gear" : "shop");
   // Talking to a merchant: they wait for you while the shop is open.
   useEffect(() => { send({ t: "talk", merchantId: id }); const t = setInterval(() => send({ t: "talk", merchantId: id }), 2_000); return () => clearInterval(t); }, [id]);
   if (!m) return null;
@@ -54,46 +55,73 @@ function MerchantSheet({ id }: { id: string }) {
   const fresh = det && Date.now() - det.at < 2500;
   const open = m.state !== "at_hq" && m.state !== "unavailable";
   const sell = (items: Partial<Record<Resource, number>>) => p && send({ t: "sell", petId: p.id, merchantId: id, items });
+  const total = p && det ? RESOURCES.reduce((s, r) => s + BigInt(det.detail.prices[r]) * BigInt(p.carried[r]), 0n) : 0n;
+  const mealPrice = tut ? ECONOMY.food.price : meal.price, medPrice = tut ? ECONOMY.medicine.price : med.price;
   return (
     <Sheet onClose={close}>
-      <div className="col" style={{ gap: 12 }}>
-        <div className="row"><h2 className="grow">{m.name}</h2><span className="tag">{m.state === "at_hq" ? "restocking at HQ" : m.state === "unavailable" ? "no budget right now" : m.state}</span></div>
+      <div className="mshop">
+        <div className="mshop-head">
+          <span className="mshop-art"><img src={genUrl(MERCHANT_ART[id] ?? "merchant-finn")} alt="" /></span>
+          <div className="mshop-who">
+            <h2>{m.name}</h2>
+            {open && fresh && det
+              ? <span className="mshop-chips"><span>💰 {fmt(det.detail.cash)}</span><span>🛒 room {fmtQty(det.detail.capacityLeft)}</span></span>
+              : <span className="mshop-chips"><span>{m.state === "at_hq" ? "🏰 restocking at HQ" : m.state === "unavailable" ? "😴 closed today" : "👋 come closer"}</span></span>}
+          </div>
+        </div>
         {!open && <div className="notice">{m.state === "unavailable" ? "HQ couldn't fund this merchant's next trip within today's budget. They'll head out again when funds allow." : "Back at HQ delivering goods and collecting the next budget."}</div>}
         {open && !fresh && (
           <div className="notice">
-            Cash and stock are only visible up close. Walk {p ? p.name : "your pet"} next to {m.name.split(" ")[0]} to trade.
+            Walk {p ? p.name : "your pet"} next to {m.name.split(" ")[0]} to trade.
             <div style={{ marginTop: 8 }}><button className="btn sm" onClick={() => { send({ t: "goto", x: m.x, y: m.y }); close(); }}>Walk there</button></div>
           </div>
         )}
         {open && fresh && det && (
           <>
-            <dl className="kv">
-              <dt>Cash on hand</dt><dd className="num">{fmt(det.detail.cash)}</dd>
-              <dt>Cart space left</dt><dd className="num">{det.detail.capacityLeft}</dd>
-            </dl>
-            <div className="card col" style={{ gap: 6 }}>
-              {RESOURCES.map((r) => (
-                <div className="row" key={r}>
-                  <ResIcon r={r} size={24} />
-                  <span className="grow" style={{ fontWeight: 600 }}>{RESOURCE_LABEL[r]}</span>
-                  <span className="small muted">stock {det.detail.inventory[r]}</span>
-                  <span className="num" style={{ minWidth: 70, textAlign: "right", fontWeight: 700 }}>{fmt(det.detail.prices[r])}</span>
-                  <button className="btn sm leaf" disabled={!p || !p.carried[r]} onClick={() => sell({ [r]: p!.carried[r] })}>Sell {p?.carried[r] ?? 0}</button>
-                </div>
-              ))}
-            </div>
-            <button className="btn leaf block" disabled={!p || inventoryWeight(p.carried) === 0} onClick={() => sell(p!.carried)}>Sell everything</button>
-            <div className="row" style={{ gap: 8 }}>
-              <button className="btn sun grow" disabled={!p || p.hunger < 50} onClick={() => p && send({ t: "buy", petId: p.id, item: "food", rid: rid() })}>🍖 Buy meal · {fmt(tut ? ECONOMY.food.price : meal.price)}</button>
-              <button className="btn coral grow" disabled={!p || (!tut && p.status !== "knocked_out" && p.hp >= p.stats.maxHp)} onClick={() => p && send({ t: "buy", petId: p.id, item: "medicine", rid: rid() })}>💊 Medicine · {fmt(tut ? ECONOMY.medicine.price : med.price)}</button>
-            </div>
-            {(!tut || id === "smith") && p && (
-              <div className="card col" style={{ gap: 6 }}>
-                <button className="btn sky block" onClick={() => setCrafting((v) => !v)}>🛠️ Craft gear {crafting ? "▴" : "▾"}</button>
-                {crafting && <CraftPanel p={p} />}
+            {gearOk && (
+              <div className="mshop-tabs">
+                <button className={tab === "shop" ? "on" : ""} onClick={() => setTab("shop")}>🛒 Shop</button>
+                <button className={tab === "gear" ? "on" : ""} onClick={() => setTab("gear")}>🛠️ Gear</button>
               </div>
             )}
-            <p className="small muted" style={{ margin: 0 }}>Prices follow live demand and HQ's treasury health. The merchant pays from its own HQ-funded budget and stops buying when cash or cart space runs out.</p>
+            {(tab === "shop" || !gearOk) && (
+              <>
+                <h4 className="mshop-h">Sell your loot</h4>
+                <div className="mshop-sell">
+                  {RESOURCES.map((r) => {
+                    const have = p?.carried[r] ?? 0;
+                    return (
+                      <div key={r} className={`mshop-res ${have ? "" : "none"}`}>
+                        <ResIcon r={r} size={38} />
+                        <b>{RESOURCE_LABEL[r]}</b>
+                        <small>🪙 {fmt(det.detail.prices[r])} each</small>
+                        <button className="mshop-mini" disabled={!p || !have} onClick={() => sell({ [r]: have })}>Sell {fmtQty(have)}</button>
+                      </div>
+                    );
+                  })}
+                </div>
+                <button className="mshop-big sell" disabled={!p || inventoryWeight(p.carried) === 0} onClick={() => sell(p!.carried)}>
+                  <b>💰 Sell everything</b>{total > 0n && <small>+{fmt(total)}</small>}
+                </button>
+                <h4 className="mshop-h">Food &amp; care</h4>
+                <div className="mshop-items">
+                  <div className="mshop-item meal">
+                    <span className="mshop-emoji">🍖</span>
+                    <b>{!tut && meal.imported ? "Imported meal" : "Meal"}</b>
+                    <small>−350 hunger · +220 energy</small>
+                    <button className="mshop-buy" disabled={!p || p.hunger < 50} onClick={() => p && send({ t: "buy", petId: p.id, item: "food", rid: rid() })}>Buy meal · {fmt(mealPrice)}</button>
+                  </div>
+                  <div className="mshop-item med">
+                    <span className="mshop-emoji">💊</span>
+                    <b>{!tut && med.imported ? "Imported medicine" : "Medicine"}</b>
+                    <small>+40% HP · wakes a 0-HP pet</small>
+                    <button className="mshop-buy" disabled={!p || (!tut && p.status !== "knocked_out" && p.hp >= p.stats.maxHp)} onClick={() => p && send({ t: "buy", petId: p.id, item: "medicine", rid: rid() })}>Buy Medicine · {fmt(medPrice)}</button>
+                  </div>
+                </div>
+                <p className="mshop-fine">Prices follow live demand. Merchants pay from their own purse and stop buying when cash or cart space runs out.</p>
+              </>
+            )}
+            {gearOk && tab === "gear" && p && <CraftPanel p={p} />}
           </>
         )}
       </div>

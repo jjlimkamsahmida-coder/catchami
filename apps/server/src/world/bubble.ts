@@ -134,6 +134,7 @@ export class BubbleArena {
     if (p.s.hunger >= ECONOMY.battle.maxHunger) return "too hungry to battle";
     if (p.listed) return "listed for sale";
     if (p.task?.kind === "gather" || p.round) return "busy gathering";
+    if (now < (p.shoppingUntil ?? 0)) return "busy shopping at a merchant";
     if (!battlesAllowed(this.game.world, p.s.x, p.s.y)) return "in Paw Village — battles only happen in the Forest and Mining Valley";
     return null;
   }

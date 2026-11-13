@@ -1809,3 +1809,54 @@ html.has-touch .joystick { display: block !important; }
 .flow-sum .out { background: #ffe8e8; } .flow-sum .out b { color: #c92a2a; }
 .flow-sum .bal { background: linear-gradient(#fff8dc, #ffe9a6); }
 .gtabs { flex-wrap: wrap; }
+
+/* ---- Merchant shop: Shop / Gear tabs, playful cards ---- */
+.mshop { display: flex; flex-direction: column; gap: 10px; }
+.mshop-head { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 20px; border: 3px solid var(--ink); background: linear-gradient(#fff3c4, #ffd98a); box-shadow: 0 4px 0 var(--ink); }
+.mshop-art { width: 64px; height: 64px; flex: none; border-radius: 50%; border: 3px solid var(--ink); background: radial-gradient(circle at 50% 60%, #fff, #ffe9b8); display: grid; place-items: center; overflow: hidden; }
+.mshop-art img { width: 90%; height: 90%; object-fit: contain; }
+.mshop-who h2 { margin: 0; font: 700 22px Fredoka, sans-serif; }
+.mshop-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.mshop-chips span { padding: 2px 9px; border-radius: 99px; background: #fff; border: 2px solid var(--ink); font-size: 12px; font-weight: 700; }
+.mshop-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mshop-tabs button { padding: 10px; border-radius: 16px; border: 3px solid var(--ink); background: #fff; box-shadow: 0 4px 0 var(--ink); font: 700 17px Fredoka, sans-serif; cursor: pointer; color: var(--ink); }
+.mshop-tabs button.on { background: linear-gradient(#ffe066, #ffc23a); transform: translateY(2px); box-shadow: 0 2px 0 var(--ink); }
+.mshop-h { margin: 4px 0 0; font: 700 16px Fredoka, sans-serif; }
+.mshop-sell { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.mshop-res { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border-radius: 16px; border: 3px solid var(--ink); background: #fff; box-shadow: 0 3px 0 var(--ink); text-align: center; }
+.mshop-res.none { opacity: 0.55; }
+.mshop-res b { font-size: 13px; }
+.mshop-res small { font-size: 10.5px; font-weight: 700; color: var(--ink-soft, #6b5b7a); }
+.mshop-mini { margin-top: 4px; width: 100%; padding: 5px 4px; border-radius: 12px; border: 2.5px solid var(--ink); background: linear-gradient(#8ee06b, #4fb33a); color: #fff; font: 700 13px Fredoka, sans-serif; -webkit-text-stroke: 3px var(--ink); paint-order: stroke fill; box-shadow: 0 2px 0 var(--ink); cursor: pointer; }
+.mshop-mini:disabled, .mshop-big:disabled, .mshop-buy:disabled, .gear-btn:disabled { filter: grayscale(0.7) opacity(0.6); cursor: default; }
+.mshop-big { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 12px; border-radius: 18px; border: 4px solid var(--ink); box-shadow: 0 5px 0 var(--ink); cursor: pointer; font-family: Fredoka, sans-serif; color: #fff; }
+.mshop-big.sell { background: linear-gradient(#ffe066, #f0a52c); }
+.mshop-big b { font-size: 20px; -webkit-text-stroke: 4.5px var(--ink); paint-order: stroke fill; }
+.mshop-big small { font-size: 14px; font-weight: 700; color: var(--ink); background: #fff; padding: 2px 10px; border-radius: 99px; border: 2px solid var(--ink); }
+.mshop-big:active:not(:disabled), .mshop-buy:active:not(:disabled), .gear-btn:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
+.mshop-items { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mshop-item { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 10px 8px; border-radius: 18px; border: 3px solid var(--ink); box-shadow: 0 4px 0 var(--ink); text-align: center; }
+.mshop-item.meal { background: linear-gradient(#fff4dc, #ffd6a0); }
+.mshop-item.med { background: linear-gradient(#ffe8ee, #ffb8c8); }
+.mshop-emoji { font-size: 34px; line-height: 1; animation: petbob 2.2s ease-in-out infinite; }
+.mshop-item b { font: 700 16px Fredoka, sans-serif; }
+.mshop-item small { font-size: 11px; font-weight: 700; color: var(--ink-soft, #6b5b7a); }
+.mshop-buy { margin-top: 4px; width: 100%; padding: 8px; border-radius: 14px; border: 3px solid var(--ink); background: linear-gradient(#ffb199, #ff5a3c); color: #fff; font: 700 14px Fredoka, sans-serif; -webkit-text-stroke: 3.5px var(--ink); paint-order: stroke fill; box-shadow: 0 3px 0 var(--ink); cursor: pointer; }
+.mshop-fine { margin: 0; font-size: 11.5px; color: var(--ink-soft, #6b5b7a); text-align: center; }
+/* Gear bench */
+.gear-bench { display: flex; flex-direction: column; gap: 8px; }
+.gear-lead { margin: 0; font-size: 13px; font-weight: 600; color: var(--ink-soft, #6b5b7a); text-align: center; }
+.gear-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.gear-card { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 8px; border-radius: 18px; border: 3px solid var(--ink); background: linear-gradient(#f3f0ff, #ddd4ff); box-shadow: 0 4px 0 var(--ink); text-align: center; }
+.gear-card.ready { background: linear-gradient(#e9ffe0, #bff0a8); }
+.gear-ico { font-size: 34px; line-height: 1; }
+.gear-name { font: 700 15px Fredoka, sans-serif; }
+.gear-bonus { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
+.gear-bonus i { font-style: normal; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 99px; border: 2px solid var(--ink); background: #fff; }
+.gear-bonus i.up { color: #1b7a33; } .gear-bonus i.down { color: #c92a2a; }
+.gear-mats { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
+.gear-mats i { font-style: normal; display: inline-flex; align-items: center; gap: 2px; font-size: 11.5px; font-weight: 700; padding: 1px 6px; border-radius: 99px; background: rgba(255,255,255,0.8); }
+.gear-mats i.short { color: #c92a2a; } .gear-mats i.ok { color: #1b7a33; }
+.gear-btn { width: 100%; margin-top: 2px; padding: 8px; border-radius: 14px; border: 3px solid var(--ink); background: linear-gradient(#8ee06b, #4fb33a); color: #fff; font: 700 13.5px Fredoka, sans-serif; -webkit-text-stroke: 3px var(--ink); paint-order: stroke fill; box-shadow: 0 3px 0 var(--ink); cursor: pointer; }
+.gear-btn.alt { background: linear-gradient(#9fd6ff, #4aa8f0); }
+@media (max-width: 380px) { .mshop-sell { grid-template-columns: repeat(2, 1fr); } }
