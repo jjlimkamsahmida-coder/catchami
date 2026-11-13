@@ -19,7 +19,7 @@ import { PhoneHandoff } from "./Journey.tsx";
 const backToGame = () => store.set({ screen: "world", petScreen: null, sheet: null });
 
 /** Shared page chrome: themed header with a big back button. */
-function PageFrame({ title, icon, theme, onBack = backToGame, right, children }: { title: string; icon: string; theme: string; onBack?: () => void; right?: ReactNode; children: ReactNode }) {
+export function PageFrame({ title, icon, theme, onBack = backToGame, right, children }: { title: string; icon: string; theme: string; onBack?: () => void; right?: ReactNode; children: ReactNode }) {
   return (
     <div className={`gpage ${theme}`}>
       <header className="gpage-head">

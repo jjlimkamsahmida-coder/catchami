@@ -75,62 +75,6 @@ export function RanksScreen() {
   );
 }
 
-export function WalletScreen() {
-  const wallet = useStore((s) => s.wallet);
-  const network = useStore((s) => s.network);
-  const name = useStore((s) => s.displayName);
-  const me = useAsync(() => api(`/api/me`), []);
-  const econ = useAsync(() => api(`/api/economy`), []);
-  const faucet = async () => {
-    try { const r = await api(`/api/dev/faucet`, {}); toast("good", `Added ${fmt(r.amount)} test coins`); await refreshWallet(); me.reload(); }
-    catch (e) { toast("bad", (e as Error).message); }
-  };
-  return (
-    <div className="screen">
-      <ScreenHead title="Wallet" onBack={() => store.set({ screen: "world" })} right={<span className="tag">{name}</span>} />
-      {network === "dev" && (
-        <div className="notice" style={{ marginBottom: 12 }}>
-          <b>Test network.</b> Grab free test coins and try the whole game loop.
-          <div style={{ marginTop: 8 }}><button className="btn sm" onClick={faucet}>Get today's test coins</button></div>
-        </div>
-      )}
-      <div className="card col" style={{ marginBottom: 12 }}>
-        <div className="row"><span className="muted">Available</span><b className="right num" style={{ fontSize: 24 }}>{fmt(wallet?.available)}</b></div>
-        {wallet?.held !== "0" && <div className="row small"><span className="muted">On hold (pending)</span><span className="right num">{fmt(wallet?.held)}</span></div>}
-        <div className="row small"><span className="muted">Exact</span><span className="right num">{wallet ? toDecimalString(BigInt(wallet.balance)) : "—"}</span></div>
-      </div>
-      <div className="card col" style={{ marginBottom: 12 }}>
-        <h3>Add money</h3>
-        <p className="small" style={{ margin: 0 }}>Deposits arrive by sending $CATCHAMI to the Catchami game contract on NEAR. Card/bank top-ups need an approved on-ramp provider that supports $CATCHAMI and your region.</p>
-        <div className="notice warn small">Deposits and withdrawals open when the $CATCHAMI contracts go live.</div>
-      </div>
-      <div className="card col" style={{ marginBottom: 12 }}>
-        <h3>Recent activity</h3>
-        {me.data?.wallet?.history?.length === 0 && <p className="muted small" style={{ margin: 0 }}>Nothing yet.</p>}
-        <table className="lb"><tbody>
-          {me.data?.wallet?.history?.map((h: { id: string; kind: string; amount: string; created_at: string }) => (
-            <tr key={h.id}><td style={{ width: "auto", fontWeight: 600 }}>{h.kind.replace(/_/g, " ")}</td><td className="small muted">{new Date(h.created_at).toLocaleString()}</td><td className="num" style={{ textAlign: "right", fontWeight: 700, color: h.amount.startsWith("-") ? "var(--bad)" : "var(--good)" }}>{h.amount.startsWith("-") ? "−" : "+"}{fmt(h.amount.replace("-", ""))}</td></tr>
-          ))}
-        </tbody></table>
-      </div>
-      {econ.data && (
-        <div className="card col" style={{ marginBottom: 12 }}>
-          <h3>Economy transparency</h3>
-          <dl className="kv">
-            <dt>HQ treasury</dt><dd className="num">{fmt(econ.data.hq.balance)}</dd>
-            <dt>Reserve floor</dt><dd className="num">{fmt(econ.data.hq.reserveFloor)}</dd>
-            <dt>Today's merchant budget</dt><dd className="num">{fmt(econ.data.today.merchantGranted)} / {fmt(econ.data.today.merchantAllowance)}</dd>
-            <dt>7-day avg daily revenue</dt><dd className="num">{fmt(econ.data.hq.avgDailyRevenue)}</dd>
-            <dt>Team fee revenue</dt><dd className="num">{fmt(econ.data.team.revenueBalance)}</dd>
-            <dt>Config version</dt><dd>{econ.data.version}</dd>
-          </dl>
-        </div>
-      )}
-      <div className="row"><button className="btn paper sm" onClick={() => store.set({ screen: "fairness" })}>Verify fairness</button><button className="btn ghost sm right" onClick={signOut}>Sign out</button></div>
-    </div>
-  );
-}
-
 export function FairnessScreen() {
   const ep = useAsync(() => api(`/api/fairness`), []);
   const [seed, setSeed] = useState(""), [label, setLabel] = useState(""), [tier, setTier] = useState<CatchTier>("basic");
