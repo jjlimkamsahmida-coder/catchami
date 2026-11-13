@@ -93,17 +93,19 @@ Stages: `intro → wallet → catch → name → world → tutorial → done`.
 2. **Wallet** — sign in with NEAR (testnet today) or as a guest, then pick a starter pouch.
 3. **Catch** — your first catch always succeeds (rarity is still a fair roll). On a PC the game shows a QR code that opens the camera on your phone.
 4. **Name** your pet.
-5. **Tutorial in the Keeper's Glade** — seven short tutorials ("Tutorial 1…7"), each in its own walled-off arena or screen, with a pointing hand and a glowing highlight on every button to tap:
+5. **Tutorial in the Keeper's Glade** — nine short tutorials ("Tutorial 1…9"), each in its own walled-off arena or screen, with a pointing hand and a glowing highlight on every button to tap:
 
 | Tutorial | Where | Goal |
 |---|---|---|
 | 1 First Steps | Empty meadow with a flag and a glowing ground ring | Walk to the flag (joystick on phones, arrow keys / WASD on PC) |
 | 2 Gathering | One spot each of wood, herbs, stone, fish | Gather all four. Then an info popup explains bags and selling |
-| 3 Trading | Merchant Mari's stall | Open shop → **Sell everything** → **Buy meal** → **Buy medicine** (allowed at full HP in the Glade) |
-| 4 Battles | Coach Kiki, a practice partner | Read How to Play, then win a practice Bubble Roulette match (she challenges you automatically; no HP or loot at stake). The hand points at both splash buttons |
-| 5 Marketplace | Bottom menu appears | Tap **Market** in the bottom menu, look around, come back |
-| 6 Profile | Pet Profile page | Tap **Profile** → learn the Bag (bag space bar at the bottom) → open **Autopilot** (on by default, explained) → open **Piggy bank** (explained) |
-| 7 Graduation | Portal | Step into the portal to Paw Village |
+| 3 Trading | Merchant Mari's stall | Open shop → **Sell everything** |
+| 4 Hungry! | New scene: the pet arrives with an **empty food bar** (highlighted) | Walk to **Chef Coco** → Open shop → **Buy meal** |
+| 5 Ouch! | New scene: the pet arrives at **0 HP** (heart bar highlighted; it can still walk slowly) | Walk to **Nurse Nana** → Open shop → **Buy medicine** |
+| 6 Battles | Coach Kiki, a practice partner | Read How to Play, then win a practice Bubble Roulette match (she challenges you automatically; no HP or loot at stake). The hand points at both splash buttons |
+| 7 Marketplace | Bottom menu appears | Tap **Market** in the bottom menu, look around, come back |
+| 8 Profile | Pet Profile page | Tap **Profile** → learn the Bag (bag space bar at the bottom) → open **Autopilot** (on by default, explained) → open **Piggy bank** (explained) |
+| 9 Graduation | Portal | Step into the portal to Paw Village |
 
 Tutorial rules: tutorial spots hold only 10 units and refill 15 s after
 emptying (the bag can never fill up and block you). Meals in the Glade don't

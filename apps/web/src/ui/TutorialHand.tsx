@@ -76,8 +76,11 @@ function findTargets(goal: string | undefined): Pt[] {
   if (goal === "sell" || goal === "meal" || goal === "medicine") {
     const b = btn(".actions", "Open shop");
     if (b) return [b];
-    const m = s.merchants.find((q) => q.id === "keeper");
-    if (!TOUCH && m && window.__w2s && petNear(m.x, m.y, ECONOMY.merchants.interactRangePx)) return [window.__w2s(m.x, m.y - MERCHANT_HEIGHT - 44)];
+    const m = s.merchants.find((q) => ["keeper", "chef", "nurse"].includes(q.id) && petNear(q.x, q.y, ECONOMY.merchants.interactRangePx));
+    if (!TOUCH && m && window.__w2s) return [window.__w2s(m.x, m.y - MERCHANT_HEIGHT - 44)];
+    // Still walking over: highlight the bar that explains why.
+    if (goal === "meal") return some(elPt(".pc-stat.fd"));
+    if (goal === "medicine") return some(elPt(".pc-stat.hp"));
   }
   if (goal === "flag" && TOUCH && controlledPet(s)) return some(elPt(".joystick"));
   return [];

@@ -1,8 +1,8 @@
 /**
- * Stage-by-stage tutorial in the Keeper's Glade, like a real game's training
- * mode. Six stages — First Steps, Gathering, Trading, Danger!, Marketplace,
- * Graduation — each opens with a big "STAGE N" card, moves the pet to that
- * stage's spot in the glade, and ends with a "Stage Clear!" card.
+ * Tutorial-by-tutorial training in the Keeper's Glade, like a real game:
+ * First Steps, Gathering, Trading, Hungry!, Ouch!, Battles, Marketplace,
+ * Profile, Graduation. Each opens with a "Tutorial N" card, moves the pet to
+ * that scene's arena, and ends with a "Tutorial N Clear!" card.
  * Objectives tick themselves off; "Skip tutorial" sends the pet straight to
  * the village.
  */
@@ -82,11 +82,21 @@ const STAGES: Stage[] = [
     ],
   },
   {
-    name: "Trading", icon: "🪙", learn: ["Selling to merchants", "Buying food", "Buying medicine"],
+    name: "Trading", icon: "🪙", learn: ["Selling to merchants"],
     steps: [
       { title: "Sell to a merchant", pose: "point", text: () => "Merchants buy what you gather. Meet Merchant Mari! Walk over to her, tap “Open shop”, then sell your haul for coins.", goal: "sell", goalText: "Sell your resources to Mari", target: () => poi("glade_stall") },
-      { title: "Time for a snack", pose: "wave", text: (n) => `Merchants sell food too! Open Mari's shop again and buy a meal — it fills ${n} up and restores energy. Meals cost ${fmt(ECONOMY.food.price)}.`, goal: "meal", goalText: "Buy a meal from Mari", target: () => poi("glade_stall") },
-      { title: "Medicine", pose: "point", text: (n) => `Battles cost HP. Medicine heals 40% of ${n}'s HP and wakes up a knocked-out pet. Buy one from Mari so you know where to find it (${fmt(ECONOMY.medicine.price)}).`, goal: "medicine", goalText: "Buy medicine from Mari", target: () => poi("glade_stall") },
+    ],
+  },
+  {
+    name: "Hungry!", icon: "🍖", learn: ["The food bar", "Buying meals"],
+    steps: [
+      { title: "Tummy rumbling!", pose: "point", text: (n) => `Uh-oh — ${n}'s food bar is empty (look at the badge, top left)! A starving pet gets tired fast and can't work. Walk over to Chef Coco, open the shop and buy a meal (${fmt(ECONOMY.food.price)}).`, goal: "meal", goalText: "Buy a meal from Chef Coco", target: () => poi("glade_chef") },
+    ],
+  },
+  {
+    name: "Ouch!", icon: "🩹", learn: ["HP (health)", "Buying medicine"],
+    steps: [
+      { title: "0 HP!", pose: "point", text: (n) => `${n} has 0 HP — see the heart bar on the badge. At 0 HP a pet can still walk (slowly), but can't gather or battle. Limp over to Nurse Nana and buy medicine (${fmt(ECONOMY.medicine.price)}).`, goal: "medicine", goalText: "Buy medicine from Nurse Nana", target: () => poi("glade_nurse") },
     ],
   },
   {
@@ -132,7 +142,7 @@ export function tutorialShowsNav(step: number | undefined) {
 }
 
 /** Which glade arena each tutorial plays in (Profile happens on a page, so it stays at the market stall). */
-const ARENA = [1, 2, 3, 4, 5, 5, 6];
+const ARENA = [1, 2, 3, 4, 5, 6, 7, 7, 8];
 
 const STEPS = STAGES.flatMap((st, si) => st.steps.map((s, k) => ({ ...s, stage: si, k, first: k === 0, last: k === st.steps.length - 1 })));
 
@@ -252,7 +262,8 @@ export function TutorialCoach() {
         if (have.length >= 4) done();
       }
       if (cur.goal === "sell") { const w = inventoryWeight(me.carried); if (b.carried > 0 && w === 0) done(); if (w > b.carried) b.carried = w; }
-      if (cur.goal === "meal" && (me.hunger < b.hunger - 50 || b.hunger < 60)) done(); // already full: nothing to buy
+      if (me.hunger > b.hunger) b.hunger = me.hunger;
+      if (cur.goal === "meal" && me.hunger < b.hunger - 50) done();
       if (cur.goal === "portal") { const ex = poi("glade_exit"); if (ex && Math.hypot(p.x - ex.x, p.y - ex.y) < TILE * 2) done(); }
     }, 400);
     let raf = 0;

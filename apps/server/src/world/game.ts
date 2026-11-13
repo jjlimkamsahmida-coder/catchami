@@ -478,10 +478,18 @@ export class Game {
   tutorialMove(userId: string, petId: string, where: "enter" | "exit", stage?: number) {
     const p = this.pets.get(petId);
     if (!p || p.ownerId !== userId) throw new GameError("not_owner", "Not your pet");
-    if (where === "exit") { const sp = this.spawnSpot(); p.s.x = sp.x; p.s.y = sp.y; }
+    if (where === "exit") {
+      const sp = this.spawnSpot(); p.s.x = sp.x; p.s.y = sp.y;
+      // Leaving the tutorial (finished or skipped) never strands a pet hungry or at 0 HP.
+      if (p.s.status === "knocked_out" || p.s.hp <= 0) { p.s.hp = Math.round(p.stats.maxHp * 0.4); p.s.status = "active"; p.s.koUntil = null; }
+      p.s.hunger = Math.min(p.s.hunger, 500);
+    }
     else {
-      const id = stage && stage >= 1 && stage <= 6 ? `glade_s${stage}` : "glade_spawn";
-      if (stage === 4) this.bandits.resetPractice(p.id);
+      const id = stage && stage >= 1 && stage <= 8 ? `glade_s${stage}` : "glade_spawn";
+      // Scenes that set the pet up for the lesson.
+      if (stage === 4) { p.s.hunger = ECONOMY.stats.hungerMax; p.s.energy = Math.max(p.s.energy, 500); if (p.s.status === "inactive") p.s.status = "active"; } // Hungry: empty food bar
+      if (stage === 5) { p.s.hp = 0; p.s.status = "knocked_out"; p.s.koUntil = null; p.task = null; p.round = null; } // Hurt: 0 HP
+      if (stage === 6) this.bandits.resetPractice(p.id);
       const poi = this.world.pois.find((q) => q.id === id) ?? this.world.pois.find((q) => q.id === "glade_spawn")!;
       p.s.x = tileCenter(poi.tx) + (Math.random() - 0.5) * 20; p.s.y = tileCenter(poi.ty) + Math.random() * 10;
     }

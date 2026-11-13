@@ -290,7 +290,7 @@ describe("knockout (0 HP)", () => {
 describe("Coach Kiki (tutorial practice)", () => {
   it("challenges once you're in her arena, and leaves you alone after you beat her", async () => {
     const u = await createGuest(db);
-    const s4 = game.world.pois.find((q) => q.id === "glade_s4")!;
+    const s4 = game.world.pois.find((q) => q.id === "glade_s6")!;
     const p = await spawn(u.userId, s4.tx, s4.ty);
     const c = client(u.userId);
     game.join(c);
@@ -315,7 +315,7 @@ describe("Coach Kiki (tutorial practice)", () => {
     for (let i = 0; i < 300; i++) { t += 100; game.bandits.step(0.1, t); }
     expect(p.matchId).toBeNull();
     // Replaying the battle tutorial lets her challenge again.
-    game.tutorialMove(u.userId, p.id, "enter", 4);
+    game.tutorialMove(u.userId, p.id, "enter", 6);
     kiki.calmUntil = 0;
     for (let i = 0; i < 200 && !p.matchId; i++) { t += 100; game.bandits.step(0.1, t); }
     expect(p.matchId).not.toBeNull();

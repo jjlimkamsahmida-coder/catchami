@@ -97,18 +97,20 @@ export const GATE_Y = 29;
 export const WORLD_SEED = "catchami-world-v6";
 
 /**
- * The Keeper's Glade is split into six walled-off tutorial arenas, one per stage
- * (players are teleported between them). Interior tile rects [x0, y0, x1, y1] inclusive.
+ * The Keeper's Glade is split into eight walled-off tutorial arenas (4 rows x 2),
+ * one per scene; players are teleported between them. Interior tile rects [x0, y0, x1, y1] inclusive.
  */
 export const GLADE_ARENAS: Array<[number, number, number, number]> = [
-  [GLADE_X0 + 2, 41, GLADE_X0 + 18, 56], // 1 First Steps
-  [GLADE_X0 + 22, 41, GLADE_X0 + 37, 56], // 2 Gathering
-  [GLADE_X0 + 22, 22, GLADE_X0 + 37, 37], // 3 Trading
-  [GLADE_X0 + 2, 22, GLADE_X0 + 18, 37], // 4 Danger
-  [GLADE_X0 + 2, 3, GLADE_X0 + 18, 18], // 5 Marketplace
-  [GLADE_X0 + 22, 3, GLADE_X0 + 37, 18], // 6 Graduation
+  [GLADE_X0 + 2, 45, GLADE_X0 + 18, 55], // 1 First Steps
+  [GLADE_X0 + 22, 45, GLADE_X0 + 37, 55], // 2 Gathering
+  [GLADE_X0 + 22, 31, GLADE_X0 + 37, 41], // 3 Trading (Merchant Mari)
+  [GLADE_X0 + 2, 31, GLADE_X0 + 18, 41], // 4 Hungry (Chef Coco)
+  [GLADE_X0 + 2, 17, GLADE_X0 + 18, 27], // 5 Hurt (Nurse Nana)
+  [GLADE_X0 + 22, 17, GLADE_X0 + 37, 27], // 6 Battles (Coach Kiki)
+  [GLADE_X0 + 2, 3, GLADE_X0 + 18, 13], // 7 Marketplace (+ Profile)
+  [GLADE_X0 + 22, 3, GLADE_X0 + 37, 13], // 8 Graduation
 ];
-/** Index (0-5) of the tutorial arena containing a tile, or -1. */
+/** Index (0-7) of the tutorial arena containing a tile, or -1. */
 export function gladeArenaAt(tx: number, ty: number): number {
   return GLADE_ARENAS.findIndex(([x0, y0, x1, y1]) => tx >= x0 - 1 && tx <= x1 + 1 && ty >= y0 - 1 && ty <= y1 + 1);
 }
@@ -145,6 +147,7 @@ export function generateWorld(seed = WORLD_SEED): WorldDef {
   const n2 = valueNoise(rng, w, h, 4);
   const n3 = valueNoise(rng, w, h, 2);
   const groves = valueNoise(Rng.fromString(seed + ":groves"), w, h, 6);
+  const grng = Rng.fromString(seed + ":glade");
   const tiles = new Uint8Array(w * h);
   const area = new Uint8Array(w * h);
   const idx = (x: number, y: number) => y * w + x;
@@ -192,7 +195,7 @@ export function generateWorld(seed = WORLD_SEED): WorldDef {
   for (let y = 2; y < 36; y++) { const sx = 24 + Math.round((n1(30, y) - 0.5) * 8); set(sx, y, T.water); set(sx + 1, y, T.shallow); set(sx - 1, y, T.shallow); }
   blob(52, 10, 5, 3);
   blob(96, 47, 4, 2, false);
-  blob(GLADE_X0 + 34, 50, 3, 2, false); // Gathering arena pond (practice fishing), kept high so the tutorial card never covers it
+  blob(GLADE_X0 + 34, 52, 3, 2, false); // Gathering arena pond (practice fishing)
 
   // Village plaza (cobblestone); HQ castle on its north side.
   const hq = { tx: 96, ty: 20 };
@@ -278,11 +281,11 @@ export function generateWorld(seed = WORLD_SEED): WorldDef {
   place("signpost", MINES_X0 - 5, GATE_Y - 1, true);
 
   // Keeper's Glade arenas — each holds only its stage's objects.
-  carve(GLADE_X0 + 4, 48, GLADE_X0 + 16, 48); // 1: a path to the goal flag
-  place("banner", GLADE_X0 + 16, 46, true);
-  place("stall", GLADE_X0 + 11, 9, true); // 5: a market stall
-  place("portal", GLADE_X0 + 31, 7, true); // 6: the portal home
-  for (const [x, y] of [[GLADE_X0 + 29, 7], [GLADE_X0 + 35, 7], [GLADE_X0 + 29, 9], [GLADE_X0 + 35, 9]] as const) place("glowcrystal", x, y, true);
+  carve(GLADE_X0 + 4, 50, GLADE_X0 + 16, 50); // 1: a path to the goal flag
+  place("banner", GLADE_X0 + 16, 48, true);
+  place("stall", GLADE_X0 + 11, 6, true); // 7: a market stall
+  place("portal", GLADE_X0 + 31, 4, true); // 8: the portal home
+  for (const [x, y] of [[GLADE_X0 + 29, 4], [GLADE_X0 + 35, 4], [GLADE_X0 + 29, 6], [GLADE_X0 + 35, 6]] as const) place("glowcrystal", x, y, true);
 
   // Forest landmarks.
   place("portal", 10, 10, true);
@@ -333,8 +336,9 @@ export function generateWorld(seed = WORLD_SEED): WorldDef {
       else if (gv > 0.45 && gv <= 0.52 && r < 0.05) place("mushroom", x, y);
     } else if (a === A.glade) {
       // Arenas stay open: a few trees hugging the cliffs, a sprinkle of flowers.
-      if (nextToRock(x, y) && r < 0.35) place(r < 0.12 ? "pine" : "tree", x, y);
-      else if ((t === T.grass || t === T.meadow) && gv > 0.62 && r < 0.08) props.push({ kind: "flower", tx: x, ty: y, v: rng.int(4) });
+      // (Own random stream, so changing the tutorial glade never reshuffles the rest of the world.)
+      if (nextToRock(x, y) && r < 0.35) { if (canPlace(r < 0.12 ? "pine" : "tree", x, y)) { const k = r < 0.12 ? "pine" : "tree"; for (let j = 0; j < PROP_SIZE[k].h; j++) for (let i = 0; i < PROP_SIZE[k].w; i++) if (inb(x + i, y + j)) occupied[idx(x + i, y + j)] = 1; props.push({ kind: k, tx: x, ty: y, v: grng.int(4) }); } }
+      else if ((t === T.grass || t === T.meadow) && gv > 0.62 && r < 0.08) props.push({ kind: "flower", tx: x, ty: y, v: grng.int(4) });
     } else if (a === A.village) {
       // Only gentle flower patches in the open lawns — streets stay clear.
       const inPlaza = x >= PX0 - 1 && x <= PX1 + 1 && y >= PY0 - 4 && y <= PY1 + 1;
@@ -404,7 +408,7 @@ export function generateWorld(seed = WORLD_SEED): WorldDef {
   addNodes("fish", 8, A.forest, (x, y, t) => ground(t) && nextToWater(x, y));
   addNodes("minerals", 15, A.mines, (_x, _y, t) => t === T.highland);
   // Gathering arena: one spot of each resource.
-  for (const [resource, x, y] of [["wood", GLADE_X0 + 27, 44], ["herbs", GLADE_X0 + 33, 45], ["minerals", GLADE_X0 + 27, 49], ["fish", GLADE_X0 + 30, 49]] as const) {
+  for (const [resource, x, y] of [["wood", GLADE_X0 + 27, 47], ["herbs", GLADE_X0 + 33, 47], ["minerals", GLADE_X0 + 27, 51], ["fish", GLADE_X0 + 30, 51]] as const) {
     // Clear the tile and its neighbours so the spot is always reachable.
     for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) if (get(x + i, y + j) !== T.water && get(x + i, y + j) !== T.shallow) { set(x + i, y + j, T.grass); blocked[idx(x + i, y + j)] = 0; }
     for (let k = props.length - 1; k >= 0; k--) { const q = props[k]!; if (Math.abs(q.tx - x) <= 1 && Math.abs(q.ty - y) <= 1 && PROP_SIZE[q.kind].w === 1) props.splice(k, 1); }
@@ -426,19 +430,23 @@ export function generateWorld(seed = WORLD_SEED): WorldDef {
     { id: "mines", label: "Mining Valley", tx: 142, ty: GATE_Y },
     { id: "mine", label: "Old Mine", tx: 152, ty: 14 },
     { id: "smithy", label: "Forge", tx: 172, ty: 44 },
-    { id: "glade_spawn", label: "Keeper's Glade", tx: GLADE_X0 + 4, ty: 48 },
-    { id: "glade_goal", label: "Goal flag", tx: GLADE_X0 + 16, ty: 48 },
-    { id: "glade_stall", label: "Merchant Mari", tx: GLADE_X0 + 31, ty: 29 },
-    { id: "glade_bandit", label: "Training Bandit", tx: GLADE_X0 + 13, ty: 30 },
-    { id: "glade_market", label: "Market stall", tx: GLADE_X0 + 12, ty: 11 },
-    { id: "glade_exit", label: "Portal to Paw Village", tx: GLADE_X0 + 32, ty: 10 },
+    { id: "glade_spawn", label: "Keeper's Glade", tx: GLADE_X0 + 4, ty: 50 },
+    { id: "glade_goal", label: "Goal flag", tx: GLADE_X0 + 16, ty: 50 },
+    { id: "glade_stall", label: "Merchant Mari", tx: GLADE_X0 + 31, ty: 36 },
+    { id: "glade_chef", label: "Chef Coco", tx: GLADE_X0 + 13, ty: 36 },
+    { id: "glade_nurse", label: "Nurse Nana", tx: GLADE_X0 + 13, ty: 22 },
+    { id: "glade_bandit", label: "Coach Kiki", tx: GLADE_X0 + 31, ty: 22 },
+    { id: "glade_market", label: "Market stall", tx: GLADE_X0 + 12, ty: 8 },
+    { id: "glade_exit", label: "Portal to Paw Village", tx: GLADE_X0 + 32, ty: 7 },
     // Tutorial stage start spots (one per arena).
-    { id: "glade_s1", label: "Stage 1", tx: GLADE_X0 + 4, ty: 48 },
-    { id: "glade_s2", label: "Stage 2", tx: GLADE_X0 + 24, ty: 48 },
-    { id: "glade_s3", label: "Stage 3", tx: GLADE_X0 + 24, ty: 30 },
-    { id: "glade_s4", label: "Stage 4", tx: GLADE_X0 + 5, ty: 30 },
-    { id: "glade_s5", label: "Stage 5", tx: GLADE_X0 + 5, ty: 11 },
-    { id: "glade_s6", label: "Stage 6", tx: GLADE_X0 + 25, ty: 12 },
+    { id: "glade_s1", label: "Tutorial 1", tx: GLADE_X0 + 4, ty: 50 },
+    { id: "glade_s2", label: "Tutorial 2", tx: GLADE_X0 + 24, ty: 50 },
+    { id: "glade_s3", label: "Tutorial 3", tx: GLADE_X0 + 24, ty: 36 },
+    { id: "glade_s4", label: "Tutorial 4", tx: GLADE_X0 + 5, ty: 36 },
+    { id: "glade_s5", label: "Tutorial 5", tx: GLADE_X0 + 5, ty: 22 },
+    { id: "glade_s6", label: "Tutorial 6", tx: GLADE_X0 + 24, ty: 22 },
+    { id: "glade_s7", label: "Tutorial 7", tx: GLADE_X0 + 5, ty: 8 },
+    { id: "glade_s8", label: "Tutorial 8", tx: GLADE_X0 + 25, ty: 9 },
   ];
   return { w, h, tiles, area, nodes, pois, hq, props, blocked };
 }
