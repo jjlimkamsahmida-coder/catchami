@@ -140,6 +140,11 @@ describe("gameplay economy loop", () => {
     expect(p2.s.hunger).toBe(700 - ECONOMY.food.hungerRestore);
     expect((await db.tx((tx) => balanceOf(tx, acct.team))).balance - teamBefore).toBe(ECONOMY.food.price / 10n);
     expect(game.hqStockCache.fish).toBe(caught - ECONOMY.food.fishPerMeal);
+    // The pet's coin history shows the meals it paid for (owner only).
+    const hist = await svc.petHistory(db, game, u2.userId, p2.id);
+    expect(hist.items.filter((i) => i.kind === "food").length).toBeGreaterThanOrEqual(2);
+    expect(hist.items[0]!.amount.startsWith("-")).toBe(true);
+    await expect(svc.petHistory(db, game, u1.userId, p2.id)).rejects.toBeTruthy();
 
     // Marketplace: atomic sale with stale-balance protection.
     const price = tokens(500_000);

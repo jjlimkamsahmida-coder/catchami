@@ -68,6 +68,16 @@ export async function fundPet(db: Db, game: Game, userId: string, petId: string,
 }
 
 /** Move settled, unheld pet funds back to the owner's wallet. Blocked while listed for sale. */
+/** A pet's piggy-bank ledger: every coin in or out, newest first (owner only). */
+export async function petHistory(db: Db, game: Game, userId: string, petId: string) {
+  ownedPet(game, userId, petId);
+  const r = await db.query<{ id: string; kind: string; amount: string; created_at: string; meta: Record<string, unknown> }>(
+    `SELECT j.id::text, j.kind, p.amount::text, j.created_at::text, j.meta FROM postings p JOIN journal j ON j.id = p.journal_id
+     WHERE p.account_id = $1 ORDER BY p.id DESC LIMIT 100`, [acct.pet(petId)],
+  );
+  return { items: r.rows };
+}
+
 export async function withdrawFromPet(db: Db, game: Game, userId: string, petId: string, amount: bigint, rid: string) {
   if (game.flags.pauseWithdrawals) throw new ServiceError("paused", "Withdrawals are paused by operations", 503);
   if (amount <= 0n) throw new ServiceError("amount", "Amount must be positive");

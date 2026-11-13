@@ -133,6 +133,7 @@ export function startHttp(db: Db, game: Game, detector: () => Detector | null, s
 
   // Pets.
   route("POST", "/api/pets/:id/fund", async (c) => svc.fundPet(db, game, uid(c), c.params.id!, amountOf(c.body.amount), rid(c.body.rid)), { auth: true });
+  route("GET", "/api/pets/:id/history", async (c) => svc.petHistory(db, game, uid(c), c.params.id!), { auth: true });
   route("POST", "/api/pets/:id/withdraw", async (c) => svc.withdrawFromPet(db, game, uid(c), c.params.id!, amountOf(c.body.amount), rid(c.body.rid)), { auth: true });
   route("POST", "/api/pets/:id/craft", async (c) => svc.craft(db, game, uid(c), c.params.id!, c.body.kind as EquipmentKind, Boolean(c.body.buyMissing), rid(c.body.rid)), { auth: true });
   route("GET", "/api/craft", async () => ({ recipes: EQUIPMENT_KINDS.map((k) => svc.craftQuote(game, k)) }));

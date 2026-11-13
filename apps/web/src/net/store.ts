@@ -53,7 +53,7 @@ export interface State {
   mgResult: { roundId: string; grade: Grade; gained: number; resource: Resource; detail: string; note?: string; at: number } | null;
   bubble: BubbleMatchView | null;
   /** Which tab of the pet Profile page is open (the tutorial watches it). */
-  profileTab: "bag" | "strategy" | "wallet" | "gear";
+  profileTab: "bag" | "strategy" | "wallet" | "gear" | "history";
   bubbleInvite: { matchId: string; demo: boolean; fromName: string; ownerName: string; sticker: string | null; species: "cat" | "dog"; look: OwnPet["look"]; toPetId: string; expiresAt: number } | null;
 }
 

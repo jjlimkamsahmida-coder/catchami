@@ -1799,3 +1799,13 @@ html.has-touch .joystick { display: block !important; }
   .album.wide .album-active { font-size: 14px; padding: 2px 10px; bottom: -12px; }
 }
 .vault-tile.claimed { background: #eaf7e4; }
+
+/* ---- Pet Profile: coin history ---- */
+.flow-sum { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.flow-sum > div { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 6px; border-radius: 16px; border: 3px solid var(--ink); box-shadow: 0 3px 0 var(--ink); background: #fff; }
+.flow-sum small { font-size: 11px; font-weight: 700; color: var(--ink-soft, #6b5b7a); text-transform: uppercase; letter-spacing: 0.5px; }
+.flow-sum b { font: 700 18px Fredoka, sans-serif; }
+.flow-sum .in { background: #e3f9e5; } .flow-sum .in b { color: #1b7a33; }
+.flow-sum .out { background: #ffe8e8; } .flow-sum .out b { color: #c92a2a; }
+.flow-sum .bal { background: linear-gradient(#fff8dc, #ffe9a6); }
+.gtabs { flex-wrap: wrap; }

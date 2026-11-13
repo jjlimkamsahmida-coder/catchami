@@ -12,6 +12,7 @@ import { api, refreshWallet, rid, send } from "../net/api.ts";
 import { fmt, fmtQty, PetArt, useAsync } from "./common.tsx";
 import { CollectorCard, cardFromPet } from "./CollectorCard.tsx";
 import { GearTab, StrategyTab, WalletTab } from "./Pets.tsx";
+import { PetHistoryTab } from "./PetHistory.tsx";
 import { genUrl } from "../game/assets.ts";
 import { sfx } from "./sfx.ts";
 import { MissionDemo, PhoneHandoff, Scene } from "./Journey.tsx";
@@ -57,7 +58,7 @@ export function BagScreen({ p }: { p: OwnPet }) {
         </div>
       </div>
       <div className="gtabs">
-        {(["bag", "strategy", "wallet", "gear"] as const).map((t) => <button key={t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>{{ bag: "🎒 Bag", strategy: "🤖 Autopilot", wallet: "🪙 Piggy bank", gear: "🛡️ Gear" }[t]}</button>)}
+        {(["bag", "strategy", "wallet", "history", "gear"] as const).map((t) => <button key={t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>{{ bag: "🎒 Bag", strategy: "🤖 Autopilot", wallet: "🪙 Piggy bank", history: "📜 History", gear: "🛡️ Gear" }[t]}</button>)}
       </div>
       {tab === "bag" && (
         <>
@@ -81,6 +82,7 @@ export function BagScreen({ p }: { p: OwnPet }) {
       {tab === "strategy" && <div className="gpage-card"><StrategyTab p={p} /></div>}
       {tab === "wallet" && <div className="gpage-card"><WalletTab p={p} /></div>}
       {tab === "gear" && <div className="gpage-card"><GearTab p={p} /></div>}
+      {tab === "history" && <div className="gpage-card"><PetHistoryTab p={p} /></div>}
     </PageFrame>
   );
 }
