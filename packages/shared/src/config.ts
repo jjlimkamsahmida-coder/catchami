@@ -91,7 +91,8 @@ export const ECONOMY = {
     battleEnergyPerExchange: 12,
     restEnergyPerSec: 0.6,
     restMaxHunger: 700,
-    knockoutCooldownSec: 3 * 3600,
+    /** At 0 HP a pet can still walk, sell and buy medicine (no wait), but can't gather or battle until healed. */
+    knockoutCooldownSec: 0,
     /** Below this energy the pet is too tired to gather or fight. */
     exhaustedEnergy: 40,
   },

@@ -168,7 +168,7 @@ export function PetCard() {
 }
 
 function statusText(p: OwnPet) {
-  if (p.status === "knocked_out") return "knocked out";
+  if (p.status === "knocked_out") return "0 HP";
   if (p.status === "inactive") return "inactive";
   if (p.autopilotResumesAt) return "manual";
   return p.strategy.auto ? "autopilot" : p.status;
@@ -214,7 +214,7 @@ export function Joystick() {
     update(cx, cy);
     const p = controlledPet(store.get());
     if (p && Date.now() - warned.current > 4000) {
-      const why = p.status === "knocked_out" ? `${p.name} is knocked out — use medicine to get moving again` : p.energy < ECONOMY.stats.exhaustedEnergy ? `${p.name} is exhausted and moves slowly — rest or eat` : null;
+      const why = p.status === "knocked_out" ? `${p.name} has 0 HP and walks slowly — buy medicine to recover` : p.energy < ECONOMY.stats.exhaustedEnergy ? `${p.name} is exhausted and moves slowly — rest or eat` : null;
       if (why) { warned.current = Date.now(); toast("info", why); }
     }
   };
@@ -255,6 +255,12 @@ export function Joystick() {
 export function BagFullBanner() {
   const p = useStore(controlledPet);
   const tut = useStore((s) => s.onboarding?.stage === "tutorial");
+  if (p?.status === "knocked_out") return (
+    <div className="bagfull ko" role="status">
+      <span className="bagfull-ico">💔</span>
+      <span><b>{p.name} has 0 HP!</b><small>Buy medicine to recover before gathering again — you can still walk to a merchant.</small></span>
+    </div>
+  );
   if (!p || inventoryWeight(p.carried) < carryCapacity(p.stats) * 0.98) return null;
   return (
     <div className="bagfull" role="status">
@@ -283,12 +289,12 @@ export function ActionBar() {
   const m = merchants.find((mm) => mm.state !== "at_hq" && mm.state !== "unavailable" && Math.hypot(mm.x - px, mm.y - py) <= ECONOMY.merchants.interactRangePx);
   const node = nodesDef.map((n) => ({ n, d: Math.hypot(n.tx * 32 + 16 - px, n.ty * 32 + 16 - py) })).filter((x) => x.d < 120).sort((a, b) => a.d - b.d)[0]?.n;
   const ko = p.status === "knocked_out";
-  const koReady = ko && p.koUntil !== null && Date.now() >= p.koUntil;
+  const koReady = ko;
   const btns: React.ReactNode[] = [];
   const touch = window.matchMedia("(pointer: coarse)").matches;
   const full = inventoryWeight(p.carried) >= carryCapacity(p.stats) * 0.98;
   if (touch && m && !store.get().sheet) btns.push(<button key="shop" className="btn big-action" onClick={() => store.set({ sheet: { kind: "merchant", id: m.id } })}>Open shop</button>);
-  if (touch && node && !ko && !store.get().mgSession) btns.push(<button key="gather" className="btn big-action" disabled={(nodes[node.id] ?? 1) <= 0 || full} onClick={() => send({ t: "gather", petId: p.id, nodeId: node.id })}>{full ? "Bag full" : (nodes[node.id] ?? 1) <= 0 ? "Regrowing…" : "Gather!"}</button>);
+  if (touch && node && !store.get().mgSession) btns.push(<button key="gather" className="btn big-action" disabled={ko || (nodes[node.id] ?? 1) <= 0 || full} onClick={() => send({ t: "gather", petId: p.id, nodeId: node.id })}>{ko ? "Needs medicine" : full ? "Bag full" : (nodes[node.id] ?? 1) <= 0 ? "Regrowing…" : "Gather!"}</button>);
   // The tutorial teaches one thing per stage: only selling and gathering show up there.
   if (tut) return btns.length ? <div className="actions">{btns}</div> : null;
   const foe = !ko ? nearbyFoe(px, py) : null;
@@ -303,7 +309,6 @@ export function ActionBar() {
     { const sp = shopPrice("food", ticker?.hqStock.fish ?? 0); btns.push(<button key="food" className="btn paper" title={sp.imported ? "HQ kitchen is out of local fish — imported meals cost more" : ""} onClick={() => send({ t: "buy", petId: p.id, item: "food", rid: rid() })}>{sp.imported ? "Imported meal" : "Buy meal"} · {fmt(sp.price)}</button>); }
   }
   if ((ko && koReady) || (!ko && p.hp < p.stats.maxHp * 0.6)) btns.push(<button key="med" className="btn coral" onClick={() => send({ t: "buy", petId: p.id, item: "medicine", rid: rid() })}>Medicine · {fmt(shopPrice("medicine", ticker?.hqStock.herbs ?? 0).price)}</button>);
-  if (ko && !koReady && p.koUntil) btns.push(<div key="ko" className="panel small" style={{ padding: "6px 10px" }}>Recovering · {Math.ceil((p.koUntil - Date.now()) / 60000)} min</div>);
   if (!ko && p.energy < p.stats.maxEnergy * 0.5 && p.status !== "sleeping") btns.push(<button key="rest" className="btn paper" onClick={() => send({ t: "rest", petId: p.id })}>Nap</button>);
   return btns.length ? <div className="actions">{btns.slice(0, 3)}</div> : null;
 }

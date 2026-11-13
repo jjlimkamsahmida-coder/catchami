@@ -228,7 +228,7 @@ export class Game {
     }
     // Status transitions.
     if (s.status === "knocked_out") {
-      p.anim = "ko";
+      // stays knocked out until medicine
     } else if (s.energy <= 0 && s.hunger >= cfg.hungerMax) {
       if (s.status !== "inactive") { s.status = "inactive"; p.activity = "Out of energy and starving"; p.metaDirty = true; p.path = []; p.task = null; }
     } else if (s.status === "inactive" && s.energy > 0) {
@@ -236,11 +236,12 @@ export class Game {
     } else {
       s.status = p.task?.kind === "rest" ? "sleeping" : "active";
     }
-    if (s.status === "knocked_out") { p.moveDir = null; p.path = []; p.dirty = true; return; }
+    const ko = s.status === "knocked_out";
+    if (ko && p.task?.kind === "gather") { p.task = null; p.round = null; }
 
-    // Movement.
+    // Movement (a pet at 0 HP limps along slowly).
     const exhausted = s.energy < cfg.exhaustedEnergy;
-    const speed = p.stats.speed * SPEED_SCALE * (s.status === "inactive" ? 0.45 : exhausted ? 0.6 : 1) * (s.hunger >= cfg.hungerMax ? 0.85 : 1);
+    const speed = p.stats.speed * SPEED_SCALE * (s.status === "inactive" ? 0.45 : ko ? 0.55 : exhausted ? 0.6 : 1) * (s.hunger >= cfg.hungerMax ? 0.85 : 1);
     let moved = false;
     if (p.moveDir && now < p.moveDir.until && !p.busy) {
       const { dx, dy } = p.moveDir;
@@ -282,7 +283,7 @@ export class Game {
 
     // Animation state.
     if (now >= p.animUntil) {
-      p.anim = p.task?.kind === "rest" ? "sleep" : p.task?.kind === "gather" && p.task.endsAt ? "gather" : moved ? "walk" : "idle";
+      p.anim = p.task?.kind === "rest" ? "sleep" : p.task?.kind === "gather" && p.task.endsAt ? "gather" : moved ? "walk" : ko ? "ko" : "idle";
     } else if (moved && (p.anim === "idle" || p.anim === "walk")) {
       p.anim = "walk";
     }
@@ -328,6 +329,7 @@ export class Game {
       p.task = null; p.activity = why; p.anim = "idle";
       if (t.minigame) { p.round = null; this.toOwner(p, { t: "mg_end", petId: p.id, reason: why }); }
     };
+    if (s.status === "knocked_out") return stop(`${p.name} has 0 HP — buy medicine from a merchant to recover first`);
     if (s.energy < ECONOMY.stats.exhaustedEnergy) return stop("Too tired to gather");
     if (inventoryWeight(s.inventory) + w > carryCapacity(p.stats)) return stop("Bag is full");
     if (node.remaining <= 0) return stop("This spot is picked clean — it regrows soon");
@@ -398,6 +400,7 @@ export class Game {
     const node = this.nodes.get(round.nodeId);
     if (!node || p.task?.kind !== "gather" || p.task.nodeId !== node.id) throw new GameError("round", "Not gathering here anymore");
     if (Math.hypot(tileCenter(node.tx) - p.s.x, tileCenter(node.ty) - p.s.y) > GATHER_RANGE) throw new GameError("too_far", "Too far from the spot");
+    if (p.s.status === "knocked_out") throw new GameError("ko", `${p.name} has 0 HP — buy medicine from a merchant to recover first`);
     if (p.s.energy < ECONOMY.stats.exhaustedEnergy) throw new GameError("tired", "Too tired to gather");
     const { grade, detail } = gradeRound(round.params, ms);
     const w = ECONOMY.resources[node.resource].weight;
@@ -591,7 +594,7 @@ export class Game {
     if (!m) throw new GameError("not_found", "No such merchant");
     if (m.state === "at_hq" || m.state === "unavailable") throw new GameError("closed", `${m.name} is not trading right now`);
     if (Math.hypot(m.x - p.s.x, m.y - p.s.y) > ECONOMY.merchants.interactRangePx) throw new GameError("too_far", `Walk closer to ${m.name}`);
-    if (p.s.status !== "active" && p.s.status !== "sleeping") throw new GameError("inactive", `${p.name} can't trade right now`);
+    if (p.s.status === "inactive") throw new GameError("inactive", `${p.name} can't trade right now`);
     return this.withPet(p, () => (m.busy = m.busy.then(async (): Promise<{ sold: Inventory; total: bigint }> => {
       let capLeft = ECONOMY.merchants.inventoryCapacity - inventoryWeight(m.inventory);
       let cash = m.cash;
@@ -642,9 +645,6 @@ export class Game {
   async buy(p: PetRt, item: "food" | "medicine", rid = newId("buy")) {
     if (this.flags.pauseTrades) throw new GameError("paused", "Shops are paused by operations");
     const now = this.now();
-    if (item === "medicine" && p.s.status === "knocked_out" && p.s.koUntil && now < p.s.koUntil) {
-      throw new GameError("cooldown", `${p.name} is still recovering — medicine works after the cooldown`);
-    }
     if (item === "food" && p.s.hunger < 50) throw new GameError("full", `${p.name} isn't hungry`);
     const inGlade = areaAt(this.world, p.s.x, p.s.y).id === "glade";
     // (The tutorial glade lets you practise buying medicine even when healthy.)
@@ -769,6 +769,7 @@ export class Game {
         const p = own(msg.petId);
         const node = this.nodes.get(msg.nodeId);
         if (!node) throw new GameError("not_found", "No such resource spot");
+        if (p.s.status === "knocked_out") throw new GameError("ko", `${p.name} has 0 HP — buy medicine from a merchant to recover first`);
         if (p.s.status !== "active" && p.s.status !== "sleeping") throw new GameError("inactive", `${p.name} can't gather right now`);
         if (p.matchId) throw new GameError("in_match", `${p.name} is in a Bubble Roulette match`);
         p.task = { kind: "gather", nodeId: node.id, endsAt: null, repeat: true, minigame: true };

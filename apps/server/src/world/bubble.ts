@@ -312,7 +312,7 @@ export class BubbleArena {
       p.s.hp = Math.min(p.s.hp, fromBattleHp(m.hp[k], p.stats.maxHp));
       p.s.lastBattleAt = now;
       p.s.recentOpponents = { ...p.s.recentOpponents, [m.pets[other(k)].id]: now };
-      if (p.s.hp <= 0) { p.s.hp = 0; p.s.status = "knocked_out"; p.s.koUntil = now + ECONOMY.stats.knockoutCooldownSec * 1000; p.anim = "ko"; }
+      if (p.s.hp <= 0) { p.s.hp = 0; p.s.status = "knocked_out"; p.s.koUntil = null; p.anim = "ko"; p.task = null; p.round = null; }
       p.dirty = true; p.metaDirty = true;
     }
     if (m.bot) {

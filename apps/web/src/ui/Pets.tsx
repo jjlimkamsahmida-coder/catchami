@@ -73,7 +73,7 @@ function StatusTab({ p }: { p: OwnPet }) {
           <dt>Hunger</dt><dd className="num">{p.hunger} / {ECONOMY.stats.hungerMax}</dd>
           <dt>Gathered today</dt><dd className="num">{p.gatheredToday}</dd>
           <dt>Battles</dt><dd className="num">{p.wins}W · {p.losses}L</dd>
-          {p.koUntil && <><dt>Knocked out until</dt><dd>{new Date(p.koUntil).toLocaleTimeString()}</dd></>}
+          {p.status === "knocked_out" && <><dt>Health</dt><dd>0 HP — buy medicine to gather again</dd></>}
         </dl>
       </div>
       <div className="card">

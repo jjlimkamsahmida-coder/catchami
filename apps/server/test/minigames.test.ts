@@ -259,3 +259,30 @@ describe("rivals", () => {
     expect(b.state).toBe("flee");
   }, 30_000);
 });
+
+describe("knockout (0 HP)", () => {
+  it("a 0-HP pet can still walk and buy medicine straight away, but can't gather", async () => {
+    const u = await createGuest(db);
+    const forest = game.world.pois.find((q) => q.id === "forest")!;
+    const p = await spawn(u.userId, forest.tx + 3, forest.ty + 3);
+    await db.tx((tx) => post(tx, { idem: `test-fund:${p.id}`, kind: "pet_fund", postings: transfer(acct.chain, acct.pet(p.id), tokens(1_000_000)) }));
+    await game.refreshBalance(p);
+    p.s.hp = 0; p.s.status = "knocked_out"; p.s.energy = 1000; p.s.hunger = 0;
+    const c = client(u.userId);
+    game.join(c);
+    c.controlled = p.id;
+    const x0 = p.s.x, y0 = p.s.y;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      await game.handle(c, { t: "move", dx, dy });
+      advance(300);
+      if (Math.hypot(p.s.x - x0, p.s.y - y0) > 0) break;
+    }
+    expect(Math.hypot(p.s.x - x0, p.s.y - y0)).toBeGreaterThan(0);
+    expect(p.s.status).toBe("knocked_out");
+    const node = game.world.nodes.find((n) => n.resource === "wood")!;
+    await expect(game.handle(c, { t: "gather", petId: p.id, nodeId: node.id })).rejects.toMatchObject({ code: "ko" });
+    await game.buy(p, "medicine", "ko-med-1");
+    expect(p.s.status).toBe("active");
+    expect(p.s.hp).toBeGreaterThan(0);
+  }, 30_000);
+});

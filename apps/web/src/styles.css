@@ -1644,3 +1644,5 @@ table.lb td:first-child { width: 28px; font-weight: 700; }
 
 .br > .br-rules-wrap { position: fixed; inset: 0; z-index: 60; }
 .br-rules-card li p { margin: 0; }
+
+.bagfull.ko { background: linear-gradient(#ffd6d6, #ff9a9a); }

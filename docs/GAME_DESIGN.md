@@ -220,7 +220,7 @@ capture checks).
 | Hunger | 0 = full, 1,000 = starving. Rises from full to starving in **5 hours**, plus gathering hunger (§8) |
 | Starving (hunger 1,000) | −0.6 energy per second. At 0 energy the pet goes **inactive** until it is fed |
 | HP | Max about 1,000. Only Bubble Roulette lowers it |
-| Knockout (HP 0) | 3-hour cooldown, then **medicine** revives the pet |
+| 0 HP | The pet can still **walk (slowly), sell and buy medicine**, but **can't gather or battle** until healed. Medicine works straight away, no cooldown |
 
 Upkeep: an idle pet needs about **14 meals a day (≈ 165K)** to stay fed. A
 working pet needs more because gathering adds hunger. This upkeep is the
@@ -306,7 +306,7 @@ doesn't count.
 | Item | Price | Effect | Uses from HQ stock | If HQ is out of stock |
 |---|---:|---|---|---|
 | Meal | **12K** | −350 hunger, +220 energy | 10 fish | **Imported meal 24K** (2×) |
-| Medicine | **60K** | Heals 40% of max HP; revives after a knockout's cooldown | 20 herbs | **Imported 120K** (2×) |
+| Medicine | **60K** | Heals 40% of max HP; brings a 0-HP pet back to work | 20 herbs | **Imported 120K** (2×) |
 
 - Coins split **90% HQ / 10% team**.
 - **Meals are the only food;** pets cannot eat fish from their own bag.
@@ -367,7 +367,7 @@ Mining Valley: 5 in the Forest, 4 in the Valley. They walk up to your pet when i
 |---|---|
 | Both pets | **80 energy + 60 hunger** when the match starts |
 | Both pets | HP lost to splashes (it never heals during a match) |
-| Loser | Ends at **0 HP**: knocked out 3 h, then **60K medicine** to revive |
+| Loser | Ends at **0 HP**: can't gather or battle until it buys **60K medicine** (it can still walk and trade) |
 
 ### Spoils (what the winner takes)
 
@@ -541,7 +541,7 @@ Example: one fed pet sends about **16K a day** to the team from meals alone.
 
 - The loser holds 1M, so 950K is at stake. The share rolls 10%, so **95K is taken**.
 - Fee 9.5K (HQ 8.55K, team 0.95K). The winner receives **85.5K**.
-- The loser also loses 10% of each resource in its bag, is knocked out for 3 h, and then pays **60K for medicine**.
+- The loser also loses 10% of each resource in its bag and drops to 0 HP, so it pays **60K for medicine** before it can gather again.
 - Both pets paid 80 energy and 60 hunger.
 
 **Selling a pet**

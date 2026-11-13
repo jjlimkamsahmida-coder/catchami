@@ -16,10 +16,9 @@ export function decide(g: Game, p: PetRt, now: number, urgentOnly = false) {
   const avail = p.balance - p.held;
 
   if (s.status === "knocked_out") {
-    if (st.buyMedicine && s.koUntil && now >= s.koUntil) {
-      if (avail >= shopPrice("medicine", g.hqStockCache.herbs).price) void g.buy(p, "medicine", `ai:${p.id}:${now}`).catch(fail);
-      else p.activity = "Needs tokens for medicine";
-    } else p.activity = "Recovering from a knockout";
+    // 0 HP: no gathering or battles until healed. Autopilot buys medicine when it can.
+    if (st.buyMedicine && avail >= shopPrice("medicine", g.hqStockCache.herbs).price) void g.buy(p, "medicine", `ai:${p.id}:${now}`).catch(fail);
+    else p.activity = "0 HP — needs medicine to gather again";
     return;
   }
 

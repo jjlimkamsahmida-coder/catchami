@@ -159,7 +159,7 @@ function NodeSheet({ id }: { id: string }) {
           <dt>Weight per unit</dt><dd>{cfg.weight}</dd>
           <dt>Used for</dt><dd>{{ fish: "food", herbs: "medicine", wood: "crafting", minerals: "crafting" }[n.resource]}</dd>
         </dl>
-        <button className="btn block" disabled={!p || p.status === "knocked_out"} onClick={() => { send({ t: "gather", petId: p!.id, nodeId: id }); close(); }}>
+        <button className="btn block" disabled={!p || p.status === "knocked_out"} title={p?.status === "knocked_out" ? "0 HP — buy medicine first" : ""} onClick={() => { send({ t: "gather", petId: p!.id, nodeId: id }); close(); }}>
           {p ? `Send ${p.name} to gather` : "Catch a pet first"}
         </button>
       </div>
