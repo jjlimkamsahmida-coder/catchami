@@ -135,7 +135,6 @@ export function StrategyTab({ p }: { p: OwnPet }) {
       </div>
       <div className="card col">
         <h3>Battles</h3>
-        {seg("battle", [["balanced", "Accept challenges"], ["avoid", "Avoid battles"]])}
         <label className="field">Fight only above {Math.round(s.minHpBps / 100)}% HP<input type="range" min={1000} max={10000} step={500} value={s.minHpBps} onChange={(e) => set("minHpBps", Number(e.target.value))} /></label>
         <label className="field">Head to a merchant once carrying {Math.round(s.maxCarryRiskBps / 100)}% of capacity (theft exposure)<input type="range" min={1000} max={10000} step={500} value={s.maxCarryRiskBps} onChange={(e) => set("maxCarryRiskBps", Number(e.target.value))} /></label>
       </div>

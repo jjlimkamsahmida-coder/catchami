@@ -50,7 +50,7 @@ function WalletButton() {
   const short = address.length > 16 ? `${address.slice(0, 7)}…${address.slice(-6)}` : address;
   return (
     <div className="wallet-top" ref={ref}>
-      <button className={`wallet-btn ${open ? "open" : ""}`} onClick={() => setOpen((v) => !v)} aria-label="Wallet">
+      <button className={`wallet-btn ${open ? "open" : ""}`} onClick={() => { if (store.get().onboarding?.stage !== "tutorial") setOpen((v) => !v); }} aria-label="Wallet">
         <img src={genUrl("ui-coin")} alt="" />
         <span className="wb-text">
           <b className="num">{fmt(wallet?.available)}</b>
@@ -147,7 +147,7 @@ export function PetCard() {
     </div>
   );
   return (
-    <button className="petcard2" onClick={() => store.set({ screen: "pets", petScreen: p.id })} aria-label={`${p.name} — open pet`}>
+    <button className="petcard2" onClick={() => { if (store.get().onboarding?.stage !== "tutorial") store.set({ screen: "pets", petScreen: p.id }); }} aria-label={`${p.name} — open pet`}>
       <span className={`pc-avatar r-${p.rarity}`}>
         <PetArt sticker={p.sticker} species={p.species} look={p.look} />
         <span className="pc-rarity">{p.rarity.slice(0, 1).toUpperCase()}</span>
@@ -258,7 +258,7 @@ export function BagFullBanner() {
   if (p?.status === "knocked_out") return (
     <div className="bagfull ko" role="status">
       <span className="bagfull-ico">💔</span>
-      <span><b>{p.name} has 0 HP!</b><small>Buy medicine to recover before gathering again — you can still walk to a merchant.</small></span>
+      <span><b>0 HP!</b><small>Buy medicine at a merchant</small></span>
     </div>
   );
   if (!p || inventoryWeight(p.carried) < carryCapacity(p.stats) * 0.98) return null;
@@ -296,7 +296,13 @@ export function ActionBar() {
   if (touch && m && !store.get().sheet) btns.push(<button key="shop" className="btn big-action" onClick={() => store.set({ sheet: { kind: "merchant", id: m.id } })}>Open shop</button>);
   if (touch && node && !store.get().mgSession) btns.push(<button key="gather" className="btn big-action" disabled={ko || (nodes[node.id] ?? 1) <= 0 || full} onClick={() => send({ t: "gather", petId: p.id, nodeId: node.id })}>{ko ? "Needs medicine" : full ? "Bag full" : (nodes[node.id] ?? 1) <= 0 ? "Regrowing…" : "Gather!"}</button>);
   // The tutorial teaches one thing per stage: only selling and gathering show up there.
-  if (tut) return btns.length ? <div className="actions">{btns}</div> : null;
+  if (tut) {
+    // Tutorial 6: walk up to Coach Kiki, then press Battle.
+    const k = store.get().bandits.find((b) => b[0] === "bandit-practice");
+    if (k && !ko && Math.hypot(k[1] - px, k[2] - py) <= 130 && k[3] !== 2 && !store.get().bubble)
+      btns.unshift(<button key="battle" className="btn big-action battle" onClick={() => send({ t: "fight_bandit", petId: p.id, banditId: "bandit-practice" })}>⚔️ Battle Coach Kiki</button>);
+    return btns.length ? <div className="actions">{btns}</div> : null;
+  }
   const foe = !ko ? nearbyFoe(px, py) : null;
   if (foe) {
     const gathering = !!store.get().mgSession || p.activity.startsWith("Gathering");
@@ -305,11 +311,8 @@ export function ActionBar() {
       {gathering ? "Busy gathering" : `⚔️ Battle ${foe.name}`}
     </button>);
   }
-  if (p.hunger > 300 && !ko) {
-    { const sp = shopPrice("food", ticker?.hqStock.fish ?? 0); btns.push(<button key="food" className="btn paper" title={sp.imported ? "HQ kitchen is out of local fish — imported meals cost more" : ""} onClick={() => send({ t: "buy", petId: p.id, item: "food", rid: rid() })}>{sp.imported ? "Imported meal" : "Buy meal"} · {fmt(sp.price)}</button>); }
-  }
-  if ((ko && koReady) || (!ko && p.hp < p.stats.maxHp * 0.6)) btns.push(<button key="med" className="btn coral" onClick={() => send({ t: "buy", petId: p.id, item: "medicine", rid: rid() })}>Medicine · {fmt(shopPrice("medicine", ticker?.hqStock.herbs ?? 0).price)}</button>);
-  if (!ko && p.energy < p.stats.maxEnergy * 0.5 && p.status !== "sleeping") btns.push(<button key="rest" className="btn paper" onClick={() => send({ t: "rest", petId: p.id })}>Nap</button>);
+  // (Meals and medicine are bought at a merchant's shop, not from this bar.)
+  void ticker; void koReady;
   return btns.length ? <div className="actions">{btns.slice(0, 3)}</div> : null;
 }
 

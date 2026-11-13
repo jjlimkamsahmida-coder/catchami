@@ -103,7 +103,7 @@ const STAGES: Stage[] = [
     name: "Battles", icon: "⚔️", learn: ["Battling other Keepers", "Bubble Roulette"],
     steps: [
       {
-        title: "Battle time!", pose: "point", text: (n) => `Out in the wild, other Keepers' pets challenge you to Bubble Roulette. The launcher holds 6 bubbles and 3 are loaded. Splash your rival — or splash yourself: if it's empty you get an extra turn! A loaded bubble soaks for 50 HP, so two soaks and you're out. Coach Kiki is here to practise — show her what ${n} can do!`,
+        title: "Battle time!", pose: "point", text: (n) => `Out in the wild, other Keepers' pets will challenge you to Bubble Roulette. Coach Kiki is here to practise: walk up to her and tap ⚔️ Battle. Show her what ${n} can do!`,
         goal: "fight", goalText: "Win the practice battle", target: trainingBandit,
         extra: () => <div className="tut-bandit"><b>⚔️ PvP battle</b></div>,
       },
@@ -339,7 +339,7 @@ export function TutorialCoach() {
   return (
     <>
       {hand}
-      <div key="arrow" ref={arrow} className="tut-arrow" style={{ display: "none" }}><span>➜</span><small /></div>
+      {screen === "world" && <div key="arrow" ref={arrow} className="tut-arrow" style={{ display: "none" }}><span>➜</span><small /></div>}
       <div key="card" ref={card} className={`tut-card sticky panel ${min ? "min" : ""}`}>
         <button className="tut-min" onClick={() => setMin((v) => !v)} aria-label={min ? "Expand" : "Minimise"}>{min ? "▴" : "▾"}</button>
         <div className="tut-body">

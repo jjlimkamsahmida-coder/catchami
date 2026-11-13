@@ -13,7 +13,8 @@ import { MERCHANT_HEIGHT } from "../game/assets.ts";
 
 declare global { interface Window { __w2s?: (x: number, y: number) => { x: number; y: number } } }
 
-type Pt = { x: number; y: number; el?: Element };
+/** noHand: glow the element but don't point at it. */
+type Pt = { x: number; y: number; el?: Element; noHand?: boolean };
 const TOUCH = typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
 
 /** First visible, enabled button whose text matches. */
@@ -52,7 +53,7 @@ function findTargets(goal: string | undefined): Pt[] {
     return some(btn(".br-actions", "Splash myself"), btn(".br-actions", /Splash (?!myself)/));
   }
   if (document.querySelector(".bduel")) return some(btn(".bduel", "ATTACK"));
-  if (document.querySelector(".mg-overlay")) return some(btn(".mg-overlay", /Close/) ?? elPt(".mg-tap:not(:disabled)"));
+  if (document.querySelector(".mg-overlay")) return some(btn(".mg-overlay", /Close/) ?? elPt(".mg-tap"));
   const s = store.get();
   if (goal === "market") return some(btn(".gamebar", "Market"));
   if (goal === "marketBack") return some(elPt(".gpage-back"));
@@ -78,10 +79,11 @@ function findTargets(goal: string | undefined): Pt[] {
     if (b) return [b];
     const m = s.merchants.find((q) => ["keeper", "chef", "nurse"].includes(q.id) && petNear(q.x, q.y, ECONOMY.merchants.interactRangePx));
     if (!TOUCH && m && window.__w2s) return [window.__w2s(m.x, m.y - MERCHANT_HEIGHT - 44)];
-    // Still walking over: highlight the bar that explains why.
-    if (goal === "meal") return some(elPt(".pc-stat.fd"));
-    if (goal === "medicine") return some(elPt(".pc-stat.hp"));
+    // Still walking over: just glow the bar that explains why (no pointing).
+    const bar = goal === "meal" ? elPt(".pc-stat.fd") : goal === "medicine" ? elPt(".pc-stat.hp") : null;
+    if (bar) return [{ ...bar, noHand: true }];
   }
+  if (goal === "fight") return some(btn(".actions", "Battle"));
   if (goal === "flag" && TOUCH && controlledPet(s)) return some(elPt(".joystick"));
   return [];
 }
@@ -92,22 +94,33 @@ export function TutorialHand({ goal, active }: { goal: string | undefined; activ
     if (!active) return;
     let raf = 0;
     let lit: Element[] = [];
+    // Each hand eases toward its target (pulsing buttons don't make it shake) and stays a
+    // moment when a target blinks out between minigame rounds (no flicker).
+    const st = [0, 1].map(() => ({ x: 0, y: 0, shown: false, seen: 0 }));
     const loop = () => {
-      const ts = findTargets(goal).slice(0, 2);
+      const all = findTargets(goal);
+      const ts = all.filter((t) => !t.noHand).slice(0, 2);
+      const now = performance.now();
       refs.forEach((ref, i) => {
-        const h = ref.current, t = ts[i];
+        const h = ref.current, t = ts[i], s = st[i]!;
         if (!h) return;
-        if (!t) { h.style.display = "none"; return; }
+        if (t) {
+          if (!s.shown || Math.hypot(t.x - s.x, t.y - s.y) > 220) { s.x = t.x; s.y = t.y; }
+          else { s.x += (t.x - s.x) * 0.25; s.y += (t.y - s.y) * 0.25; }
+          s.shown = true; s.seen = now;
+        } else if (s.shown && now - s.seen > 400) s.shown = false;
+        if (!s.shown) { h.style.display = "none"; return; }
         // Point up from below the target; flip to point down if there's no room below.
-        const below = t.y + 70 < window.innerHeight;
+        const below = s.y + 70 < window.innerHeight;
         h.style.display = "block";
-        h.style.transform = `translate(${t.x - 22}px, ${below ? t.y + 10 : t.y - 66}px)`;
+        h.style.transform = `translate(${Math.round(s.x - 22)}px, ${Math.round(below ? s.y + 10 : s.y - 66)}px)`;
         h.dataset.dir = below ? "up" : "down";
       });
-      const now = ts.map((t) => t.el).filter((e): e is Element => !!e);
-      for (const e of lit) if (!now.includes(e)) e.classList.remove("tut-target");
-      for (const e of now) e.classList.add("tut-target");
-      lit = now;
+      const tsAll = all.slice(0, 3);
+      const els = tsAll.map((t) => t.el).filter((e): e is Element => !!e);
+      for (const e of lit) if (!els.includes(e)) e.classList.remove("tut-target");
+      for (const e of els) e.classList.add("tut-target");
+      lit = els;
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);

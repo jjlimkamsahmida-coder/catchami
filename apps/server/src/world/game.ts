@@ -222,10 +222,7 @@ export class Game {
     // Needs.
     s.hunger = Math.min(cfg.hungerMax, s.hunger + cfg.hungerPerSec * dt);
     if (s.hunger >= cfg.hungerMax) s.energy = Math.max(0, s.energy - cfg.starvingEnergyDrainPerSec * dt);
-    if (p.task?.kind === "rest") {
-      if (s.hunger < cfg.restMaxHunger) s.energy = Math.min(p.stats.maxEnergy, s.energy + cfg.restEnergyPerSec * dt);
-      if (s.energy >= p.stats.maxEnergy * 0.9 || s.hunger >= cfg.restMaxHunger) this.setTask(p, null);
-    }
+    if (p.task?.kind === "rest" && (s.energy >= p.stats.maxEnergy * 0.9 || s.hunger >= cfg.restMaxHunger)) this.setTask(p, null);
     // Status transitions.
     if (s.status === "knocked_out") {
       // stays knocked out until medicine
@@ -260,10 +257,23 @@ export class Game {
     if (moved) {
       s.energy = Math.max(0, s.energy - cfg.walkEnergyPerSec * dt);
       p.dirty = true;
+    } else if (p.task?.kind !== "gather" && !p.matchId && s.status !== "knocked_out" && s.hunger < cfg.restMaxHunger && s.energy < p.stats.maxEnergy) {
+      // Energy refills slowly by itself whenever the pet isn't working, walking or battling.
+      s.energy = Math.min(p.stats.maxEnergy, s.energy + cfg.restEnergyPerSec * dt);
     }
 
     // Tasks.
     if (!p.busy && !moved && p.task?.kind === "gather") this.stepGather(p, now);
+    if (!p.busy && !moved && !p.path.length && p.task?.kind === "shop") {
+      const t = p.task;
+      const m = this.merchants.find((x) => x.id === t.merchantId);
+      if (m && m.state !== "at_hq" && m.state !== "unavailable") {
+        if (Math.hypot(m.x - s.x, m.y - s.y) <= ECONOMY.merchants.interactRangePx) {
+          p.task = null;
+          void this.buy(p, t.item, `ai-shop:${p.id}:${now}`).catch((e: Error) => { p.activity = e.message; });
+        } else if (now >= p.nextThink) { this.pathTo(p, toTile(m.x), toTile(m.y)); p.nextThink = now + 1500; }
+      } else p.task = null;
+    }
     if (!p.busy && !moved && !p.path.length && p.task?.kind === "sell") {
       const merchantId = p.task.merchantId;
       const m = this.merchants.find((x) => x.id === merchantId);
@@ -480,16 +490,15 @@ export class Game {
     if (!p || p.ownerId !== userId) throw new GameError("not_owner", "Not your pet");
     if (where === "exit") {
       const sp = this.spawnSpot(); p.s.x = sp.x; p.s.y = sp.y;
-      // Leaving the tutorial (finished or skipped) never strands a pet hungry or at 0 HP.
-      if (p.s.status === "knocked_out" || p.s.hp <= 0) { p.s.hp = Math.round(p.stats.maxHp * 0.4); p.s.status = "active"; p.s.koUntil = null; }
-      p.s.hunger = Math.min(p.s.hunger, 500);
+      // Leaving the tutorial (finished or skipped): a fresh start — full HP, full food, full energy.
+      p.s.hp = p.stats.maxHp; p.s.hunger = 0; p.s.energy = p.stats.maxEnergy; p.s.status = "active"; p.s.koUntil = null;
     }
     else {
       const id = stage && stage >= 1 && stage <= 8 ? `glade_s${stage}` : "glade_spawn";
       // Scenes that set the pet up for the lesson.
       if (stage === 4) { p.s.hunger = ECONOMY.stats.hungerMax; p.s.energy = Math.max(p.s.energy, 500); if (p.s.status === "inactive") p.s.status = "active"; } // Hungry: empty food bar
       if (stage === 5) { p.s.hp = 0; p.s.status = "knocked_out"; p.s.koUntil = null; p.task = null; p.round = null; } // Hurt: 0 HP
-      if (stage === 6) this.bandits.resetPractice(p.id);
+      if (stage === 6) { this.bandits.resetPractice(p.id); if (p.s.status === "knocked_out" || p.s.hp < p.stats.maxHp * 0.5) { p.s.hp = p.stats.maxHp; p.s.status = "active"; p.s.koUntil = null; } }
       const poi = this.world.pois.find((q) => q.id === id) ?? this.world.pois.find((q) => q.id === "glade_spawn")!;
       p.s.x = tileCenter(poi.tx) + (Math.random() - 0.5) * 20; p.s.y = tileCenter(poi.ty) + Math.random() * 10;
     }
@@ -651,8 +660,14 @@ export class Game {
     })) as Promise<{ sold: Inventory; total: bigint }>);
   }
 
+  /** The open merchant the pet is standing at, if any. */
+  merchantNear(p: PetRt): MerchantRt | null {
+    return this.merchants.find((m) => m.state !== "at_hq" && m.state !== "unavailable" && Math.hypot(m.x - p.s.x, m.y - p.s.y) <= ECONOMY.merchants.interactRangePx) ?? null;
+  }
+
   async buy(p: PetRt, item: "food" | "medicine", rid = newId("buy")) {
     if (this.flags.pauseTrades) throw new GameError("paused", "Shops are paused by operations");
+    if (!this.merchantNear(p)) throw new GameError("no_merchant", `${item === "food" ? "Meals" : "Medicine"} are sold by merchants — walk up to one and open their shop`);
     const now = this.now();
     if (item === "food" && p.s.hunger < 50) throw new GameError("full", `${p.name} isn't hungry`);
     const inGlade = areaAt(this.world, p.s.x, p.s.y).id === "glade";

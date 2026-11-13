@@ -390,6 +390,10 @@ export class GameScene extends Phaser.Scene {
       const ps = this.ensurePet(e);
       if (!ps) continue;
       const [x, y] = sample(e, now);
+      // The tutorial glade is a private training ground: other Keepers' pets aren't shown there.
+      const hide = !!e.meta && e.meta.ownerId !== s.userId && x / TILE >= AREA_BOUNDS.glade[0];
+      ps.root.setVisible(!hide); ps.label.setVisible(!hide);
+      if (hide) continue;
       ps.root.setPosition(x, y).setDepth(y);
       ps.label.setPosition(x, y - 60).setFontStyle(e.id === s.controlled ? "bold" : "");
       this.animate(ps, e, time);

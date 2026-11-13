@@ -30,6 +30,7 @@ export type Task =
   | { kind: "gather"; nodeId: string; endsAt: number | null; repeat: boolean; minigame?: boolean }
   | { kind: "rest" }
   | { kind: "sell"; merchantId: string }
+  | { kind: "shop"; merchantId: string; item: "food" | "medicine" }
   | null;
 
 export interface PetRt {

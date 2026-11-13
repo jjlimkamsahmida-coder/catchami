@@ -142,7 +142,6 @@ export class BubbleArena {
     const ea = this.eligible(a, now), eb = this.eligible(b, now);
     if (ea) throw new GameError("not_eligible", `${a.name} is ${ea}`);
     if (eb) throw new GameError("not_eligible", `${b.name} is ${eb}`);
-    if (b.s.strategy.battle === "avoid") throw new GameError("declined", `${b.name}'s owner isn't accepting battles`);
     if (!this.online(b.ownerId)) throw new GameError("offline", `${b.name}'s owner isn't online — Bubble Roulette needs both players`);
     const repeat = Math.max(a.s.recentOpponents[b.id] ?? 0, b.s.recentOpponents[a.id] ?? 0);
     if (now - repeat < ECONOMY.battle.sameOpponentCooldownSec * 1000) throw new GameError("repeat", `${a.name} played ${b.name} recently`);
@@ -157,9 +156,8 @@ export class BubbleArena {
     };
     m.startHp = { ...m.hp };
     this.matches.set(id, m);
-    a.matchId = id; b.matchId = id; // reserved while the invite is open
-    this.sendInvite(m);
-    this.push(m);
+    a.matchId = id; b.matchId = id;
+    this.begin(m); // forced: no accept/decline
     void c;
   }
 
@@ -176,6 +174,11 @@ export class BubbleArena {
     if (!m || m.state !== "invited") throw new GameError("gone", "That invitation has expired");
     if (m.pets.b.ownerId !== c.userId) throw new GameError("not_yours", "Only the challenged player can answer");
     if (!accept) return this.cancel(m, `${m.pets.b.name}'s owner declined`);
+    this.begin(m);
+  }
+
+  /** Start the match (battles are forced: a challenge starts straight away). */
+  private begin(m: Match) {
     const now = this.game.now();
     for (const p of [m.pets.a, m.pets.b]) {
       if (isBot(p)) continue;

@@ -133,13 +133,9 @@ describe("Bubble Roulette", () => {
     const ca = client(ua.userId), cb = client(ub.userId);
     game.join(ca); game.join(cb);
     await game.handle(ca, { t: "br_challenge", petId: a.id, targetId: b.id });
-    const invite = cb.inbox.find((m) => m.t === "br_invite");
-    expect(invite?.t).toBe("br_invite");
-    if (invite?.t !== "br_invite") return;
-    // Only the challenged player can accept.
-    expect(() => game.arena.respond(ca, invite.matchId, true)).toThrow();
-    game.arena.respond(cb, invite.matchId, true);
-    const m = game.arena.get(invite.matchId)!;
+    // Forced battle: no invite to accept, the match is live straight away.
+    expect(cb.inbox.some((m) => m.t === "br_invite")).toBe(false);
+    const m = game.arena.get(a.matchId!)!;
     expect(m.state).toBe("active");
     expect(m.hp.a).toBe(toBattleHp(a.s.hp, a.stats.maxHp));
     expect(a.busy && b.busy).toBe(true); // locked in place
@@ -198,10 +194,7 @@ describe("Bubble Roulette", () => {
     const ca = client(ua.userId), cb = client(ub.userId);
     game.join(ca); game.join(cb);
     await game.handle(ca, { t: "br_challenge", petId: a.id, targetId: b.id });
-    const invite = cb.inbox.find((m) => m.t === "br_invite");
-    if (invite?.t !== "br_invite") throw new Error("no invite");
-    game.arena.respond(cb, invite.matchId, true);
-    const m = game.arena.get(invite.matchId)!;
+    const m = game.arena.get(a.matchId!)!;
     const first = m.turn;
     advance(BUBBLE.turnMs + BUBBLE.firstTurnGraceMs + 200); // the first turn has extra reading time
     expect(m.state).toBe("active");
@@ -237,21 +230,18 @@ describe("rivals", () => {
     p.task = { kind: "gather", nodeId: "wood-1", endsAt: null, repeat: true };
     b.x = p.s.x + 20; b.y = p.s.y; b.state = "wander"; b.calmUntil = 0; b.nextThink = 0; b.path = [];
     for (let i = 0; i < 10; i++) { t += 100; game.bandits.step(0.1, t); }
-    expect(c.inbox.some((m) => m.t === "br_invite")).toBe(false);
-    // Idle: it challenges.
+    expect(p.matchId).toBeNull();
+    // Idle: it challenges — a forced battle that starts right away.
     p.task = null;
-    for (let i = 0; i < 20 && !c.inbox.some((m) => m.t === "br_invite"); i++) { t += 100; game.bandits.step(0.1, t); }
-    const inv = c.inbox.find((m) => m.t === "br_invite");
-    if (inv?.t !== "br_invite") throw new Error("no rival invite");
+    for (let i = 0; i < 20 && !p.matchId; i++) { t += 100; game.bandits.step(0.1, t); }
     expect(b.state).toBe("duel");
-    game.arena.respond(c, inv.matchId, true);
-    const m = game.arena.get(inv.matchId)!;
+    const m = game.arena.get(p.matchId!)!;
     expect(m.state).toBe("active");
-    expect(m.turn).toBe("b"); // the player goes first
-    expect(game.arena.get(inv.matchId)!.bot?.practice).toBe(false);
+    expect(m.turn).toBe("a"); // the player goes first
+    expect(m.bot?.practice).toBe(false);
     // Play it out: the rival takes its own turns.
     for (let i = 0; i < 400 && m.state === "active"; i++) {
-      if (m.turn === "b") game.arena.action(c, m.id, "opponent", m.turnNo);
+      if (m.turn === "a") game.arena.action(c, m.id, "opponent", m.turnNo);
       t += 1000; game.arena.tick(t);
     }
     expect(m.state).toBe("finished");
@@ -281,6 +271,10 @@ describe("knockout (0 HP)", () => {
     expect(p.s.status).toBe("knocked_out");
     const node = game.world.nodes.find((n) => n.resource === "wood")!;
     await expect(game.handle(c, { t: "gather", petId: p.id, nodeId: node.id })).rejects.toMatchObject({ code: "ko" });
+    // Medicine is only sold at a merchant.
+    await expect(game.buy(p, "medicine", "ko-med-0")).rejects.toMatchObject({ code: "no_merchant" });
+    const m = game.merchants.find((x) => x.id === "finn")!;
+    m.state = "travelling"; m.x = p.s.x + 20; m.y = p.s.y; m.path = []; m.waitUntil = t + 600_000;
     await game.buy(p, "medicine", "ko-med-1");
     expect(p.s.status).toBe("active");
     expect(p.s.hp).toBeGreaterThan(0);
@@ -288,36 +282,27 @@ describe("knockout (0 HP)", () => {
 });
 
 describe("Coach Kiki (tutorial practice)", () => {
-  it("challenges once you're in her arena, and leaves you alone after you beat her", async () => {
+  it("waits for you: walk up, press Battle; practice matches cost nothing", async () => {
     const u = await createGuest(db);
-    const s4 = game.world.pois.find((q) => q.id === "glade_s6")!;
-    const p = await spawn(u.userId, s4.tx, s4.ty);
+    const s6 = game.world.pois.find((q) => q.id === "glade_s6")!;
+    const p = await spawn(u.userId, s6.tx, s6.ty);
     const c = client(u.userId);
     game.join(c);
     c.controlled = p.id;
     const kiki = game.bandits.list.find((b) => b.id === "bandit-practice")!;
-    kiki.state = "wander"; kiki.calmUntil = 0; kiki.x = kiki.homeX!; kiki.y = kiki.homeY!;
-    for (let i = 0; i < 200 && !p.matchId; i++) { t += 100; game.bandits.step(0.1, t); }
+    kiki.state = "wander"; kiki.calmUntil = 0;
+    for (let i = 0; i < 100; i++) { t += 100; game.bandits.step(0.1, t); }
+    expect(p.matchId).toBeNull(); // she never starts a battle herself
+    p.s.x = kiki.homeX! - 40; p.s.y = kiki.homeY!;
+    await game.handle(c, { t: "fight_bandit", petId: p.id, banditId: kiki.id });
     const m = game.arena.get(p.matchId!)!;
     expect(m.bot?.practice).toBe(true);
-    // Play until someone wins; replay until the player wins.
-    for (let round = 0; round < 10; round++) {
-      const cur = game.arena.get(p.matchId ?? "") ?? null;
-      if (cur) for (let i = 0; i < 400 && cur.state === "active"; i++) {
-        if (cur.turn === "a") game.arena.action(c, cur.id, "opponent", cur.turnNo);
-        t += 1000; game.arena.tick(t);
-      }
-      if (cur?.winner === "a") break;
-      for (let i = 0; i < 200 && !p.matchId; i++) { t += 100; game.bandits.step(0.1, t); } // she challenges again after a loss
+    const hp = p.s.hp;
+    for (let i = 0; i < 400 && m.state === "active"; i++) {
+      if (m.turn === "a") game.arena.action(c, m.id, "opponent", m.turnNo);
+      t += 1000; game.arena.tick(t);
     }
-    expect(p.matchId).toBeNull();
-    // After the win she never starts another match with this pet.
-    for (let i = 0; i < 300; i++) { t += 100; game.bandits.step(0.1, t); }
-    expect(p.matchId).toBeNull();
-    // Replaying the battle tutorial lets her challenge again.
-    game.tutorialMove(u.userId, p.id, "enter", 6);
-    kiki.calmUntil = 0;
-    for (let i = 0; i < 200 && !p.matchId; i++) { t += 100; game.bandits.step(0.1, t); }
-    expect(p.matchId).not.toBeNull();
+    expect(m.state).toBe("finished");
+    expect(p.s.hp).toBe(hp);
   }, 30_000);
 });

@@ -15,9 +15,20 @@ export function decide(g: Game, p: PetRt, now: number, urgentOnly = false) {
   const fail = (e: Error) => { p.activity = e.message; };
   const avail = p.balance - p.held;
 
+  // Meals and medicine are sold by merchants: buy on the spot, or walk to the nearest one.
+  const shop = (item: "food" | "medicine") => {
+    if (p.task?.kind === "shop") return;
+    if (g.merchantNear(p)) { void g.buy(p, item, `ai:${p.id}:${now}`).catch(fail); return; }
+    const m = nearestOpenMerchant(g, p);
+    if (!m) { p.activity = "Waiting for a merchant to buy " + (item === "food" ? "food" : "medicine"); return; }
+    p.task = { kind: "shop", merchantId: m.id, item };
+    g.pathTo(p, toTile(m.x), toTile(m.y));
+    p.activity = `Heading to ${m.name} for ${item === "food" ? "a meal" : "medicine"}`;
+  };
+
   if (s.status === "knocked_out") {
-    // 0 HP: no gathering or battles until healed. Autopilot buys medicine when it can.
-    if (st.buyMedicine && avail >= shopPrice("medicine", g.hqStockCache.herbs).price) void g.buy(p, "medicine", `ai:${p.id}:${now}`).catch(fail);
+    // 0 HP: no gathering or battles until healed. Autopilot fetches medicine when it can.
+    if (st.buyMedicine && avail >= shopPrice("medicine", g.hqStockCache.herbs).price) shop("medicine");
     else p.activity = "0 HP — needs medicine to gather again";
     return;
   }
@@ -25,11 +36,11 @@ export function decide(g: Game, p: PetRt, now: number, urgentOnly = false) {
   // Hunger first.
   const canBuyFood = avail >= shopPrice("food", g.hqStockCache.fish).price;
   if (s.hunger >= st.eatAtHunger || s.status === "inactive") {
-    if (canBuyFood && s.hunger >= 50) { void g.buy(p, "food", `ai:${p.id}:${now}`).catch(fail); return; }
+    if (canBuyFood && s.hunger >= 50) { shop("food"); return; }
     if (s.status === "inactive") { p.activity = "Inactive: no money or food — deposit tokens to recover"; return; }
   }
   if (st.buyMedicine && s.hp < p.stats.maxHp * 0.3 && avail >= shopPrice("medicine", g.hqStockCache.herbs).price) {
-    void g.buy(p, "medicine", `ai:${p.id}:${now}`).catch(fail);
+    shop("medicine");
     return;
   }
   if (urgentOnly) return;
@@ -82,6 +93,16 @@ export function decide(g: Game, p: PetRt, now: number, urgentOnly = false) {
   p.task = { kind: "gather", nodeId: choice.n.id, endsAt: null, repeat: true };
   p.activity = `Going to gather ${RESOURCE_LABEL[resource].toLowerCase()}`;
   if (st.work === "low") p.nextThink = now + 6_000;
+}
+
+function nearestOpenMerchant(g: Game, p: PetRt): MerchantRt | null {
+  let best: MerchantRt | null = null, bd = Infinity;
+  for (const m of g.merchants) {
+    if (m.state === "at_hq" || m.state === "unavailable") continue;
+    const d = Math.hypot(m.x - p.s.x, m.y - p.s.y);
+    if (d < bd) { bd = d; best = m; }
+  }
+  return best;
 }
 
 function pickResource(g: Game, pref: Resource | "demand"): Resource {

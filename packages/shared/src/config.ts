@@ -89,6 +89,7 @@ export const ECONOMY = {
     /** Bags hold this many times their base carry stat ("earn more": every hit gives 10× units). */
     carryScale: 10,
     battleEnergyPerExchange: 12,
+    /** Energy refills by itself at this rate whenever the pet isn't gathering, walking or battling. */
     restEnergyPerSec: 0.6,
     restMaxHunger: 700,
     /** At 0 HP a pet can still walk, sell and buy medicine (no wait), but can't gather or battle until healed. */

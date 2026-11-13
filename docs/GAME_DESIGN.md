@@ -102,12 +102,12 @@ Stages: `intro → wallet → catch → name → world → tutorial → done`.
 | 3 Trading | Merchant Mari's stall | Open shop → **Sell everything** |
 | 4 Hungry! | New scene: the pet arrives with an **empty food bar** (highlighted) | Walk to **Chef Coco** → Open shop → **Buy meal** |
 | 5 Ouch! | New scene: the pet arrives at **0 HP** (heart bar highlighted; it can still walk slowly) | Walk to **Nurse Nana** → Open shop → **Buy medicine** |
-| 6 Battles | Coach Kiki, a practice partner | Read How to Play, then win a practice Bubble Roulette match (she challenges you automatically; no HP or loot at stake). The hand points at both splash buttons |
+| 6 Battles | Coach Kiki, a practice partner | Walk up to her and tap **⚔️ Battle**, read How to Play, then win a practice match (no HP or loot at stake). The hand points at both splash buttons |
 | 7 Marketplace | Bottom menu appears | Tap **Market** in the bottom menu, look around, come back |
 | 8 Profile | Pet Profile page | Tap **Profile** → learn the Bag (bag space bar at the bottom) → open **Autopilot** (on by default, explained) → open **Piggy bank** (explained) |
 | 9 Graduation | Portal | Step into the portal to Paw Village |
 
-Tutorial rules: tutorial spots hold only 10 units and refill 15 s after
+Tutorial rules: other Keepers' pets aren't shown in the Glade; the profile badge and wallet are locked until the tutorial ends; leaving the tutorial restores full HP, food and energy. Tutorial spots hold only 10 units and refill 15 s after
 emptying (the bag can never fill up and block you). Meals in the Glade don't
 need HQ fish stock.
 
@@ -218,7 +218,7 @@ capture checks).
 |---|---|
 | Energy | 0–1,000. Below **40** a pet is too tired to gather |
 | Walking | 1 energy per second |
-| Napping | +0.6 energy per second (about 28 min from empty to full), only while hunger is below 700 |
+| Resting | Energy refills by itself at +0.6 per second (about 28 min from empty to full) whenever the pet isn't gathering, walking or battling, and hunger is below 700. There is no nap button |
 | Hunger | 0 = full, 1,000 = starving. Rises from full to starving in **5 hours**, plus gathering hunger (§8) |
 | Starving (hunger 1,000) | −0.6 energy per second. At 0 energy the pet goes **inactive** until it is fed |
 | HP | Max about 1,000. Only Bubble Roulette lowers it |
@@ -343,7 +343,7 @@ current merchant price**. The coin fee splits 90% HQ / 10% team.
 
 The one battle game. Live, turn-based PvP between online players. For the demo,
 **demo rivals** (pets of simulated Keepers, e.g. "Sid's Mochi") roam the Forest and
-Mining Valley: 5 in the Forest, 4 in the Valley. They walk up to your pet when it's idle out in the wild and send a Bubble Roulette invite (accept or "Not now"). The same pet is challenged at most once every 45 s. Demo rivals only put **bags** at stake (they carry a small bag of their own); coins never move in demo matches. Coach Kiki in the tutorial is practice only. A ⚔️ **Battle** button appears whenever another Keeper's pet or a rival is within range.
+Mining Valley: 5 in the Forest, 4 in the Valley. They walk up to your pet when it's idle out in the wild and **start a Bubble Roulette battle right away** (battles are forced: there is no accept/decline, for real players too). The same pet is challenged at most once every 45 s. Demo rivals only put **bags** at stake (they carry a small bag of their own); coins never move in demo matches. Coach Kiki in the tutorial is practice only. A ⚔️ **Battle** button appears whenever another Keeper's pet or a rival is within range.
 
 ### Rules
 

@@ -142,29 +142,11 @@ export class Bandits {
     }
   }
 
-  /** Training Bandit: waits at home, then runs at any pet in its arena and starts a battle. */
-  private stepPractice(b: BanditRt, dt: number, now: number) {
+  /** Coach Kiki: waits at home for you to walk up and press Battle (she never starts one herself). */
+  private stepPractice(b: BanditRt, _dt: number, now: number) {
     if (b.state === "duel") return;
-    if (b.state === "flee") { if (now > b.calmUntil) { b.state = "wander"; b.x = b.homeX!; b.y = b.homeY!; b.path = []; } return; }
-    const arena = gladeArenaAt(toTile(b.homeX!), toTile(b.homeY!));
-    let target: PetRt | null = null, bd = Infinity;
-    if (now >= b.calmUntil) for (const p of this.game.pets.values()) {
-      if (p.s.status === "knocked_out" || this.duelFor(p.id) || this.beaten.has(p.id)) continue;
-      if (gladeArenaAt(toTile(p.s.x), toTile(p.s.y)) !== arena) { this.arrived.delete(p.id); continue; }
-      if (!this.arrived.has(p.id)) this.arrived.set(p.id, now);
-      if (now - this.arrived.get(p.id)! < 3_000) continue;
-      const d = Math.hypot(p.s.x - b.x, p.s.y - b.y);
-      if (d < bd) { bd = d; target = p; }
-    }
-    const gx = target ? target.s.x : b.homeX!, gy = target ? target.s.y : b.homeY!;
-    const d = Math.hypot(gx - b.x, gy - b.y);
-    b.state = target ? "chase" : "wander";
-    if (target && d < CATCH + 8) { this.startDuel(b, target, now, false); return; }
-    if (d > 2) {
-      const step = Math.min(d, (target ? 120 : 80) * dt);
-      if (Math.abs(gx - b.x) > 1) b.facing = gx > b.x ? 1 : -1;
-      b.x += ((gx - b.x) / d) * step; b.y += ((gy - b.y) / d) * step;
-    }
+    if (b.state === "flee" && now <= b.calmUntil) return;
+    b.state = "wander"; b.target = null; b.x = b.homeX!; b.y = b.homeY!; b.path = [];
   }
 
   /** Starting the battle tutorial (again): Coach Kiki may challenge this pet. */
@@ -174,7 +156,8 @@ export class Bandits {
   private invite(b: BanditRt, p: PetRt, now: number) {
     this.challengedAt.set(p.id, now);
     const art = BANDIT_ART[hashId(b.id) % BANDIT_ART.length]!;
-    if (this.game.arena.inviteBot(p, { banditId: b.id, name: b.name, ownerName: b.name.split("'")[0]!, art, practice: false })) {
+    // Forced battle: the match starts right away.
+    if (this.game.arena.startBot(p, { banditId: b.id, name: b.name, ownerName: b.name.split("'")[0]!, art, practice: false })) {
       b.state = "duel"; b.path = []; b.target = p.id;
     } else { b.state = "wander"; b.target = null; b.calmUntil = now + 5_000; }
   }
