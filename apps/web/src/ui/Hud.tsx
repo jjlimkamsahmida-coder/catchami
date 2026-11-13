@@ -198,6 +198,7 @@ export function ActionBar() {
   const nodes = useStore((s) => s.nodes);
   const ticker = useStore((s) => s.ticker);
   const own = useStore((s) => s.own);
+  const tut = useStore((s) => s.onboarding?.stage === "tutorial");
   const [, force] = useState(0);
   useEffect(() => { const id = setInterval(() => force((n) => n + 1), 500); return () => clearInterval(id); }, []);
 
@@ -211,8 +212,10 @@ export function ActionBar() {
   const ko = p.status === "knocked_out";
   const koReady = ko && p.koUntil !== null && Date.now() >= p.koUntil;
   const btns: React.ReactNode[] = [];
-  if (m && inventoryWeight(p.carried) > 0) btns.push(<button key="sell" className="btn leaf" onClick={() => store.set({ sheet: { kind: "merchant", id: m.id } })}>Sell to {m.name.split(" ")[0]}</button>);
+  if (m && inventoryWeight(p.carried) > 0) btns.push(<button key="sell" className="btn leaf" onClick={() => store.set({ sheet: { kind: "merchant", id: m.id } })}>Sell to {m.name.startsWith("The ") ? m.name.slice(4) : m.name.split(" ")[0]}</button>);
   if (node && !ko) btns.push(<button key="gather" className="btn" disabled={(nodes[node.id] ?? 1) <= 0} onClick={() => send({ t: "gather", petId: p.id, nodeId: node.id })}><ResIcon r={node.resource} /> Gather</button>);
+  // The tutorial teaches one thing per stage: only selling and gathering show up there.
+  if (tut) return btns.length ? <div className="actions">{btns}</div> : null;
   if (p.hunger > 300 && !ko) {
     if (p.carried.fish > 0) btns.push(<button key="eat" className="btn paper" onClick={() => send({ t: "eat_own", petId: p.id })}><ResIcon r="fish" /> Eat fish</button>);
     btns.push(<button key="food" className="btn paper" disabled={(ticker?.hqStock.fish ?? 0) < 1} title={(ticker?.hqStock.fish ?? 0) < 1 ? "HQ kitchen is out of fish" : ""} onClick={() => send({ t: "buy", petId: p.id, item: "food", rid: rid() })}>Buy meal · {fmt(ECONOMY.food.price)}</button>);

@@ -42,9 +42,9 @@ export class Bandits {
         n++;
       }
     }
-    const g = this.game.world.pois.find((p) => p.id === "glade_s4");
+    const g = this.game.world.pois.find((p) => p.id === "glade_bandit");
     if (g) {
-      const x = tileCenter(g.tx + 5), y = tileCenter(g.ty);
+      const x = tileCenter(g.tx), y = tileCenter(g.ty);
       this.list.push({ id: "bandit-practice", name: "Training Bandit", home: "glade", x, y, facing: -1, path: [], state: "wander", target: null, nextThink: 0, calmUntil: 0, practice: true, homeX: x, homeY: y });
     }
   }

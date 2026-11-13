@@ -180,7 +180,7 @@ function Shell() {
     <div className="shell">
       <div className="canvas-host" ref={host} />
       <div className={`hud ${tutorial ? "tutorial-on" : ""}`}>
-        {(screen === "world" || screen === "map") && (<><TopBar /><MusicToggle className="hud-music" /><PetCard /><AreaBanner />{!tutorial && <MiniMap />}<Joystick /><ActionBar /><Sheets /><BanditFightPopup /></>)}
+        {(screen === "world" || screen === "map") && (<><TopBar /><MusicToggle className="hud-music" /><PetCard />{!tutorial && <AreaBanner />}{!tutorial && <MiniMap />}<Joystick /><ActionBar /><Sheets /><BanditFightPopup /></>)}
         {screen === "map" && <MapScreen />}
         {screen === "world" && <MinigameLayer />}
         <BubbleInvite />

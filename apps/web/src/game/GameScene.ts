@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { AREA_BOUNDS, areaAt, decodeTiles, generateWorld, PROP_SIZE, RARITY_LABEL, T, type BattleEvent, type Prop, type Resource, type WorldDef } from "@catchami/shared";
+import { AREA_BOUNDS, areaAt, decodeTiles, GLADE_ARENAS, gladeArenaAt, generateWorld, PROP_SIZE, RARITY_LABEL, T, type BattleEvent, type Prop, type Resource, type WorldDef } from "@catchami/shared";
 import { entities, store, type PetEntity } from "../net/store.ts";
 import { send, serverNow } from "../net/api.ts";
 import * as art from "./art.ts";
@@ -24,6 +24,8 @@ export class GameScene extends Phaser.Scene {
   private keys: Record<string, Phaser.Input.Keyboard.Key> = {};
   private lastMove = 0;
   private moving = false;
+  /** True while the keyboard (not the joystick) is driving the pet. */
+  private keyDriving = false;
   private unsub: (() => void) | null = null;
   private overrides = new Set<string>();
 
@@ -93,6 +95,7 @@ export class GameScene extends Phaser.Scene {
   private chunks = new Map<string, Phaser.GameObjects.Image>();
   private chunkSeq = 0;
   private lastArea = "";
+  private lastAreaId = "";
   private groundTex: Awaited<ReturnType<typeof loadTextures>> = {};
 
   private buildWorld() {
@@ -148,7 +151,8 @@ export class GameScene extends Phaser.Scene {
       const x = n.tx * TILE + 16, y = n.ty * TILE + 30;
       const img = this.add.image(x, y + 4, `node-${n.resource}`).setOrigin(0.5, 1).setDepth(y).setInteractive({ useHandCursor: true });
       this.fitNode(img);
-      img.on("pointerup", () => store.set({ sheet: { kind: "node", id: n.id } }));
+      // Tap a spot: the pet walks over and starts gathering right away (no sheet).
+      img.on("pointerup", () => { const s = store.get(); const pid = s.controlled; if (!pid) return; send({ t: "gather", petId: pid, nodeId: n.id }); this.tapMarker(img.x, img.y - 6); });
       const badge = this.add.text(x, y - 58, "", { fontFamily: "Fredoka", fontSize: "13px", color: "#2b1d3a", backgroundColor: "#fff6e5", padding: { x: 5, y: 1 } }).setOrigin(0.5).setDepth(9000).setAlpha(0);
       this.nodes.set(n.id, { img, badge, res: n.resource, depleted: false });
     }
@@ -315,15 +319,19 @@ export class GameScene extends Phaser.Scene {
         window.__petAnchor = { x: (x - cam.worldView.x) * cam.zoom, y: (y - cam.worldView.y) * cam.zoom };
         if (this.world) {
           const a = areaAt(this.world, x, y);
-          if (a.id !== this.lastArea) {
+          const arena = a.id === "glade" ? gladeArenaAt(Math.floor(x / TILE), Math.floor(y / TILE)) : -1;
+          const key = arena >= 0 ? `glade-${arena}` : a.id;
+          if (key !== this.lastArea) {
             const first = !this.lastArea;
-            this.lastArea = a.id;
+            this.lastArea = key;
             // Each area is its own map: the camera stays inside it, with a quick fade through the gate.
-            const [bx0, by0, bx1, by1] = AREA_BOUNDS[a.id];
+            // Tutorial arenas get their own tight bounds (cliff edge included).
+            const g = arena >= 0 ? GLADE_ARENAS[arena]! : null;
+            const [bx0, by0, bx1, by1] = g ? [g[0] - 2, g[1] - 2, g[2] + 3, g[3] + 3] : AREA_BOUNDS[a.id];
             const enter = () => { cam.setBounds(bx0 * TILE, by0 * TILE, (bx1 - bx0) * TILE, (by1 - by0) * TILE); cam.centerOn(x, y); };
             enter();
             if (!first) { cam.resetFX(); cam.fadeIn(420, 43, 29, 58); }
-            window.dispatchEvent(new CustomEvent("catchami:area", { detail: a }));
+            if (a.id !== this.lastAreaId) { this.lastAreaId = a.id; window.dispatchEvent(new CustomEvent("catchami:area", { detail: a })); }
           }
         }
         // On phones, lift the pet higher on screen while the tutorial card sits below it.
@@ -412,7 +420,9 @@ export class GameScene extends Phaser.Scene {
     const dx = (k.D!.isDown || k.RIGHT!.isDown ? 1 : 0) - (k.A!.isDown || k.LEFT!.isDown ? 1 : 0);
     const dy = (k.S!.isDown || k.DOWN!.isDown ? 1 : 0) - (k.W!.isDown || k.UP!.isDown ? 1 : 0);
     if (!store.get().controlled) { this.pan(dx, dy); return; }
-    if (dx || dy || this.moving) this.onJoystick(new CustomEvent("k", { detail: { dx, dy } }));
+    // Only the keyboard may stop movement it started; otherwise it would cancel the joystick every frame.
+    if (dx || dy) { this.keyDriving = true; this.onJoystick(new CustomEvent("k", { detail: { dx, dy } })); }
+    else if (this.keyDriving) { this.keyDriving = false; this.onJoystick(new CustomEvent("k", { detail: { dx: 0, dy: 0 } })); }
   }
 
   private animate(ps: PetSprite, e: PetEntity, time: number) {

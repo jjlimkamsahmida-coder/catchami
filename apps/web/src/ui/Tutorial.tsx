@@ -7,16 +7,16 @@
  * the village.
  */
 import { useEffect, useRef, useState } from "react";
-import { AREA_BOUNDS, ECONOMY, inventoryWeight } from "@catchami/shared";
+import { AREA_BOUNDS, ECONOMY, inventoryWeight, RESOURCES, type Resource } from "@catchami/shared";
 import { controlledPet, entities, store, useStore } from "../net/store.ts";
 import { send, setOnboarding } from "../net/api.ts";
-import { fmt } from "./common.tsx";
+import { fmt, ResIcon } from "./common.tsx";
 import { Keeper, type KeeperPose } from "./Journey.tsx";
 import { sfx } from "./sfx.ts";
 
 const TILE = 32;
 type Target = { x: number; y: number; label: string } | null;
-type Goal = "walk" | "gather" | "sell" | "meal" | "fight" | "market" | "portal";
+type Goal = "flag" | "gather4" | "sell" | "meal" | "fight" | "market" | "portal";
 interface Step {
   title: string;
   text: (pet: string) => string;
@@ -39,12 +39,14 @@ const petPos = (): { x: number; y: number } | null => {
   return s ? { x: s[1], y: s[2] } : null;
 };
 const inGlade = (p: { x: number } | null) => !!p && p.x / TILE >= AREA_BOUNDS.glade[0];
+let gatheredKinds = new Set<Resource>();
 const nearestNode = (): Target => {
   const p = petPos();
   const s = store.get();
   if (!p) return null;
   let best: Target = null, bd = Infinity;
   for (const n of s.nodesDef) {
+    if (!n.id.startsWith("glade") || gatheredKinds.has(n.resource)) continue;
     if ((s.nodes[n.id] ?? 1) <= 0) continue;
     const x = n.tx * TILE + 16, y = n.ty * TILE + 16, d = (x - p.x) ** 2 + (y - p.y) ** 2;
     if (d < bd) { bd = d; best = { x, y, label: "Glowing spot" }; }
@@ -60,13 +62,13 @@ const STAGES: Stage[] = [
   {
     name: "First Steps", icon: "👣", learn: ["Moving around"],
     steps: [
-      { title: "Welcome to my glade!", pose: "wave", text: (n) => `This is the Keeper's Glade — a safe place to practise with ${n}. Let's start with a little walk!`, goal: "walk", goalText: "Move with the joystick, WASD, or tap where to walk" },
+      { title: "Welcome to my glade!", pose: "wave", text: (n) => `This is the Keeper's Glade — a safe place to practise with ${n}. Let's start with a little walk: use the joystick (or tap the ground) to reach the flag!`, goal: "flag", goalText: "Walk to the flag", target: () => poi("glade_goal") },
     ],
   },
   {
     name: "Gathering", icon: "🪵", learn: ["Gathering resources", "Energy & hunger"],
     steps: [
-      { title: "Gather resources", pose: "point", text: () => "See the glowing spots? Walk up to one and tap Gather. Time the minigame well — a perfect hit gives double loot!", goal: "gather", goalText: "Gather from a glowing spot", target: nearestNode },
+      { title: "Gather resources", pose: "point", text: () => "There are four kinds of resources here: wood, herbs, minerals and fish. Tap a spot and your pet walks over to gather it. Time the minigame well — a perfect hit gives double loot!", goal: "gather4", goalText: "Collect all 4 resources", target: nearestNode },
       {
         title: "Energy & hunger", pose: "idle", text: (n) => `Hard work tires ${n} out and makes them hungry. Keep an eye on the bars on your pet badge (top left):`,
         extra: () => (
@@ -98,7 +100,7 @@ const STAGES: Stage[] = [
     name: "Marketplace", icon: "🛒", learn: ["Buying & selling pets"],
     steps: [
       {
-        title: "The marketplace", pose: "idle", text: () => "Want a rarer friend? Other Keepers sell their pets in the Marketplace — and you can sell yours too. Take a peek, then come back!", goal: "market", goalText: "Open the marketplace and come back",
+        title: "The marketplace", pose: "idle", text: () => "Want a rarer friend? Other Keepers sell their pets in the Marketplace — and you can sell yours too. Walk up to the market stall to take a peek, then come back!", goal: "market", goalText: "Visit the market stall", target: () => poi("glade_market"),
         extra: () => <button className="btn sky sm" onClick={() => { marketOpened = true; store.set({ screen: "market", sheet: null }); }}>🛒 Open the marketplace</button>,
       },
     ],
@@ -114,6 +116,7 @@ const STEPS = STAGES.flatMap((st, si) => st.steps.map((s, k) => ({ ...s, stage: 
 
 // Survives the coach unmounting while the marketplace page is open.
 let marketOpened = false;
+let marketAutoOpened = false; // the stall opens the market once per visit
 let phaseMem: { step: number; phase: "intro" | "play" | "clear" } | null = null;
 let enteredOnce = false;
 
@@ -128,11 +131,21 @@ export function TutorialCoach() {
     phaseMem && phaseMem.step === step ? phaseMem.phase : cur?.first ? "intro" : "play");
   const setPhase = (p: "intro" | "play" | "clear") => { phaseMem = { step, phase: p }; setPhaseRaw(p); };
   const [met, setMet] = useState(false);
+  const [got, setGot] = useState<Resource[]>([]);
   const [min, setMin] = useState(false);
-  const base = useRef<{ x: number; y: number; carried: number; hunger: number } | null>(null);
+  const base = useRef<{ x: number; y: number; carried: number; hunger: number; byRes: Record<Resource, number> } | null>(null);
   const readyAt = useRef(0);
   const stepStart = useRef(Date.now());
   const arrow = useRef<HTMLDivElement>(null);
+  const card = useRef<HTMLDivElement>(null);
+  // Keep the joystick and action buttons just above the docked chat, whatever its height.
+  useEffect(() => {
+    const el = card.current, root = document.documentElement;
+    if (!el) { root.style.removeProperty("--tut-h"); return; }
+    const ro = new ResizeObserver(() => root.style.setProperty("--tut-h", `${el.offsetHeight}px`));
+    ro.observe(el);
+    return () => { ro.disconnect(); root.style.removeProperty("--tut-h"); };
+  });
   const pet = own.find((p) => p.id === controlled);
   const name = pet?.name ?? "your pet";
 
@@ -142,7 +155,7 @@ export function TutorialCoach() {
     void setOnboarding("done");
   };
   const goTo = (to: number) => {
-    setMet(false); setMin(false); base.current = null; stepStart.current = Date.now();
+    setMet(false); setMin(false); base.current = null; stepStart.current = Date.now(); setGot([]); gatheredKinds = new Set(); marketAutoOpened = false;
     if (to >= STEPS.length) return finish();
     const next = STEPS[to]!;
     const p = next.first ? "intro" : "play";
@@ -157,6 +170,7 @@ export function TutorialCoach() {
   const startStage = () => {
     if (!cur) return;
     if (pet) send({ t: "tutorial", petId: pet.id, action: "stage", stage: cur.stage + 1 });
+    store.set({ minigame: null, sheet: null }); // leave the last stage behind
     base.current = null; readyAt.current = Date.now() + 900; stepStart.current = Date.now();
     setPhase("play"); sfx.whoosh();
   };
@@ -195,15 +209,23 @@ export function TutorialCoach() {
   useEffect(() => {
     if (!cur || phase !== "play") return;
     const done = () => { if (!met) { setMet(true); sfx.perfect(); setTimeout(complete, 1100); } };
-    const onGathered = () => { if (cur.goal === "gather") done(); };
-    window.addEventListener("catchami:gathered", onGathered);
+
     const check = setInterval(() => {
       if (Date.now() < readyAt.current) return; // wait for the stage teleport to land
       const p = petPos(), me = controlledPet(store.get());
       if (!p || !me) return;
-      base.current ??= { x: p.x, y: p.y, carried: inventoryWeight(me.carried), hunger: me.hunger };
+      base.current ??= { x: p.x, y: p.y, carried: inventoryWeight(me.carried), hunger: me.hunger, byRes: { ...me.carried } };
       const b = base.current;
-      if (cur.goal === "walk" && Math.hypot(p.x - b.x, p.y - b.y) > TILE * 3) done();
+      if (cur.goal === "flag") { const g = poi("glade_goal"); if (g && Math.hypot(p.x - g.x, p.y - g.y) < TILE * 1.6) done(); }
+      if (cur.goal === "gather4") {
+        const have = RESOURCES.filter((r) => me.carried[r] > b.byRes[r]);
+        if (have.length !== gatheredKinds.size) { gatheredKinds = new Set(have); setGot(have); if (have.length < 4) sfx.pop(); }
+        if (have.length >= 4) done();
+      }
+      if (cur.goal === "market" && !marketOpened && !marketAutoOpened) {
+        const m = poi("glade_market");
+        if (m && Math.hypot(p.x - m.x, p.y - m.y) < TILE * 2) { marketOpened = true; marketAutoOpened = true; store.set({ screen: "market", sheet: null }); }
+      }
       if (cur.goal === "sell") { const w = inventoryWeight(me.carried); if (b.carried > 0 && w === 0) done(); if (w > b.carried) b.carried = w; }
       if (cur.goal === "meal" && (me.hunger < b.hunger - 50 || b.hunger < 60)) done(); // already full: nothing to buy
       if (cur.goal === "portal") { const ex = poi("glade_exit"); if (ex && Math.hypot(p.x - ex.x, p.y - ex.y) < TILE * 2) done(); }
@@ -225,7 +247,7 @@ export function TutorialCoach() {
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
-    return () => { window.removeEventListener("catchami:gathered", onGathered); clearInterval(check); cancelAnimationFrame(raf); };
+    return () => { clearInterval(check); cancelAnimationFrame(raf); };
   }, [step, met, phase]);
 
   if (!cur) return null;
@@ -266,7 +288,7 @@ export function TutorialCoach() {
   return (
     <>
       <div ref={arrow} className="tut-arrow" style={{ display: "none" }}><span>➜</span><small /></div>
-      <div className={`tut-card sticky panel ${min ? "min" : ""}`}>
+      <div ref={card} className={`tut-card sticky panel ${min ? "min" : ""}`}>
         <button className="tut-min" onClick={() => setMin((v) => !v)} aria-label={min ? "Expand" : "Minimise"}>{min ? "▴" : "▾"}</button>
         <Keeper size={62} cube={false} className="mini" pose={cur.pose} />
         <div className="tut-body">
@@ -274,7 +296,10 @@ export function TutorialCoach() {
           <b>{cur.title}</b>
           {!min && <p>{cur.text(name)}</p>}
           {!min && cur.extra?.(name)}
-          {cur.goalText && <span className={`tut-goal2 ${met ? "met" : ""}`}>{met ? "✓ Nice one!" : `🎯 ${cur.goalText}`}</span>}
+          {cur.goal === "gather4" && (
+            <div className="tut-res4">{RESOURCES.map((r) => <span key={r} className={got.includes(r) ? "on" : ""}><ResIcon r={r} size={26} />{got.includes(r) && <i>✓</i>}</span>)}</div>
+          )}
+          {cur.goalText && <span className={`tut-goal2 ${met ? "met" : ""}`}>{met ? "✓ Nice one!" : `🎯 ${cur.goalText}${cur.goal === "gather4" ? ` (${got.length}/4)` : ""}`}</span>}
           {!min && (
             <div className="row tut-actions">
               {cur.goal ? <span /> : <button className="btn leaf sm" onClick={complete}>Got it!</button>}

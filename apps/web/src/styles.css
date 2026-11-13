@@ -235,8 +235,9 @@ table.lb td:first-child { width: 28px; font-weight: 700; }
 @media (max-width: 899px) { .keyhint { display: none; } }
 /* Phones: keep the pet card clear of the minimap column on the right. */
 @media (max-width: 599px) { .petcard { width: calc(100vw - 132px); } .petcard .thumb { width: 44px; height: 44px; } .area-chip { display: none; } }
+/* Hide the joystick only on mouse-driven screens (touch phones keep it in landscape too). */
+@media (hover: hover) and (pointer: fine) { .joystick { display: none; } }
 @media (min-width: 900px) {
-  .joystick { display: none; }
   /* Laptop / desktop: keep panels readable instead of stretching edge to edge. */
   .catch .bottom:not(.full) { left: 50%; right: auto; transform: translateX(-50%); width: min(560px, 100%); }
   .catch .bottom.full > .col { max-width: 560px; margin: 0 auto; }
@@ -946,9 +947,9 @@ table.lb td:first-child { width: 28px; font-weight: 700; }
 
 /* ---- pet badge, top left ---- */
 .petcard2 { position: absolute; top: calc(8px + var(--safe-top)); left: calc(8px + var(--safe-left)); z-index: 9; display: flex; align-items: center; gap: 8px; padding: 6px 12px 8px 6px; border-radius: 22px; border: 3px solid var(--ink); background: linear-gradient(#fffdf6, #fff2d6); box-shadow: 0 4px 0 var(--ink); cursor: pointer; font: inherit; color: var(--ink); text-align: left; width: min(270px, calc(50vw - 16px)); transition: transform 120ms; }
-.petcard2:hover { transform: translateY(-2px) rotate(-0.5deg); }
+
 .pc-avatar { position: relative; width: 58px; height: 58px; flex: none; border-radius: 50%; border: 3.5px solid var(--ink); background: radial-gradient(circle at 50% 60%, #fff, #ffe9b8); display: grid; place-items: center; box-shadow: inset 0 -4px 0 rgba(43,29,58,0.08); }
-.pc-avatar > :first-child { width: 112%; height: 112%; object-fit: contain; margin-top: -10%; animation: petbob 2.4s ease-in-out infinite; }
+.pc-avatar > :first-child { width: 112%; height: 112%; object-fit: contain; margin-top: -10%; }
 .pc-avatar.r-uncommon { background: radial-gradient(circle at 50% 60%, #fff, #c9f0b2); }
 .pc-avatar.r-rare { background: radial-gradient(circle at 50% 60%, #fff, #bfe0ff); }
 .pc-avatar.r-epic { background: radial-gradient(circle at 50% 60%, #fff, #e3d0ff); }
@@ -1323,8 +1324,8 @@ table.lb td:first-child { width: 28px; font-weight: 700; }
 .tut-goal2 { display: inline-flex; align-self: flex-start; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 99px; background: #fff3cc; border: 2.5px solid var(--ink); font-weight: 700; font-size: 14px; box-shadow: 0 2px 0 var(--ink); }
 .tut-goal2.met { background: #c9f0b2; animation: pop 260ms cubic-bezier(.2,1.4,.5,1); }
 /* Controls sit above the docked chat during the tutorial. */
-.hud.tutorial-on .joystick { bottom: calc(max(25vh, 170px) + 16px + var(--safe-bottom)); }
-.hud.tutorial-on .actions { bottom: calc(max(25vh, 170px) + 16px + var(--safe-bottom)); }
+.hud.tutorial-on .joystick { bottom: calc(var(--tut-h, max(25vh, 170px)) + 14px); }
+.hud.tutorial-on .actions { bottom: calc(var(--tut-h, max(25vh, 170px)) + 14px); }
 .hud.tutorial-on .keyhint { display: none; }
 @media (max-width: 640px) {
   .tut-card.sticky { padding-left: 88px; max-height: 38vh; }
@@ -1384,3 +1385,12 @@ table.lb td:first-child { width: 28px; font-weight: 700; }
 .stage-clear-title { color: #8be06b; }
 .stage-clear-msg { margin: 0; font-weight: 600; font-size: 15px; }
 .stage-card-wrap .confetti-burst { position: fixed; }
+
+.pack-rate { font: 700 12px Fredoka, sans-serif; color: #2f7d1f; background: #dff5d3; border: 2px solid var(--ink); border-radius: 99px; padding: 1px 8px; white-space: nowrap; }
+.pack.on .pack-rate { background: #c9f0b2; }
+
+/* tutorial stage 2: four resources to collect */
+.tut-res4 { display: flex; gap: 8px; }
+.tut-res4 span { position: relative; width: 42px; height: 42px; border-radius: 12px; border: 2.5px solid var(--ink); background: #fff; display: grid; place-items: center; opacity: 0.45; filter: grayscale(0.8); }
+.tut-res4 span.on { opacity: 1; filter: none; background: #dff5d3; animation: pop 260ms cubic-bezier(.2,1.4,.5,1); }
+.tut-res4 i { position: absolute; right: -6px; top: -6px; width: 18px; height: 18px; border-radius: 50%; background: var(--leaf); color: #fff; border: 2px solid var(--ink); font: 700 11px/14px Fredoka, sans-serif; text-align: center; font-style: normal; }

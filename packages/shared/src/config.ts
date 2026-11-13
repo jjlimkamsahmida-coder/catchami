@@ -41,7 +41,7 @@ export const ECONOMY = {
     tiers: {
       basic: { cost: tokens(1_000_000), successPpm: 600_000 },
       enhanced: { cost: tokens(3_000_000), successPpm: 800_000 },
-      premium: { cost: tokens(8_000_000), successPpm: 950_000 },
+      premium: { cost: tokens(8_000_000), successPpm: 1_000_000 },
     } satisfies Record<CatchTier, { cost: bigint; successPpm: number }>,
     /** Rarity table after a successful catch, per tier, in ppm. Each row sums to 1e6. */
     rarityPpm: {
@@ -64,9 +64,9 @@ export const ECONOMY = {
      * simulated purchase (test NEAR price shown, coins credited as test units); one per account.
      */
     starterPacks: [
-      { id: "sprout", name: "Sprout Pouch", whole: 10_000_000, near: "1", tag: "" },
-      { id: "bloom", name: "Bloom Bag", whole: 25_000_000, near: "2", tag: "Popular" },
-      { id: "grove", name: "Grove Chest", whole: 60_000_000, near: "4", tag: "Best value" },
+      { id: "sprout", name: "Sprout Pouch", whole: 10_000_000, near: "1", tag: "", tier: "basic" as CatchTier },
+      { id: "bloom", name: "Bloom Bag", whole: 25_000_000, near: "2", tag: "Popular", tier: "enhanced" as CatchTier },
+      { id: "grove", name: "Grove Chest", whole: 60_000_000, near: "4", tag: "Best value", tier: "premium" as CatchTier },
     ],
     minDetectionScore: 0.6,
     duplicateHammingThreshold: 6,

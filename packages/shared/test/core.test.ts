@@ -48,7 +48,7 @@ describe("fair randomness", () => {
       for (let i = 0; i < N; i++) if (rollCatch(seed, `t${i}`, tier).success) ok++;
       const p = ECONOMY.catch.tiers[tier].successPpm / 1e6;
       const sd = Math.sqrt((p * (1 - p)) / N);
-      expect(Math.abs(ok / N - p)).toBeLessThan(5 * sd);
+      expect(Math.abs(ok / N - p)).toBeLessThanOrEqual(5 * sd);
     }
   });
   it("premium never guarantees mythic", () => {

@@ -94,7 +94,24 @@ export const MINES_X0 = FOREST_W + VILLAGE_W;
 export const GLADE_X0 = FOREST_W + VILLAGE_W + MINES_W;
 /** Row of the east/west gate roads. */
 export const GATE_Y = 29;
-export const WORLD_SEED = "catchami-world-v5";
+export const WORLD_SEED = "catchami-world-v6";
+
+/**
+ * The Keeper's Glade is split into six walled-off tutorial arenas, one per stage
+ * (players are teleported between them). Interior tile rects [x0, y0, x1, y1] inclusive.
+ */
+export const GLADE_ARENAS: Array<[number, number, number, number]> = [
+  [GLADE_X0 + 2, 41, GLADE_X0 + 18, 56], // 1 First Steps
+  [GLADE_X0 + 22, 41, GLADE_X0 + 37, 56], // 2 Gathering
+  [GLADE_X0 + 22, 22, GLADE_X0 + 37, 37], // 3 Trading
+  [GLADE_X0 + 2, 22, GLADE_X0 + 18, 37], // 4 Danger
+  [GLADE_X0 + 2, 3, GLADE_X0 + 18, 18], // 5 Marketplace
+  [GLADE_X0 + 22, 3, GLADE_X0 + 37, 18], // 6 Graduation
+];
+/** Index (0-5) of the tutorial arena containing a tile, or -1. */
+export function gladeArenaAt(tx: number, ty: number): number {
+  return GLADE_ARENAS.findIndex(([x0, y0, x1, y1]) => tx >= x0 - 1 && tx <= x1 + 1 && ty >= y0 - 1 && ty <= y1 + 1);
+}
 
 /** Tile bounds [x0, y0, x1, y1) of each area, for cameras and minimaps. */
 export const AREA_BOUNDS: Record<AreaId, [number, number, number, number]> = {
@@ -156,6 +173,9 @@ export function generateWorld(seed = WORLD_SEED): WorldDef {
     const wall = Math.abs(x - VILLAGE_X0 - wob) <= 1 || Math.abs(x - MINES_X0 - wob) <= 1 || Math.abs(x - GLADE_X0 - wob) <= 1;
     if (rim || wall) set(x, y, T.rock);
   }
+  for (let y = 0; y < h; y++) for (let x = GLADE_X0; x < w; x++) {
+    if (!GLADE_ARENAS.some(([x0, y0, x1, y1]) => x >= x0 && x <= x1 && y >= y0 && y <= y1)) set(x, y, T.rock);
+  }
 
   // Water: a forest lake fed by a stream, a small pond, and the village pond.
   const blob = (cx: number, cy: number, rx: number, ry: number, sandy = true) => {
@@ -172,7 +192,7 @@ export function generateWorld(seed = WORLD_SEED): WorldDef {
   for (let y = 2; y < 36; y++) { const sx = 24 + Math.round((n1(30, y) - 0.5) * 8); set(sx, y, T.water); set(sx + 1, y, T.shallow); set(sx - 1, y, T.shallow); }
   blob(52, 10, 5, 3);
   blob(96, 47, 4, 2, false);
-  blob(GLADE_X0 + 9, 15, 5, 3); // glade pond (practice fishing)
+  blob(GLADE_X0 + 34, 54, 3, 2, false); // Gathering arena pond (practice fishing)
 
   // Village plaza (cobblestone); HQ castle on its north side.
   const hq = { tx: 96, ty: 20 };
@@ -257,13 +277,12 @@ export function generateWorld(seed = WORLD_SEED): WorldDef {
   place("signpost", VILLAGE_X0 + 4, GATE_Y - 1, true);
   place("signpost", MINES_X0 - 5, GATE_Y - 1, true);
 
-  // Keeper's Glade: a small loop path, the exit portal, signpost.
-  carve(GLADE_X0 + 6, 40, GLADE_X0 + 32, 40);
-  carve(GLADE_X0 + 20, 40, GLADE_X0 + 20, 22);
-  carve(GLADE_X0 + 8, 22, GLADE_X0 + 32, 22);
-  place("portal", GLADE_X0 + 33, 29, true);
-  place("signpost", GLADE_X0 + 22, 41, true);
-  for (const [x, y] of [[GLADE_X0 + 31, 28], [GLADE_X0 + 37, 28], [GLADE_X0 + 30, 31], [GLADE_X0 + 37, 31]] as const) place("glowcrystal", x, y);
+  // Keeper's Glade arenas — each holds only its stage's objects.
+  carve(GLADE_X0 + 4, 48, GLADE_X0 + 16, 48); // 1: a path to the goal flag
+  place("banner", GLADE_X0 + 16, 46, true);
+  place("stall", GLADE_X0 + 11, 9, true); // 5: a market stall
+  place("portal", GLADE_X0 + 31, 7, true); // 6: the portal home
+  for (const [x, y] of [[GLADE_X0 + 29, 7], [GLADE_X0 + 35, 7], [GLADE_X0 + 29, 9], [GLADE_X0 + 35, 9]] as const) place("glowcrystal", x, y, true);
 
   // Forest landmarks.
   place("portal", 10, 10, true);
@@ -313,10 +332,9 @@ export function generateWorld(seed = WORLD_SEED): WorldDef {
       else if (gv < 0.4 && (t === T.meadow || t === T.forest) && r < 0.06) props.push({ kind: "purpleflower", tx: x, ty: y, v: rng.int(4) });
       else if (gv > 0.45 && gv <= 0.52 && r < 0.05) place("mushroom", x, y);
     } else if (a === A.glade) {
-      // A tidy ring of trees around the glade, flowers inside.
-      const edgeBand = x < GLADE_X0 + 5 || x > w - 6 || y < 6 || y > h - 7;
-      if (edgeBand && !nearPath(x, y, 1) && r < 0.5) place(r < 0.2 ? "pine" : "tree", x, y);
-      else if (!edgeBand && (t === T.grass || t === T.meadow) && gv > 0.6 && r < 0.12) props.push({ kind: "flower", tx: x, ty: y, v: rng.int(4) });
+      // Arenas stay open: a few trees hugging the cliffs, a sprinkle of flowers.
+      if (nextToRock(x, y) && r < 0.35) place(r < 0.12 ? "pine" : "tree", x, y);
+      else if ((t === T.grass || t === T.meadow) && gv > 0.62 && r < 0.08) props.push({ kind: "flower", tx: x, ty: y, v: rng.int(4) });
     } else if (a === A.village) {
       // Only gentle flower patches in the open lawns — streets stay clear.
       const inPlaza = x >= PX0 - 1 && x <= PX1 + 1 && y >= PY0 - 4 && y <= PY1 + 1;
@@ -385,7 +403,8 @@ export function generateWorld(seed = WORLD_SEED): WorldDef {
   addNodes("herbs", 9, A.forest, (_x, _y, t) => t === T.meadow || t === T.forest);
   addNodes("fish", 8, A.forest, (x, y, t) => ground(t) && nextToWater(x, y));
   addNodes("minerals", 15, A.mines, (_x, _y, t) => t === T.highland);
-  for (const [resource, x, y] of [["wood", GLADE_X0 + 13, 27], ["herbs", GLADE_X0 + 25, 26], ["fish", GLADE_X0 + 9, 19], ["minerals", GLADE_X0 + 27, 35], ["wood", GLADE_X0 + 12, 35], ["herbs", GLADE_X0 + 16, 44]] as const) {
+  // Gathering arena: one spot of each resource.
+  for (const [resource, x, y] of [["wood", GLADE_X0 + 27, 44], ["herbs", GLADE_X0 + 33, 45], ["minerals", GLADE_X0 + 27, 53], ["fish", GLADE_X0 + 31, 53]] as const) {
     // Clear the tile and its neighbours so the spot is always reachable.
     for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) if (get(x + i, y + j) !== T.water && get(x + i, y + j) !== T.shallow) { set(x + i, y + j, T.grass); blocked[idx(x + i, y + j)] = 0; }
     for (let k = props.length - 1; k >= 0; k--) { const q = props[k]!; if (Math.abs(q.tx - x) <= 1 && Math.abs(q.ty - y) <= 1 && PROP_SIZE[q.kind].w === 1) props.splice(k, 1); }
@@ -407,16 +426,19 @@ export function generateWorld(seed = WORLD_SEED): WorldDef {
     { id: "mines", label: "Mining Valley", tx: 142, ty: GATE_Y },
     { id: "mine", label: "Old Mine", tx: 152, ty: 14 },
     { id: "smithy", label: "Forge", tx: 172, ty: 44 },
-    { id: "glade_spawn", label: "Keeper's Glade", tx: GLADE_X0 + 8, ty: 40 },
-    { id: "glade_stall", label: "The Keeper", tx: GLADE_X0 + 20, ty: 31 },
-    { id: "glade_exit", label: "Portal to Paw Village", tx: GLADE_X0 + 30, ty: 30 },
-    // Tutorial stage start spots.
-    { id: "glade_s1", label: "Stage 1", tx: GLADE_X0 + 8, ty: 40 },
-    { id: "glade_s2", label: "Stage 2", tx: GLADE_X0 + 16, ty: 30 },
-    { id: "glade_s3", label: "Stage 3", tx: GLADE_X0 + 17, ty: 33 },
-    { id: "glade_s4", label: "Stage 4", tx: GLADE_X0 + 24, ty: 40 },
-    { id: "glade_s5", label: "Stage 5", tx: GLADE_X0 + 20, ty: 38 },
-    { id: "glade_s6", label: "Stage 6", tx: GLADE_X0 + 25, ty: 30 },
+    { id: "glade_spawn", label: "Keeper's Glade", tx: GLADE_X0 + 4, ty: 48 },
+    { id: "glade_goal", label: "Goal flag", tx: GLADE_X0 + 16, ty: 48 },
+    { id: "glade_stall", label: "The Keeper", tx: GLADE_X0 + 31, ty: 29 },
+    { id: "glade_bandit", label: "Training Bandit", tx: GLADE_X0 + 13, ty: 30 },
+    { id: "glade_market", label: "Market stall", tx: GLADE_X0 + 12, ty: 11 },
+    { id: "glade_exit", label: "Portal to Paw Village", tx: GLADE_X0 + 32, ty: 10 },
+    // Tutorial stage start spots (one per arena).
+    { id: "glade_s1", label: "Stage 1", tx: GLADE_X0 + 4, ty: 48 },
+    { id: "glade_s2", label: "Stage 2", tx: GLADE_X0 + 24, ty: 48 },
+    { id: "glade_s3", label: "Stage 3", tx: GLADE_X0 + 24, ty: 30 },
+    { id: "glade_s4", label: "Stage 4", tx: GLADE_X0 + 5, ty: 30 },
+    { id: "glade_s5", label: "Stage 5", tx: GLADE_X0 + 5, ty: 11 },
+    { id: "glade_s6", label: "Stage 6", tx: GLADE_X0 + 25, ty: 12 },
   ];
   return { w, h, tiles, area, nodes, pois, hq, props, blocked };
 }

@@ -261,6 +261,7 @@ function BuyCoins({ onBought }: { onBought: (amount: string) => void }) {
               <span className="pack-coins">{Array.from({ length: i + 1 }, (_, k) => <img key={k} src={genUrl("ui-coin")} alt="" />)}</span>
               <b>{p.name}</b>
               <span className="pack-amt">{formatTokens(tokens(p.whole))}</span>
+              <span className="pack-rate">🎯 {Math.round(ECONOMY.catch.tiers[p.tier].successPpm / 10_000)}% catch</span>
               <span className="pack-price">{p.near} NEAR</span>
             </button>
           ))}
