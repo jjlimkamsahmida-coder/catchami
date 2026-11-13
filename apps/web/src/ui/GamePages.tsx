@@ -92,11 +92,11 @@ export function CollectionScreen() {
   const [filter, setFilter] = useState<Rarity | "all">("all");
   const counts = useMemo(() => Object.fromEntries(RARITIES.map((r) => [r, own.filter((p) => p.rarity === r).length])) as Record<Rarity, number>, [own]);
   const list = own.filter((p) => filter === "all" || p.rarity === filter).sort((a, b) => RARITIES.indexOf(b.rarity) - RARITIES.indexOf(a.rarity));
-  // PC: a wide album with big cards (4 per row); phones: 3 per row.
+  // PC: a wide album with big, readable cards (3 per row, up to 340 px); phones: 3 small per row.
   const wide = window.innerWidth >= 900;
-  const cols = wide ? 4 : 3;
+  const cols = 3;
   const empty = list.length < cols * 2 ? cols * 2 - list.length : (cols - (list.length % cols)) % cols;
-  const cardW = wide ? Math.min(210, Math.floor((Math.min(window.innerWidth, 1080) - 140) / cols)) : Math.min(112, Math.floor((Math.min(window.innerWidth, 520) - 60) / 3));
+  const cardW = wide ? Math.min(340, Math.floor((Math.min(window.innerWidth, 1200) - 160) / cols)) : Math.min(112, Math.floor((Math.min(window.innerWidth, 520) - 60) / 3));
   return (
     <PageFrame title="Collection" icon="ui-heart" theme="t-album" right={<span className="album-count">{own.length} caught</span>}>
       <div className="album-filters">

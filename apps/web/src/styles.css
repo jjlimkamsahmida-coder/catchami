@@ -1788,3 +1788,13 @@ html.has-touch .joystick { display: block !important; }
 @keyframes shotfly { 0% { transform: translate(0, 0) scale(0.4); opacity: 0; } 15% { opacity: 1; } 55% { transform: translate(calc(var(--tx) * 0.55), calc(var(--ty) * 0.55 - 50px)) scale(1); } 100% { transform: translate(var(--tx), var(--ty)) scale(1.15); opacity: 0.9; } }
 /* Page tips stay in the centred column (margin: 0 used to push them to the far left on PC). */
 .gpage-body > .gpage-tip { margin-left: auto; margin-right: auto; }
+/* Collection on PC: bigger album and filter chips. */
+@media (min-width: 900px) {
+  .t-album .gpage-body > .album.wide, .t-album .gpage-body > .album-filters { width: min(1200px, 100%); }
+  .t-album .album-filters { gap: 10px; }
+  .t-album .album-filters button { font-size: 18px; padding: 8px 20px; border-width: 3px; box-shadow: 0 3px 0 var(--ink); }
+  .t-album .album-filters button b { font-size: 15px; padding: 1px 8px; }
+  .album.wide .album-slot.empty span { font-size: 56px; }
+  .album.wide .album-slot.empty small { font-size: 16px; }
+  .album.wide .album-active { font-size: 14px; padding: 2px 10px; bottom: -12px; }
+}
