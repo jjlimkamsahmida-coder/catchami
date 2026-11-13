@@ -9,6 +9,7 @@ import { controlledPet, store, useStore } from "../net/store.ts";
 import { send } from "../net/api.ts";
 import { PetArt } from "./common.tsx";
 import { sfx } from "./sfx.ts";
+import { banditArt, genUrl } from "../game/assets.ts";
 
 type Phase = "intro" | "play" | "wait" | "result";
 
@@ -111,7 +112,7 @@ export function BanditFightPopup() {
           </div>
           <span className="bduel-vs">VS</span>
           <div className={`bduel-side bandit ${pop?.hit ? "ouch" : pop ? "dodge" : ""}`}>
-            <div className="bduel-art bandit-art">🦝</div>
+            <BanditPortrait id={duel?.banditId ?? fight?.banditId ?? name} />
             <b>{name}</b>
             <span className="bduel-hp"><i style={{ width: `${(phase === "result" && won ? 0 : banditHp) * 100}%` }} /></span>
           </div>
@@ -137,6 +138,21 @@ export function BanditFightPopup() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** The bandit's pet sticker (mirrored to face the pet) with a mask drawn over its eyes. */
+function BanditPortrait({ id }: { id: string }) {
+  const a = banditArt(id);
+  // Where the sticker lands inside the square slot (object-fit: contain), in % of the slot.
+  const w = a.aspect < 1 ? a.aspect * 100 : 100, h = a.aspect < 1 ? 100 : 100 / a.aspect;
+  const x0 = (100 - w) / 2, y0 = (100 - h) / 2;
+  const ex = 100 - (x0 + a.eyeX * w), ey = y0 + a.eyeY * h, bw = a.band * w;
+  return (
+    <div className="bduel-art bandit-art">
+      <img src={genUrl(a.key)} alt="" />
+      <span className="bduel-mask" style={{ left: `${ex - bw / 2}%`, width: `${bw}%`, top: `${ey - 6}%` }} />
     </div>
   );
 }

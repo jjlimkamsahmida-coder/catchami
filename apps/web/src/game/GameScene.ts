@@ -4,9 +4,11 @@ import { entities, store, type PetEntity } from "../net/store.ts";
 import { send, serverNow } from "../net/api.ts";
 import * as art from "./art.ts";
 import { DECAL_KINDS, drawProp, paintChunk, windmillBlades } from "./world-art.ts";
-import { ALL_SPRITES, genUrl, loadTextures, MERCHANT_ART, MERCHANT_HEIGHT, NODE_WIDTH, PROP_ART } from "./assets.ts";
+import { ALL_SPRITES, BANDIT_ART, banditArt, genUrl, loadTextures, MERCHANT_ART, MERCHANT_HEIGHT, NODE_WIDTH, PROP_ART } from "./assets.ts";
 
 const TILE = 32;
+/** Phones/tablets get DOM action buttons at the bottom centre instead of on-map buttons. */
+const TOUCH = typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
 /** Above every world object (props and pets are depth-sorted by their y). */
 const LABEL_DEPTH = 1_000_000;
 const INTERP_DELAY = 140;
@@ -149,6 +151,8 @@ export class GameScene extends Phaser.Scene {
       if (p.kind === "banner") this.tweens.add({ targets: img, scaleX: { from: img.scaleX, to: img.scaleX * 0.92 }, duration: 900, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
     }
 
+    for (const a of BANDIT_ART) if (!this.textures.exists(a.key)) this.load.image(a.key, genUrl(a.key));
+    this.load.start();
     // Warp rings where the roads cross between areas (and at the glade portal).
     const exit = s.pois.find((q) => q.id === "glade_exit");
     for (const [wx, wy] of [[VILLAGE_X0 * TILE, (GATE_Y + 1) * TILE], [MINES_X0 * TILE, (GATE_Y + 1) * TILE], ...(exit ? [[exit.tx * TILE + 16, exit.ty * TILE + 16]] : [])] as Array<[number, number]>) this.warpRing(wx, wy);
@@ -176,11 +180,11 @@ export class GameScene extends Phaser.Scene {
       bg.fillStyle(0x6cc04a, 1).fillRoundedRect(-50, -18, 100, 34, 17);
       bg.lineStyle(3, 0x2b1d3a, 1).strokeRoundedRect(-50, -18, 100, 34, 17);
       bg.fillStyle(0xffffff, 0.35).fillRoundedRect(-42, -14, 84, 9, 5);
-      const label = this.add.text(0, -1, "✋ Gather!", { fontFamily: "Fredoka", fontSize: "17px", fontStyle: "bold", color: "#ffffff", stroke: "#2b1d3a", strokeThickness: 4 }).setOrigin(0.5);
-      const btn = this.add.container(x, y - 110, [bg, label]).setDepth(9001).setVisible(false);
+      const label = this.add.text(0, -1, "Gather!", { fontFamily: "Fredoka", fontSize: "17px", fontStyle: "bold", color: "#ffffff", stroke: "#2b1d3a", strokeThickness: 4 }).setOrigin(0.5);
+      const btn = this.add.container(x, y + 30, [bg, label]).setDepth(9001).setVisible(false);
       btn.setSize(100, 36).setInteractive(new Phaser.Geom.Rectangle(0, 0, 100, 36), Phaser.Geom.Rectangle.Contains);
       btn.on("pointerup", () => { const pid = store.get().controlled; if (!pid) return; send({ t: "gather", petId: pid, nodeId: n.id }); btn.setVisible(false); });
-      this.tweens.add({ targets: btn, y: y - 116, duration: 520, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      this.tweens.add({ targets: btn, y: y + 24, duration: 520, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
       this.nodes.set(n.id, { img, badge, res: n.resource, depleted: false, btn });
     }
     const hq = s.hq!;
@@ -446,14 +450,19 @@ export class GameScene extends Phaser.Scene {
       seenB.add(id);
       let b = this.bandits.get(id);
       if (!b) {
-        const key = this.textures.exists("merchant-tom") ? "merchant-tom" : "shadow";
+        const art = banditArt(id);
+        if (!this.textures.exists(art.key)) continue; // sticker still loading
         const ring = this.add.graphics();
-        const img = this.add.image(0, 0, key).setOrigin(0.5, 0.95).setTint(0x8a6bb8);
-        const src = this.textures.get(key).getSourceImage();
-        if (src.height > 120) img.setScale((MERCHANT_HEIGHT * 0.9) / src.height);
+        const img = this.add.image(0, 0, art.key).setOrigin(0.5, 0.95);
+        const src = this.textures.get(art.key).getSourceImage();
+        const sc = Math.min(72 / src.height, 84 / src.width);
+        img.setScale(sc);
+        const w = src.width * sc, h = src.height * sc;
+        const ex = (art.eyeX - 0.5) * w, ey = -0.95 * h + art.eyeY * h, bw = Math.max(18, art.band * w);
         const mask = this.add.graphics();
-        mask.fillStyle(0x2b1d3a, 1).fillRoundedRect(-17, -MERCHANT_HEIGHT * 0.78, 34, 9, 4);
-        mask.fillStyle(0xff4d4d, 1).fillCircle(-7, -MERCHANT_HEIGHT * 0.78 + 4.5, 2.2).fillCircle(7, -MERCHANT_HEIGHT * 0.78 + 4.5, 2.2);
+        mask.fillStyle(0x2b1d3a, 0.95).fillRoundedRect(ex - bw / 2, ey - 5, bw, 11, 5);
+        mask.fillStyle(0xffffff, 1).fillCircle(ex - bw * 0.22, ey + 0.5, 2.6).fillCircle(ex + bw * 0.22, ey + 0.5, 2.6);
+        mask.fillStyle(0xff4d4d, 1).fillCircle(ex - bw * 0.22, ey + 0.5, 1.4).fillCircle(ex + bw * 0.22, ey + 0.5, 1.4);
         const label = this.add.text(0, -MERCHANT_HEIGHT - 6, `${name}`, { fontFamily: "Fredoka", fontSize: "11px", color: "#ffffff", backgroundColor: "#c0392b", padding: { x: 5, y: 1 } }).setOrigin(0.5);
         const alert = this.add.text(0, -MERCHANT_HEIGHT - 28, "!", { fontFamily: "Fredoka", fontSize: "26px", color: "#ff4d4d", stroke: "#2b1d3a", strokeThickness: 6 }).setOrigin(0.5).setAlpha(0);
         const c = this.add.container(bx, by, [ring, img, mask, label, alert]);
@@ -466,6 +475,7 @@ export class GameScene extends Phaser.Scene {
       b.c.y += (by - b.c.y) * 0.25;
       b.c.setDepth(b.c.y);
       b.img.setFlipX(facing < 0);
+      (b.c.list[2] as Phaser.GameObjects.Graphics).scaleX = facing < 0 ? -1 : 1;
       b.img.y = Math.abs(Math.sin(time / (st === 1 ? 90 : 200))) * -4;
       b.alert.setAlpha(st === 1 ? 1 : 0).setY(-MERCHANT_HEIGHT - 28 + Math.sin(time / 120) * 3);
       b.ring.clear();
@@ -480,7 +490,7 @@ export class GameScene extends Phaser.Scene {
       const dep = rem <= 0;
       if (dep !== n.depleted) { n.depleted = dep; n.img.setTexture(`node-${n.res}${dep ? "-empty" : ""}`); this.fitNode(n.img); }
       const near = cpos && Math.hypot(cpos[0] - n.img.x, cpos[1] - n.img.y) < 160;
-      n.btn.setVisible(!dep && !s.minigame && !!cpos && Math.hypot(cpos[0] - n.img.x, cpos[1] - n.img.y) < 120);
+      n.btn.setVisible(!TOUCH && !dep && !s.minigame && !!cpos && Math.hypot(cpos[0] - n.img.x, cpos[1] - n.img.y) < 120);
       n.badge.setText(dep ? "regrowing" : `${rem >= 1000 ? `${Math.round(rem / 1000)}k` : rem} left`).setAlpha(near ? 1 : 0);
     }
   }

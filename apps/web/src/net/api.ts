@@ -178,10 +178,10 @@ function onMessage(m: ServerMsg) {
       }));
       break;
     case "bandit_duel":
-      store.set({ banditDuel: { duelId: m.duelId, banditName: m.banditName, petName: m.petName, brave: m.brave, practice: m.practice, rounds: m.rounds, deadlineMs: m.deadlineMs, at: Date.now() }, sheet: null, minigame: null });
+      store.set({ banditDuel: { duelId: m.duelId, banditId: m.banditId, banditName: m.banditName, petName: m.petName, brave: m.brave, practice: m.practice, rounds: m.rounds, deadlineMs: m.deadlineMs, at: Date.now() }, sheet: null, minigame: null });
       break;
     case "bandit_fight":
-      store.set({ banditFight: { banditName: m.banditName, petName: m.petName, won: m.won, stolen: m.stolen, brave: m.brave, at: Date.now() } });
+      store.set({ banditFight: { banditId: m.banditId, banditName: m.banditName, petName: m.petName, won: m.won, stolen: m.stolen, brave: m.brave, at: Date.now() } });
       break;
     case "pong":
       clockOffset = m.serverTime - (m.at + Date.now()) / 2;

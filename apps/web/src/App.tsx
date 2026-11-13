@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type Phaser from "phaser";
 import { store, useStore } from "./net/store.ts";
 import { boot } from "./net/api.ts";
-import { ActionBar, BanditFightPopup, BottomNav, Joystick, PetCard, Toasts, TopBar } from "./ui/Hud.tsx";
+import { ActionBar, BagFullBanner, BanditFightPopup, BottomNav, Joystick, PetCard, Toasts, TopBar } from "./ui/Hud.tsx";
 import { Sheets } from "./ui/Sheets.tsx";
 import { FairnessScreen, WalletScreen } from "./ui/Screens.tsx";
 import { BagScreen, CollectionScreen, DesktopCatchScreen, MarketScreen, RanksScreen } from "./ui/GamePages.tsx";
@@ -180,7 +180,7 @@ function Shell() {
     <div className="shell">
       <div className="canvas-host" ref={host} />
       <div className={`hud ${tutorial ? "tutorial-on" : ""}`}>
-        {(screen === "world" || screen === "map") && (<><TopBar /><MusicToggle className="hud-music" /><PetCard />{!tutorial && <AreaBanner />}{!tutorial && <MiniMap />}<Joystick /><ActionBar /><Sheets /><BanditFightPopup /></>)}
+        {(screen === "world" || screen === "map") && (<><TopBar /><MusicToggle className="hud-music" /><PetCard />{!tutorial && <AreaBanner />}{!tutorial && <MiniMap />}<Joystick /><ActionBar /><BagFullBanner /><Sheets /><BanditFightPopup /></>)}
         {screen === "map" && <MapScreen />}
         {screen === "world" && <MinigameLayer />}
         <BubbleInvite />

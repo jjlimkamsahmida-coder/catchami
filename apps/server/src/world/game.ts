@@ -203,6 +203,7 @@ export class Game {
     if (!this.flags.pauseBattles) this.bandits.step(dt, now);
     for (const n of this.nodes.values()) {
       const cap = nodeStock(n.id);
+      if (n.id.startsWith("glade-")) { if (n.remaining < cap && n.nextRegen && now >= n.nextRegen) { n.remaining = cap; n.nextRegen = 0; } continue; }
       if (n.remaining < cap && now >= n.nextRegen) {
         if (n.nextRegen !== 0) n.remaining = Math.min(cap, n.remaining + ECONOMY.gather.unitsPerHit);
         n.nextRegen = now + ECONOMY.resources[n.resource].regenMs;
@@ -405,6 +406,7 @@ export class Game {
     p.s.energy = Math.max(0, p.s.energy - MINIGAMES.energyPerAttempt);
     if (gained > 0) {
       node.remaining -= gained;
+      if (node.id.startsWith("glade-") && node.remaining <= 0) node.nextRegen = now + 15_000;
       if (node.nextRegen === 0 || node.nextRegen < now) node.nextRegen = now + ECONOMY.resources[node.resource].regenMs;
       p.s.inventory[node.resource] += gained;
       p.s.energy = Math.max(0, p.s.energy - ECONOMY.stats.gatherEnergyPerUnit * gained);

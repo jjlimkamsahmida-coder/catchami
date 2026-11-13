@@ -11,7 +11,7 @@ import { AREA_BOUNDS, ECONOMY, inventoryWeight, RESOURCES, type Resource } from 
 import { controlledPet, entities, store, useStore } from "../net/store.ts";
 import { send, setOnboarding } from "../net/api.ts";
 import { fmt, ResIcon } from "./common.tsx";
-import { Keeper, type KeeperPose } from "./Journey.tsx";
+import { type KeeperPose } from "./Journey.tsx";
 import { sfx } from "./sfx.ts";
 
 const TILE = 32;
@@ -290,7 +290,6 @@ export function TutorialCoach() {
       <div key="arrow" ref={arrow} className="tut-arrow" style={{ display: "none" }}><span>➜</span><small /></div>
       <div key="card" ref={card} className={`tut-card sticky panel ${min ? "min" : ""}`}>
         <button className="tut-min" onClick={() => setMin((v) => !v)} aria-label={min ? "Expand" : "Minimise"}>{min ? "▴" : "▾"}</button>
-        <Keeper size={62} cube={false} className="mini" pose={cur.pose} />
         <div className="tut-body">
           <span className="tut-step">Stage {n} · {stage.name}{stage.steps.length > 1 ? ` · ${cur.k + 1}/${stage.steps.length}` : ""}</span>
           <b>{cur.title}</b>

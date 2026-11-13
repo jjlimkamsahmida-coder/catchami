@@ -71,3 +71,15 @@ export async function loadTextures(): Promise<Partial<Record<keyof typeof TEXTUR
   })));
   return out;
 }
+
+/** Bandits are pet stickers wearing a mask. eyeX/eyeY: where the eyes sit (0-1 of the image), for the mask. */
+export const BANDIT_ART = [
+  { key: "bandit-1", eyeX: 0.5, eyeY: 0.27, band: 0.55, aspect: 207 / 384 },
+  { key: "bandit-2", eyeX: 0.5, eyeY: 0.33, band: 0.55, aspect: 204 / 384 },
+  { key: "bandit-3", eyeX: 0.2, eyeY: 0.27, band: 0.2, aspect: 384 / 226 },
+] as const;
+export function banditArt(id: string) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return BANDIT_ART[h % BANDIT_ART.length]!;
+}

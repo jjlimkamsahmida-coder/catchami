@@ -94,6 +94,7 @@ export function carryCapacity(stats: { carry: number }): number {
 
 /** Fixed stock of a resource spot, 100k–500k, deterministic from its id. */
 export function nodeStock(id: string): number {
+  if (id.startsWith("glade-")) return 10; // tutorial spots: one good hit collects it all
   let h = 2166136261;
   for (let i = 0; i < id.length; i++) { h ^= id.charCodeAt(i); h = Math.imul(h, 16777619); }
   const { nodeStockMin: lo, nodeStockMax: hi } = ECONOMY.gather;

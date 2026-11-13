@@ -191,6 +191,19 @@ export function Joystick() {
 }
 
 /** Context-sensitive actions for the controlled pet. Each one maps to a real server action. */
+/** Big, obvious warning when the pet's bag is full. */
+export function BagFullBanner() {
+  const p = useStore(controlledPet);
+  const tut = useStore((s) => s.onboarding?.stage === "tutorial");
+  if (!p || inventoryWeight(p.carried) < carryCapacity(p.stats) * 0.98) return null;
+  return (
+    <div className="bagfull" role="status">
+      <span className="bagfull-ico">🎒</span>
+      <span><b>Bag full!</b><small>{tut ? "Sell your loot to the Keeper" : "Sell your loot to a merchant to gather more"}</small></span>
+    </div>
+  );
+}
+
 export function ActionBar() {
   const p = useStore(controlledPet);
   const merchants = useStore((s) => s.merchants);
@@ -208,10 +221,13 @@ export function ActionBar() {
   const pos = e?.samples.at(-1);
   const px = pos?.[1] ?? p.x, py = pos?.[2] ?? p.y;
   const m = merchants.find((mm) => mm.state !== "at_hq" && mm.state !== "unavailable" && Math.hypot(mm.x - px, mm.y - py) <= ECONOMY.merchants.interactRangePx);
-  const node = nodesDef.map((n) => ({ n, d: Math.hypot(n.tx * 32 + 16 - px, n.ty * 32 + 16 - py) })).filter((x) => x.d < 70).sort((a, b) => a.d - b.d)[0]?.n;
+  const node = nodesDef.map((n) => ({ n, d: Math.hypot(n.tx * 32 + 16 - px, n.ty * 32 + 16 - py) })).filter((x) => x.d < 120).sort((a, b) => a.d - b.d)[0]?.n;
   const ko = p.status === "knocked_out";
   const koReady = ko && p.koUntil !== null && Date.now() >= p.koUntil;
   const btns: React.ReactNode[] = [];
+  const touch = window.matchMedia("(pointer: coarse)").matches;
+  const full = inventoryWeight(p.carried) >= carryCapacity(p.stats) * 0.98;
+  if (touch && node && !ko && !store.get().minigame) btns.push(<button key="gather" className="btn big-action" disabled={(nodes[node.id] ?? 1) <= 0 || full} onClick={() => send({ t: "gather", petId: p.id, nodeId: node.id })}>{full ? "Bag full" : (nodes[node.id] ?? 1) <= 0 ? "Regrowing…" : "Gather!"}</button>);
   // The tutorial teaches one thing per stage: only selling and gathering show up there.
   if (tut) return btns.length ? <div className="actions">{btns}</div> : null;
   if (p.hunger > 300 && !ko) {
