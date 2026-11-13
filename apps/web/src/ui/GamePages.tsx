@@ -75,7 +75,6 @@ export function BagScreen({ p }: { p: OwnPet }) {
               </div>
             ))}
           </div>
-          <p className="gpage-tip">Tip: meals, medicine and gear are sold by merchants — sell your loot there too, and watch out for other Keepers challenging you in the wild!</p>
           <div className={`bag-cap bottom ${w >= cap * 0.98 ? "full" : ""}`}><span>🎒 Bag space</span><i><b style={{ width: `${Math.min(100, (w / cap) * 100)}%` }} /></i><em>{fmtQty(w)} / {fmtQty(cap)}</em></div>
         </>
       )}
