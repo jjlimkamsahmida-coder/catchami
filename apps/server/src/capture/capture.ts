@@ -3,7 +3,7 @@
  *  1. validate(): server-side detection on uploaded frames, liveness and
  *     duplicate checks. Invalid => rejected, nothing is charged, ever.
  *  2. attempt(): player picks a tier after seeing exact costs and odds.
- *     Fair roll (commit-reveal epoch). Success => 80/18/2 split and a new
+ *     Fair roll (commit-reveal epoch). Success => pet/HQ/team split (ECONOMY.catch.successSplit) and a new
  *     pet; failure => 100% to HQ. One atomic DB transaction either way.
  * Infrastructure errors never resolve an attempt; it stays 'valid' to retry.
  */
