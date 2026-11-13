@@ -83,7 +83,7 @@ export function BagScreen({ p }: { p: OwnPet }) {
             <button className="gbig coral" disabled={p.status !== "knocked_out" && p.hp >= p.stats.maxHp} onClick={() => send({ t: "buy", petId: p.id, item: "medicine", rid: rid() })}>💊 Medicine · {fmt(ECONOMY.medicine.price)}</button>
             <button className="gbig sky" disabled={p.status === "knocked_out"} onClick={() => send({ t: "rest", petId: p.id })}>💤 Take a nap</button>
           </div>
-          <p className="gpage-tip">Tip: sell your loot to travelling merchants — and steer clear of masked bandits in the wild!</p>
+          <p className="gpage-tip">Tip: sell your loot to travelling merchants — and watch out for other Keepers challenging you in the wild!</p>
         </>
       )}
       {tab === "strategy" && <div className="gpage-card"><StrategyTab p={p} /></div>}

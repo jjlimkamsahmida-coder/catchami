@@ -19,7 +19,8 @@ export interface BanditRt {
   practice?: boolean; homeX?: number; homeY?: number;
 }
 
-const NAMES = ["Sneaky Sid", "Grabby Gus", "Pilfer Pip", "Swipey Sue", "Nabby Ned", "Loot Lou", "Snatch Sam", "Fidget Flo"];
+/** Demo rivals: pets of other (simulated) Keepers that roam the wild and challenge you. */
+const NAMES = ["Sid's Mochi", "Gus's Biscuit", "Pip's Tofu", "Sue's Noodle", "Ned's Pumpkin", "Lou's Waffles", "Sam's Clover", "Flo's Bean"];
 const SPEED = { wander: 70, chase: 150, flee: 165 }; // px/s — pets walk ~170 px/s
 const SIGHT = 230;      // px: notices loaded pets this close
 const GIVE_UP = 460;    // px: stops chasing beyond this
@@ -52,7 +53,7 @@ export class Bandits {
     const g = this.game.world.pois.find((p) => p.id === "glade_bandit");
     if (g) {
       const x = tileCenter(g.tx), y = tileCenter(g.ty);
-      this.list.push({ id: "bandit-practice", name: "Training Bandit", home: "glade", x, y, facing: -1, path: [], state: "wander", target: null, nextThink: 0, calmUntil: 0, practice: true, homeX: x, homeY: y });
+      this.list.push({ id: "bandit-practice", name: "Coach Kiki", home: "glade", x, y, facing: -1, path: [], state: "wander", target: null, nextThink: 0, calmUntil: 0, practice: true, homeX: x, homeY: y });
     }
   }
 
@@ -185,9 +186,9 @@ export class Bandits {
   /** Player taps "Fight!" on a nearby bandit: braver pets get a better chance. */
   challenge(p: PetRt, banditId: string, now: number) {
     const b = this.list.find((x) => x.id === banditId);
-    if (!b) throw new GameError("gone", "That bandit ran off");
+    if (!b) throw new GameError("gone", "That Keeper left");
     if (p.s.status === "knocked_out") throw new GameError("ko", `${p.name} is knocked out`);
-    if (b.state === "flee") throw new GameError("fled", `${b.name} is running away`);
+    if (b.state === "flee") throw new GameError("fled", `${b.name} is heading off`);
     if (Math.hypot(p.s.x - b.x, p.s.y - b.y) > 140) throw new GameError("too_far", `Get closer to ${b.name}`);
     if (b.state === "duel") throw new GameError("busy", `${b.name} is already in a battle`);
     this.startDuel(b, p, now, true);
@@ -205,7 +206,7 @@ export class Bandits {
       : Math.max(0.1, Math.min(0.95, 0.2 + hits * 0.17 + (s.attack + s.defense - 200) / 400 + (brave ? 0.08 : 0) + (hpShare - 0.5) * 0.2));
     const won = Math.random() < chance;
     if (b.practice) {
-      this.game.toastOwner(p, won ? "good" : "info", won ? `${p.name} beat the Training Bandit!` : "The Training Bandit dodged! Practice again — no loot lost.");
+      this.game.toastOwner(p, won ? "good" : "info", won ? `${p.name} won the practice battle!` : "Coach Kiki won this one — practise again, no loot lost.");
       this.game.toOwner(p, { t: "bandit_fight", banditId: b.id, banditName: b.name, petId: p.id, petName: p.name, won, stolen: "", brave });
       b.state = won ? "flee" : "wander"; b.target = null; b.calmUntil = now + (won ? 6_000 : 5_000);
       if (!won) { b.x = b.homeX!; b.y = b.homeY!; } // back off, then try again
@@ -215,7 +216,7 @@ export class Bandits {
     if (won) {
       p.anim = "attack"; p.animUntil = now + 900;
       p.activity = `Chased off ${b.name}!`;
-      this.game.toastOwner(p, "good", `${p.name} beat ${b.name}! The bandit ran away empty-handed.`);
+      this.game.toastOwner(p, "good", `${p.name} beat ${b.name} in battle!`);
     } else {
       const loot = { ...p.s.inventory };
       stolen = RESOURCES.filter((r) => loot[r] > 0).map((r) => `${loot[r]} ${r === "minerals" ? "stone" : r}`).join(", ");
@@ -223,7 +224,7 @@ export class Bandits {
       p.s.hp = Math.max(1, p.s.hp - Math.round(s.maxHp * 0.15));
       p.anim = "hurt"; p.animUntil = now + 900;
       p.activity = `Robbed by ${b.name}!`;
-      this.game.toastOwner(p, "bad", stolen ? `${b.name} won the scuffle and snatched ${stolen}!` : `${b.name} won the scuffle but ${p.name}'s bag was empty!`);
+      this.game.toastOwner(p, "bad", stolen ? `${b.name} won the battle and took ${stolen}!` : `${b.name} won the battle — luckily ${p.name}'s bag was empty!`);
     }
     p.dirty = true; p.metaDirty = true;
     this.game.toOwner(p, { t: "bandit_fight", banditId: b.id, banditName: b.name, petId: p.id, petName: p.name, won, stolen, brave });
@@ -239,7 +240,7 @@ export class Bandits {
     p.anim = "hurt"; p.animUntil = now + 900;
     p.dirty = true; p.metaDirty = true;
     p.activity = `Robbed by ${b.name}!`;
-    this.game.toastOwner(p, "bad", `${b.name} snatched ${parts.join(", ")} from ${p.name}! Watch out for bandits.`);
+    this.game.toastOwner(p, "bad", `${b.name} won and took ${parts.join(", ")} from ${p.name}!`);
     b.state = "flee"; b.target = null; b.calmUntil = now + CALM_MS;
     const [x, y] = this.randomSpot(b.home, b, 20);
     this.pathTo(b, x, y);

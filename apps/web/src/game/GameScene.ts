@@ -464,11 +464,9 @@ export class GameScene extends Phaser.Scene {
         img.setScale(sc);
         const w = src.width * sc, h = src.height * sc;
         const ex = (art.eyeX - 0.5) * w, ey = -0.95 * h + art.eyeY * h, bw = Math.max(18, art.band * w);
-        const mask = this.add.graphics();
-        mask.fillStyle(0x2b1d3a, 0.95).fillRoundedRect(ex - bw / 2, ey - 5, bw, 11, 5);
-        mask.fillStyle(0xffffff, 1).fillCircle(ex - bw * 0.22, ey + 0.5, 2.6).fillCircle(ex + bw * 0.22, ey + 0.5, 2.6);
-        mask.fillStyle(0xff4d4d, 1).fillCircle(ex - bw * 0.22, ey + 0.5, 1.4).fillCircle(ex + bw * 0.22, ey + 0.5, 1.4);
-        const label = this.add.text(0, -MERCHANT_HEIGHT - 6, `${name}`, { fontFamily: "Fredoka", fontSize: "11px", color: "#ffffff", backgroundColor: "#c0392b", padding: { x: 5, y: 1 } }).setOrigin(0.5);
+        void ex; void ey; void bw;
+        const mask = this.add.graphics(); // (kept as list slot 2; rivals wear no mask)
+        const label = this.add.text(0, -h - 12, `⚔ ${name}`, { fontFamily: "Fredoka", fontSize: "12px", color: "#ffffff", stroke: "#2b1d3a", strokeThickness: 4 }).setOrigin(0.5);
         const alert = this.add.text(0, -MERCHANT_HEIGHT - 28, "!", { fontFamily: "Fredoka", fontSize: "26px", color: "#ff4d4d", stroke: "#2b1d3a", strokeThickness: 6 }).setOrigin(0.5).setAlpha(0);
         const c = this.add.container(bx, by, [ring, img, mask, label, alert]);
         c.setSize(56, 64).setInteractive(new Phaser.Geom.Rectangle(0, -30, 56, 66), Phaser.Geom.Rectangle.Contains);

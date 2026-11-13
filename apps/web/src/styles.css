@@ -1559,3 +1559,7 @@ table.lb td:first-child { width: 28px; font-weight: 700; }
 .tut-hand[data-dir="down"] span { transform: rotate(180deg); animation-name: handtapdown; }
 @keyframes handtap { 0%, 100% { transform: translateY(6px); } 50% { transform: translateY(-4px) scale(0.92); } }
 @keyframes handtapdown { 0%, 100% { transform: rotate(180deg) translateY(6px); } 50% { transform: rotate(180deg) translateY(-4px) scale(0.92); } }
+
+.bandit-badge { background: #fff6e5 !important; overflow: hidden; }
+.bandit-badge img { width: 100%; height: 100%; object-fit: contain; }
+.bduel-mask { display: none; }

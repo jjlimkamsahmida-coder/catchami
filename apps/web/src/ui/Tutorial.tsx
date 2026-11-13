@@ -56,7 +56,7 @@ const nearestNode = (): Target => {
 };
 const trainingBandit = (): Target => {
   const b = store.get().bandits.find((x) => x[0] === "bandit-practice");
-  return b ? { x: b[1], y: b[2], label: "Training Bandit" } : null;
+  return b ? { x: b[1], y: b[2], label: "Coach Kiki" } : null;
 };
 
 const STAGES: Stage[] = [
@@ -88,12 +88,12 @@ const STAGES: Stage[] = [
     ],
   },
   {
-    name: "Danger!", icon: "⚔️", learn: ["Bandits", "Battle minigame"],
+    name: "Battles", icon: "⚔️", learn: ["Battling other Keepers", "Battle minigame"],
     steps: [
       {
-        title: "Bandits!", pose: "point", text: (n) => `Out in the wild, masked bandits chase pets carrying loot — lose a battle and they steal your whole bag! This Training Bandit is just for practice. When it charges, tap ATTACK while the marker is in the red zone. Show it what ${n} can do!`,
-        goal: "fight", goalText: "Beat the Training Bandit", target: trainingBandit,
-        extra: () => <div className="tut-bandit"><span className="tb-mask" /><b>Bandit</b><span className="tb-alert">!</span></div>,
+        title: "Battle time!", pose: "point", text: (n) => `Out in the wild, other Keepers' pets can challenge you to a battle — the winner takes the loser's bag! Coach Kiki is here to practise with. When she challenges you, tap ATTACK while the marker is in the red zone. Show her what ${n} can do!`,
+        goal: "fight", goalText: "Win the practice battle", target: trainingBandit,
+        extra: () => <div className="tut-bandit"><b>⚔️ PvP battle</b></div>,
       },
     ],
   },

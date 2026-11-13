@@ -2,6 +2,7 @@ import { AREA_BOUNDS, ECONOMY, nodeStock, RESOURCE_LABEL, RESOURCES, inventoryWe
 import { controlledPet, entities, store, useStore } from "../net/store.ts";
 import { rid, send } from "../net/api.ts";
 import { fmt, fmtQty, PetArt, RarityTag, ResIcon, Sheet } from "./common.tsx";
+import { banditArt, genUrl } from "../game/assets.ts";
 
 const close = () => store.set({ sheet: null });
 
@@ -25,12 +26,12 @@ function BanditSheet({ id }: { id: string }) {
   return (
     <Sheet onClose={close}>
       <div className="col" style={{ gap: 10, alignItems: "center", textAlign: "center" }}>
-        <span className="bandit-badge">🦝</span>
+        <span className="bandit-badge"><img src={genUrl(banditArt(id).key)} alt="" /></span>
         <h2 style={{ margin: 0 }}>{name}</h2>
-        <p className="small" style={{ margin: 0 }}>{id === "bandit-practice" ? "A friendly sparring partner. It never steals — practise all you like!" : st === 1 ? "Chasing a pet with loot!" : st === 2 ? "Running away…" : "Sneaking around, looking for pets carrying resources."}</p>
-        {id !== "bandit-practice" && <p className="small muted" style={{ margin: 0 }}>Win a scuffle and the bandit flees empty-handed. Lose and it steals everything in your bag. Challenging first gives you a better chance!</p>}
+        <p className="small" style={{ margin: 0 }}>{id === "bandit-practice" ? "A friendly sparring partner. Practise battles here — no loot at stake!" : st === 1 ? "Coming to challenge you!" : st === 2 ? "Heading off…" : "Another Keeper's pet, out looking for a battle."}</p>
+        {id !== "bandit-practice" && <p className="small muted" style={{ margin: 0 }}>Win the battle to keep your loot. Lose and the winner takes everything in your bag. Challenging first gives you a better chance!</p>}
         <button className="game-btn start sm" disabled={!p || !near || st === 2} onClick={() => { if (p) send({ t: "fight_bandit", petId: p.id, banditId: id }); close(); }}>
-          <span className="gb-label">{!p ? "Catch a pet first" : st === 2 ? "It's running away" : near ? "⚔️ Fight!" : "Get closer to fight"}</span>
+          <span className="gb-label">{!p ? "Catch a pet first" : st === 2 ? "It's running away" : near ? "⚔️ Battle!" : "Get closer to battle"}</span>
         </button>
       </div>
     </Sheet>

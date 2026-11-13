@@ -96,7 +96,7 @@ export function BanditFightPopup() {
   });
 
   if (!phase) return null;
-  const name = duel?.banditName ?? fight?.banditName ?? "Bandit";
+  const name = duel?.banditName ?? fight?.banditName ?? "Rival";
   const petName = duel?.petName ?? fight?.petName ?? "";
   const banditHp = Math.max(0, 1 - hits / total);
   const won = phase === "result" && fight?.won;
@@ -104,7 +104,7 @@ export function BanditFightPopup() {
   return (
     <div className={`bduel ${phase} ${won ? "won" : ""} ${lost ? "lost" : ""}`} onClick={() => { if (phase === "result") { setPhase(null); store.set({ banditDuel: null }); } }}>
       <div className="bduel-card panel">
-        <div className="bduel-title">{phase === "result" ? (won ? "🏆 Victory!" : "💫 Defeated…") : duel?.brave ? "⚔️ Bandit battle!" : "⚠️ Bandit attack!"}</div>
+        <div className="bduel-title">{phase === "result" ? (won ? "🏆 Victory!" : "💫 Defeated…") : duel?.brave ? "⚔️ Battle!" : `⚔️ ${duel?.banditName ?? "A Keeper"} challenges you!`}</div>
         <div className="bduel-arena">
           <div className={`bduel-side pet ${pop?.hit ? "lunge" : ""}`}>
             <div className="bduel-art">{pet ? <PetArt sticker={pet.sticker} species={pet.species} look={pet.look} /> : null}</div>
@@ -134,7 +134,7 @@ export function BanditFightPopup() {
         {phase === "wait" && <p className="bduel-wait">{hits} of {total} hits landed… <span className="spinner sm" /></p>}
         {phase === "result" && fight && (
           <div className="bduel-result">
-            {fight.won ? `${fight.petName} wins! ${name} ran off.` : fight.stolen ? `${name} stole ${fight.stolen}!` : name === "Training Bandit" ? "It dodged! It'll come back — try again." : `${name} won — but your bag was empty!`}
+            {fight.won ? `${fight.petName} wins the battle!` : fight.stolen ? `${name} won and took ${fight.stolen}!` : name === "Coach Kiki" ? "Coach Kiki won this round — she'll challenge you again!" : `${name} won — luckily your bag was empty!`}
           </div>
         )}
       </div>
@@ -148,11 +148,10 @@ function BanditPortrait({ id }: { id: string }) {
   // Where the sticker lands inside the square slot (object-fit: contain), in % of the slot.
   const w = a.aspect < 1 ? a.aspect * 100 : 100, h = a.aspect < 1 ? 100 : 100 / a.aspect;
   const x0 = (100 - w) / 2, y0 = (100 - h) / 2;
-  const ex = 100 - (x0 + a.eyeX * w), ey = y0 + a.eyeY * h, bw = a.band * w;
+  void x0; void y0; void h;
   return (
     <div className="bduel-art bandit-art">
       <img src={genUrl(a.key)} alt="" />
-      <span className="bduel-mask" style={{ left: `${ex - bw / 2}%`, width: `${bw}%`, top: `${ey - 6}%` }} />
     </div>
   );
 }
