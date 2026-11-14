@@ -1,106 +1,74 @@
 {
-  "s1a": {
-    "text": "This cat has a wallet.",
-    "seconds": 1.95
-  },
-  "s1b": {
-    "text": "And bills to pay!",
-    "seconds": 1.8
-  },
-  "s2": {
+  "a1": {
     "text": "Welcome to Catchami — a living animal economy!",
-    "seconds": 3.55
+    "seconds": 3.65
   },
-  "s3a": {
-    "text": "It starts in the real world. Find an animal, throw your CamiCube, and turn a successful catch into a playable NFT.",
-    "seconds": 7.45
+  "a2": {
+    "text": "It all starts in the real world.",
+    "seconds": 2.35
   },
-  "s3b": {
-    "text": "With its very own wallet.",
-    "seconds": 2.15
+  "a3": {
+    "text": "Spot a real cat or dog, throw your CamiCube...",
+    "seconds": 3.45
   },
-  "s4a": {
-    "text": "Now, give your pet a life.",
+  "a4": {
+    "text": "and it becomes a playable NFT pet, with its very own coin wallet.",
+    "seconds": 4.67
+  },
+  "b1": {
+    "text": "Now your pet needs to earn.",
+    "seconds": 2.02
+  },
+  "b2": {
+    "text": "It catches fish, and fills its bag.",
+    "seconds": 2.5
+  },
+  "b3": {
+    "text": "Then it sells them to a travelling merchant, who pays from its own budget.",
+    "seconds": 4.4
+  },
+  "b4": {
+    "text": "But working makes it hungry. So it needs food.",
+    "seconds": 3
+  },
+  "b5": {
+    "text": "Every meal costs coins, and uses fish from HQ's kitchen.",
+    "seconds": 4.08
+  },
+  "b6": {
+    "text": "And food changes market demand. The more fish gets eaten, the more merchants pay for it.",
+    "seconds": 5.53
+  },
+  "c1": {
+    "text": "That's where HQ comes in.",
     "seconds": 2.05
   },
-  "s4b": {
-    "text": "Explore, gather resources, and earn coins.",
-    "seconds": 3.1
+  "c2": {
+    "text": "HQ collects what pets spend, and sets each day's merchant budget from its reserves and recent revenue.",
+    "seconds": 6.55
   },
-  "s4c": {
-    "text": "But every action costs energy. And every pet gets hungry.",
-    "seconds": 4.03
-  },
-  "s5a": {
-    "text": "Resources have real demand.",
-    "seconds": 2.25
-  },
-  "s5b": {
-    "text": "Prices change as pets gather, consume, and trade.",
-    "seconds": 3.5
-  },
-  "s5c": {
-    "text": "Find a travelling merchant, and turn your work into coins!",
-    "seconds": 3.48
-  },
-  "s6a": {
-    "text": "Think your pet is lucky?",
-    "seconds": 1.82
-  },
-  "s6b": {
-    "text": "Challenge another pet in Bubble Roulette!",
-    "seconds": 2.6
-  },
-  "s6c": {
-    "text": "Win resources and coins... or end up completely soaked!",
-    "seconds": 3.8
-  },
-  "s7a": {
-    "text": "Every pet has needs.",
-    "seconds": 1.82
-  },
-  "s7b": {
-    "text": "Buy food. Recover with medicine. Craft equipment. Trade what you create.",
-    "seconds": 4.7
-  },
-  "s7c": {
-    "text": "And every purchase changes the economy.",
-    "seconds": 2.8
-  },
-  "s8a": {
-    "text": "And here's the best part.",
-    "seconds": 1.88
-  },
-  "s8b": {
-    "text": "Your pet can run its own little business.",
-    "seconds": 2.48
-  },
-  "s8c": {
-    "text": "Set its strategy, and it will gather, find merchants, trade, rest, and look after itself, even when you're not controlling it.",
-    "seconds": 7.03
-  },
-  "s9a": {
-    "text": "Behind it all is a living economy.",
-    "seconds": 2.73
-  },
-  "s9b": {
-    "text": "HQ collects what players spend, funds the travelling merchants, and adjusts their budgets as the treasury and market change.",
+  "c3": {
+    "text": "Pets sell to merchants. Merchants deliver to HQ. Pets spend back into HQ. And HQ funds the next round.",
     "seconds": 7.5
   },
-  "s9c": {
-    "text": "Every coin has a source. Every expense has a destination.",
-    "seconds": 4.03
+  "d1": {
+    "text": "Your pet can do even more. Splash rivals in Bubble Roulette, heal up, craft gear, and trade.",
+    "seconds": 5.85
   },
-  "s10": {
-    "text": "Real NFTs. A token balance inside every pet. Gameplay, settled on NEAR.",
-    "seconds": 5.63
+  "e1": {
+    "text": "And here's the best part. Your pet doesn't need you to control every move.",
+    "seconds": 4.5
   },
-  "s11a": {
-    "text": "Catchami.",
-    "seconds": 1.57
+  "e2": {
+    "text": "Choose a strategy, and it can work, trade, rest, and manage its own little life.",
+    "seconds": 4.85
   },
-  "s11b": {
-    "text": "Catch a pet. Give it a life.",
-    "seconds": 2.4
+  "f1": {
+    "text": "Every pet is a real NFT. Its coins live in its own vault balance, and gameplay is settled on NEAR in batches.",
+    "seconds": 7.47
+  },
+  "g1": {
+    "text": "Catchami. Catch a pet. Give it a life.",
+    "seconds": 3
   }
 }

@@ -11,7 +11,7 @@ const ctx = await chromium.launchPersistentContext(resolve(".chrome-profile"), {
     "--remote-debugging-port=9333",
     "--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", `--use-file-for-fake-video-capture=${cam}`,
     "--window-size=1920,1080", "--autoplay-policy=no-user-gesture-required", "--enable-gpu-rasterization", "--ignore-gpu-blocklist",
-    "--hide-scrollbars", "--mute-audio",
+    "--hide-scrollbars", "--mute-audio", "--auto-accept-this-tab-capture", "--auto-select-tab-capture-source-by-title=Catchami", "--enable-usermedia-screen-capturing", "--allow-http-screen-capture",
   ],
   permissions: ["camera"],
 });

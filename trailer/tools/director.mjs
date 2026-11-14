@@ -4,6 +4,8 @@ import http from "node:http";
 import { connect, startRec, shot, sleep, SITE } from "./lib.mjs";
 
 const { browser } = await connect();
+import { chromium as chr } from "playwright";
+const browser2 = await chr.connectOverCDP("http://127.0.0.1:9334").catch(() => null);
 const tabs = {}; // kind -> { page, cdp }
 let cur = null, rec = null;
 
@@ -14,7 +16,7 @@ async function ensureTab(kind) {
     ? { viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent: UA_ANDROID }
     : kind === "wide" ? { viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 }
     : { viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1.5 };
-  const ctx = await browser.newContext({ ...opts, permissions: ["camera"] });
+  const ctx = await (kind === "phone" || !browser2 ? browser : browser2).newContext({ ...opts, ...(kind === "phone" ? { permissions: ["camera"] } : {}) });
   // Keep a handle on the game's own socket and its latest messages (for steering and aiming).
   await ctx.addInitScript(() => {
     const Orig = window.WebSocket;
@@ -168,12 +170,54 @@ async function run(c) {
     case "text": return { value: (await page.evaluate(() => document.body.innerText)).slice(0, c.max ?? 3000) };
     case "shot": return { path: await shot(page, c.name ?? "now") };
     case "recStart": rec = await startRec(cur.cdp, c.name, { ...(cur.kind === "phone" ? { maxWidth: 1170, maxHeight: 2532 } : {}), nth: c.nth ?? 1 }); return { recording: c.name };
+    case "capStart": {
+      const r = await page.evaluate(async ({ fps, kbps }) => {
+        const stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: fps }, preferCurrentTab: true });
+        const mime = ["video/webm;codecs=h264", "video/webm;codecs=vp9", "video/webm"].find((m) => MediaRecorder.isTypeSupported(m));
+        const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: kbps * 1000 });
+        const parts = []; rec.ondataavailable = (e) => { if (e.data.size) parts.push(e.data); };
+        rec.start(1000);
+        window.__cap = { rec, stream, parts };
+        const st = stream.getVideoTracks()[0].getSettings();
+        return { mime, w: st.width, h: st.height, fps: st.frameRate };
+      }, { fps: c.fps ?? 60, kbps: c.kbps ?? 16000 });
+      return r;
+    }
+    case "capStop": {
+      const size = await page.evaluate(async () => {
+        const { rec, stream, parts } = window.__cap;
+        await new Promise((res) => { rec.onstop = res; rec.stop(); });
+        stream.getTracks().forEach((t) => t.stop());
+        window.__capBlob = new Blob(parts); return window.__capBlob.size;
+      });
+      const { mkdirSync: mk, writeFileSync: wf, appendFileSync: af } = await import("node:fs");
+      mk("footage2", { recursive: true }); const out = `footage2/${c.name}.webm`; wf(out, Buffer.alloc(0));
+      const CH = 6 * 1024 * 1024;
+      for (let off = 0; off < size; off += CH) {
+        const b64 = await page.evaluate(async ([o, n]) => { const buf = new Uint8Array(await window.__capBlob.slice(o, o + n).arrayBuffer()); let bin = ""; for (let i = 0; i < buf.length; i += 32768) bin += String.fromCharCode(...buf.subarray(i, i + 32768)); return btoa(bin); }, [off, CH]);
+        af(out, Buffer.from(b64, "base64"));
+      }
+      await page.evaluate(() => { window.__capBlob = null; window.__cap = null; });
+      return { out, size };
+    }
     case "recStop": { const out = await rec.stop(); rec = null; return { out }; }
     default: throw new Error("unknown op " + c.op);
   }
 }
 
+import { createWriteStream, mkdirSync as mkd } from "node:fs";
+const uploads = {};
 http.createServer(async (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*"); res.setHeader("Access-Control-Allow-Headers", "*"); res.setHeader("Access-Control-Allow-Private-Network", "true");
+  if (req.method === "OPTIONS") { res.end(); return; }
+  const u = new URL(req.url, "http://x");
+  if (u.pathname === "/up") {
+    const name = u.searchParams.get("n"); mkd("footage2", { recursive: true });
+    uploads[name] ??= createWriteStream(`footage2/${name}.webm`);
+    req.on("data", (d) => uploads[name].write(d));
+    req.on("end", () => { if (u.searchParams.get("last")) { uploads[name].end(); delete uploads[name]; } res.end("ok"); });
+    return;
+  }
   let body = ""; req.on("data", (d) => (body += d));
   req.on("end", async () => {
     try {

@@ -1,132 +1,20 @@
 [
- {
-  "id": "s1a",
-  "text": "This cat has a wallet.",
-  "speed": 0.95
- },
- {
-  "id": "s1b",
-  "text": "And bills to pay!",
-  "speed": 0.95
- },
- {
-  "id": "s2",
-  "text": "Welcome to Catchami — a living animal economy!",
-  "speed": 1.06
- },
- {
-  "id": "s3a",
-  "text": "It starts in the real world. Find an animal, throw your CamiCube, and turn a successful catch into a playable NFT.",
-  "speed": 1.11
- },
- {
-  "id": "s3b",
-  "text": "With its very own wallet.",
-  "speed": 0.95
- },
- {
-  "id": "s4a",
-  "text": "Now, give your pet a life.",
-  "speed": 1.06
- },
- {
-  "id": "s4b",
-  "text": "Explore, gather resources, and earn coins.",
-  "speed": 1.11
- },
- {
-  "id": "s4c",
-  "text": "But every action costs energy. And every pet gets hungry.",
-  "speed": 1.11
- },
- {
-  "id": "s5a",
-  "text": "Resources have real demand.",
-  "speed": 1.06
- },
- {
-  "id": "s5b",
-  "text": "Prices change as pets gather, consume, and trade.",
-  "speed": 1.11
- },
- {
-  "id": "s5c",
-  "text": "Find a travelling merchant, and turn your work into coins!",
-  "speed": 1.11
- },
- {
-  "id": "s6a",
-  "text": "Think your pet is lucky?",
-  "speed": 1.06
- },
- {
-  "id": "s6b",
-  "text": "Challenge another pet in Bubble Roulette!",
-  "speed": 1.11
- },
- {
-  "id": "s6c",
-  "text": "Win resources and coins... or end up completely soaked!",
-  "speed": 1.11
- },
- {
-  "id": "s7a",
-  "text": "Every pet has needs.",
-  "speed": 1.06
- },
- {
-  "id": "s7b",
-  "text": "Buy food. Recover with medicine. Craft equipment. Trade what you create.",
-  "speed": 1.14
- },
- {
-  "id": "s7c",
-  "text": "And every purchase changes the economy.",
-  "speed": 1.11
- },
- {
-  "id": "s8a",
-  "text": "And here's the best part.",
-  "speed": 1.06
- },
- {
-  "id": "s8b",
-  "text": "Your pet can run its own little business.",
-  "speed": 1.11
- },
- {
-  "id": "s8c",
-  "text": "Set its strategy, and it will gather, find merchants, trade, rest, and look after itself, even when you're not controlling it.",
-  "speed": 1.14
- },
- {
-  "id": "s9a",
-  "text": "Behind it all is a living economy.",
-  "speed": 1.06
- },
- {
-  "id": "s9b",
-  "text": "HQ collects what players spend, funds the travelling merchants, and adjusts their budgets as the treasury and market change.",
-  "speed": 1.14
- },
- {
-  "id": "s9c",
-  "text": "Every coin has a source. Every expense has a destination.",
-  "speed": 1.11
- },
- {
-  "id": "s10",
-  "text": "Real NFTs. A token balance inside every pet. Gameplay, settled on NEAR.",
-  "speed": 1.09
- },
- {
-  "id": "s11a",
-  "text": "Catchami.",
-  "speed": 0.95
- },
- {
-  "id": "s11b",
-  "text": "Catch a pet. Give it a life.",
-  "speed": 0.95
- }
+ {"id":"a1","text":"Welcome to Catchami — a living animal economy!","speed":1.0},
+ {"id":"a2","text":"It all starts in the real world.","speed":1.0},
+ {"id":"a3","text":"Spot a real cat or dog, throw your CamiCube...","speed":1.05},
+ {"id":"a4","text":"and it becomes a playable NFT pet, with its very own coin wallet.","speed":1.03},
+ {"id":"b1","text":"Now your pet needs to earn.","speed":1.05},
+ {"id":"b2","text":"It catches fish, and fills its bag.","speed":1.08},
+ {"id":"b3","text":"Then it sells them to a travelling merchant, who pays from its own budget.","speed":1.1},
+ {"id":"b4","text":"But working makes it hungry. So it needs food.","speed":1.08},
+ {"id":"b5","text":"Every meal costs coins, and uses fish from HQ's kitchen.","speed":1.1},
+ {"id":"b6","text":"And food changes market demand. The more fish gets eaten, the more merchants pay for it.","speed":1.12},
+ {"id":"c1","text":"That's where HQ comes in.","speed":1.05},
+ {"id":"c2","text":"HQ collects what pets spend, and sets each day's merchant budget from its reserves and recent revenue.","speed":1.12},
+ {"id":"c3","text":"Pets sell to merchants. Merchants deliver to HQ. Pets spend back into HQ. And HQ funds the next round.","speed":1.1},
+ {"id":"d1","text":"Your pet can do even more. Splash rivals in Bubble Roulette, heal up, craft gear, and trade.","speed":1.12},
+ {"id":"e1","text":"And here's the best part. Your pet doesn't need you to control every move.","speed":1.08},
+ {"id":"e2","text":"Choose a strategy, and it can work, trade, rest, and manage its own little life.","speed":1.06},
+ {"id":"f1","text":"Every pet is a real NFT. Its coins live in its own vault balance, and gameplay is settled on NEAR in batches.","speed":1.1},
+ {"id":"g1","text":"Catchami. Catch a pet. Give it a life.","speed":0.98}
 ]
