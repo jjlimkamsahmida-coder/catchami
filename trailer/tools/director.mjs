@@ -12,11 +12,13 @@ let cur = null, rec = null;
 const UA_ANDROID = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0 Mobile Safari/537.36";
 async function ensureTab(kind) {
   if (tabs[kind] && !tabs[kind].page.isClosed()) return tabs[kind];
-  const opts = kind === "phone"
+  const opts = kind === "tablet"
+    ? { viewport: { width: 1024, height: 768 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, userAgent: UA_ANDROID.replace("Pixel 8", "Pixel Tablet") }
+    : kind === "phone"
     ? { viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent: UA_ANDROID }
     : kind === "wide" ? { viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 }
     : { viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1.5 };
-  const ctx = await (kind === "phone" || !browser2 ? browser : browser2).newContext({ ...opts, ...(kind === "phone" ? { permissions: ["camera"] } : {}) });
+  const ctx = await (kind === "phone" || kind === "tablet" || !browser2 ? browser : browser2).newContext({ ...opts, ...(kind === "phone" || kind === "tablet" ? { permissions: ["camera"] } : {}) });
   // Keep a handle on the game's own socket and its latest messages (for steering and aiming).
   await ctx.addInitScript(() => {
     const Orig = window.WebSocket;
@@ -115,7 +117,7 @@ async function run(c) {
         await sleep(300);
       }
       if (!id) throw new Error("no battle started");
-      rec = await startRec(cur.cdp, c.name ?? "battle");
+      await run({ op: "capStart", name: c.name ?? "battle", kbps: 14000 });
       await page.evaluate(() => {
         clearInterval(window.__autoBr);
         window.__autoBr = setInterval(() => {
@@ -137,7 +139,7 @@ async function run(c) {
         await sleep(300);
       }
       await sleep(c.tail ?? 4500);
-      const out = await rec.stop(); rec = null;
+      const out = (await run({ op: "capStop", name: c.name ?? "battle" })).out;
       const res = await page.evaluate(() => { clearInterval(window.__autoBr); const m = window.__last.br_state?.match; return { winner: m?.winner, you: m?.you, reason: m?.reason, loot: m?.loot }; });
       return { out, ...res };
     }
@@ -169,7 +171,26 @@ async function run(c) {
     case "waitText": await page.getByText(c.text, { exact: !!c.exact }).first().waitFor({ timeout: c.timeout ?? 30000 }); return {};
     case "text": return { value: (await page.evaluate(() => document.body.innerText)).slice(0, c.max ?? 3000) };
     case "shot": return { path: await shot(page, c.name ?? "now") };
-    case "recStart": rec = await startRec(cur.cdp, c.name, { ...(cur.kind === "phone" ? { maxWidth: 1170, maxHeight: 2532 } : {}), nth: c.nth ?? 1 }); return { recording: c.name };
+    case "recStart": rec = await startRec(cur.cdp, c.name, { ...(cur.kind === "phone" ? { maxWidth: 1170, maxHeight: 2532 } : cur.kind === "tablet" ? { maxWidth: 2048, maxHeight: 1536 } : {}), nth: c.nth ?? 1 }); return { recording: c.name };
+    case "logStart": {
+      await page.evaluate(() => {
+        clearInterval(window.__logIv); window.__log = []; const t0 = performance.now();
+        const econ = async () => { try { const j = await (await fetch("/api/economy")).json(); window.__econ = { stock: j.ticker.hqStock, demand: Object.fromEntries(Object.entries(j.ticker.demand).map(([k, v]) => [k, v.indexBps])), hq: j.hq.balance, budget: j.today.merchantAllowance, granted: j.today.merchantGranted }; } catch {} };
+        econ(); window.__econIv = setInterval(econ, 3000);
+        window.__logIv = setInterval(() => {
+          const L = window.__last, own = L.own; if (!own) return; const p = own.pets.find((x) => x.id === own.controlled) ?? own.pets[0];
+          const row = L.snap?.p?.find((x) => x[0] === p.id);
+          const m = L.merchant?.detail;
+          window.__log.push({ t: +((performance.now() - t0) / 1000).toFixed(2), bal: p.balance, inv: p.carried ?? p.inventory, e: Math.round(p.energy), h: Math.round(p.hunger), hp: Math.round(p.hp), act: p.activity, st: row?.[3], wallet: own.wallet?.available, econ: window.__econ, merchant: m ? { id: L.merchant.id, cash: m.cash, room: m.capacityLeft, prices: m.prices } : null });
+        }, 500);
+      });
+      return {};
+    }
+    case "logStop": {
+      const log = await page.evaluate(() => { clearInterval(window.__logIv); clearInterval(window.__econIv); return window.__log; });
+      const { writeFileSync: wf, mkdirSync: mk } = await import("node:fs"); mk("footage2", { recursive: true }); wf(`footage2/${c.name}.log.json`, JSON.stringify(log));
+      return { rows: log.length };
+    }
     case "capStart": {
       const r = await page.evaluate(async ({ fps, kbps }) => {
         const stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: fps }, preferCurrentTab: true });

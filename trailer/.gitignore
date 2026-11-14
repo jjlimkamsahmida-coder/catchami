@@ -9,3 +9,5 @@ public/audio/
 assets/cam/
 .chrome-profile2/
 footage2/
+public/f2/
+.rec-token*

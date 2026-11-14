@@ -2,7 +2,7 @@
 // Other scripts attach over CDP on port 9333.
 import { resolve } from "node:path";
 import { chromium } from "playwright";
-const cam = resolve("assets/cam/cat.mjpeg");
+const cam = resolve("assets/cam/cat2.mjpeg");
 const ctx = await chromium.launchPersistentContext(resolve(".chrome-profile"), {
   channel: process.env.CHANNEL ?? "chrome",
   headless: true,

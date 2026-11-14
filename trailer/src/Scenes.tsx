@@ -4,10 +4,9 @@
  * All numbers shown are passed in from real recordings (see timeline.ts).
  */
 import React from "react";
-import { AbsoluteFill, Img, interpolate, spring, staticFile, useCurrentFrame, Easing } from "remotion";
+import { AbsoluteFill, Img, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig, Easing } from "remotion";
 
 export const C = { ink: "#2b1d3a", inkSoft: "#5a4a6b", paper: "#fff6e5", paper2: "#fbe9c8", leaf: "#6cc04a", sun: "#ffd166", sunDark: "#e8a93b", coral: "#ff7a59", sky: "#5ab8ff", plum: "#8a5cf6", mythic: "#f0569c" };
-const FPS = 30;
 const ease = Easing.bezier(0.33, 0, 0.2, 1);
 const stroke = (w: number) => ({ WebkitTextStroke: `${w}px ${C.ink}`, paintOrder: "stroke fill" as const });
 const fmtK = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(n >= 1e7 ? 0 : 2)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(n >= 1e5 ? 0 : 1)}K` : `${Math.round(n)}`);
@@ -33,6 +32,7 @@ export function Backdrop({ tint = C.sky }: { tint?: string }) {
 export function CardReveal({ card, cardW, cardH, walletBox, wallet, rarity, sticker, startAt = 0 }: {
   card: string; cardW: number; cardH: number; walletBox: [number, number, number, number]; wallet: number; rarity: string; sticker?: string; startAt?: number;
 }) {
+  const FPS = useVideoConfig().fps;
   const frame = useCurrentFrame() - startAt * FPS;
   const fly = interpolate(frame, [0, 22], [0, 1], { easing: ease, extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   const settle = spring({ frame: frame - 18, fps: FPS, config: { damping: 12, mass: 0.7 } });
@@ -84,11 +84,12 @@ export const LOOP_STEPS: Step[] = [
   { from: "pet", to: "merchant", icon: "icon-fish.png", label: "Pet sells fish", color: C.sky },
   { from: "merchant", to: "pet", icon: "ui-coin.png", label: "Merchant pays coins", color: C.sun },
   { from: "merchant", to: "hq", icon: "icon-fish.png", label: "Merchant delivers to HQ", color: C.leaf },
-  { from: "pet", to: "hq", icon: "ui-coin.png", label: "Pet spends → HQ revenue", color: C.coral },
+  { from: "pet", to: "hq", icon: "ui-coin.png", label: "Pet's meal money → HQ", color: C.coral },
   { from: "hq", to: "merchant", icon: "ui-coin.png", label: "HQ funds the next budget", color: C.plum },
 ];
 
 export function EconomyLoop({ petSticker, perStep = 1.5, amounts = {} as Record<number, string> }: { petSticker: string; perStep?: number; amounts?: Record<number, string> }) {
+  const FPS = useVideoConfig().fps;
   const frame = useCurrentFrame();
   const t = frame / FPS;
   const pos = { pet: [400, 640], merchant: [960, 330], hq: [1520, 640] } as const;
@@ -144,9 +145,13 @@ export function EconomyLoop({ petSticker, perStep = 1.5, amounts = {} as Record<
 // ------------------------------------------------------------------ autopilot activity panel
 export type ActivityRow = { t: number; text: string; balance?: number; icon?: string };
 /** A real activity log (recorded alongside the time-lapse) shown as a feed. `speed` maps trailer seconds to recording seconds. */
-export function ActivityPanel({ rows, speed, offset }: { rows: ActivityRow[]; speed: number; offset: number }) {
+export function ActivityPanel({ rows, speed, offset, map }: { rows: ActivityRow[]; speed: number; offset: number; map?: Array<[number, number, number]> }) {
+  const FPS = useVideoConfig().fps;
   const frame = useCurrentFrame();
-  const rt = offset + (frame / FPS) * speed;
+  const lt = frame / FPS;
+  // map: [localStart, recordingStart, rate] segments
+  let rt = offset + lt * speed;
+  if (map) { for (const [ls, rs, r] of map) if (lt >= ls) rt = rs + (lt - ls) * r; }
   const shown = rows.filter((r) => r.t <= rt).slice(-5);
   const last = [...rows].reverse().find((r) => r.t <= rt && r.balance !== undefined);
   return (

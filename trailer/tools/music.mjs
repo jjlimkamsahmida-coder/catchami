@@ -2,7 +2,7 @@
 // 120 BPM, C major, sections timed to the trailer's scenes. Output: public/audio/music.wav (48 kHz stereo).
 import { writeFileSync, mkdirSync } from "node:fs";
 
-const SR = 48000, BPM = 120, BEAT = 60 / BPM, LEN = 112;
+const SR = 48000, BPM = 120, BEAT = 60 / BPM, LEN = 110;
 const N = Math.ceil(SR * LEN);
 const L = new Float32Array(N), R = new Float32Array(N);       // dry bus
 const RL = new Float32Array(N), RR = new Float32Array(N);     // reverb send
@@ -127,7 +127,7 @@ function melody(t, notes, len, inst = "marimba", gain = 0.28, pan = 0.15, oct = 
 }
 
 // ---------------------------------------------------------------- arrangement (times match src/timeline.ts)
-const S = { hookEnd: 7.5, s3: 14, s4: 25.5, s5: 36.5, s6: 47.5, soak: 56.6, s7: 58.5, s8: 69.5, s9: 82, s10: 97.5, s11: 103.8, logo: 109.3, end: 112 };
+const S = { hookEnd: 4.6, s3: 12.2, s4: 17.8, s5: 25.8, s6: 58.8, soak: 61.3, s7: 63.0, s8: 67.6, s9: 84.0, s10: 87.0, s11: 93.8, logo: 101.0, end: 110 };
 
 // Hook: sparkly music-box arpeggio, then a comic stop, then a snare fill into the big reveal.
 ["C6", "E6", "G6", "B6", "C7", "G6", "E6", "D6", "C6", "E6", "G6", "C7"].forEach((s, k) => add(0.2 + k * 0.25, glock(midi(nn(s))), 0.16, k % 2 ? 0.4 : -0.4, 0.5));
@@ -228,5 +228,5 @@ for (let j = 0; j < N; j++) {
   pcm.writeInt16LE(Math.round(Math.tanh(R[j] * g) * 0.95 * fade * 32767), 46 + j * 4);
 }
 mkdirSync("public/audio", { recursive: true });
-writeFileSync("public/audio/music.wav", pcm);
+writeFileSync(process.env.OUT ?? "public/audio/music.wav", pcm);
 console.log("music.wav", LEN, "s, peak", peak.toFixed(2));
