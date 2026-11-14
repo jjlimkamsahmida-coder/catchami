@@ -262,7 +262,11 @@ export class ChainWorker {
 
   private async ledgerAccountFor(tx: Tx, source: unknown): Promise<string | null> {
     const s = source as { Pet?: string; User?: string };
-    if (s.Pet?.startsWith("a-")) return acct.pet(s.Pet.slice(2));
+    if (s.Pet?.startsWith("a-")) {
+      // Only pets this server knows (the vault is shared history; another database may have made the request).
+      const r = await tx.query(`SELECT 1 FROM accounts WHERE id = $1`, [acct.pet(s.Pet.slice(2))]);
+      return r.rows.length ? acct.pet(s.Pet.slice(2)) : null;
+    }
     if (s.User) {
       const r = await tx.query<{ id: string }>(`SELECT id FROM users WHERE chain_bucket = $1 OR near_account = $1 LIMIT 1`, [s.User]);
       return r.rows[0] ? acct.user(r.rows[0].id) : null;
@@ -286,6 +290,7 @@ export class ChainWorker {
            ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, acked = chain_withdrawals.acked OR EXCLUDED.acked, amount = EXCLUDED.amount, updated_at = now()`,
           [id, w.account, JSON.stringify(w.source), la, w.amount, w.status, w.acked],
         );
+        if (id >= from) await kvSet(tx, "chain:wd_id", Math.max(id + 1, await kvGet<number>(tx, "chain:wd_id", 0)));
         const row = (await tx.query<{ hold_id: string | null; note: string | null }>(`SELECT hold_id, note FROM chain_withdrawals WHERE id = $1`, [id])).rows[0]!;
         if (!la) { await tx.query(`UPDATE chain_withdrawals SET note = 'unmatched' WHERE id = $1`, [id]); return; }
         const holdId = `cw:${id}`;
@@ -307,7 +312,6 @@ export class ChainWorker {
           await releaseHold(tx, row.hold_id);
           await tx.query(`UPDATE chain_withdrawals SET note = 'released' WHERE id = $1`, [id]);
         }
-        if (id >= from) await kvSet(tx, "chain:wd_id", Math.max(id + 1, await kvGet<number>(tx, "chain:wd_id", 0)));
       });
       const s = w.source as { Pet?: string };
       if (s.Pet?.startsWith("a-")) { const p = this.game.pets.get(s.Pet.slice(2)); if (p) await this.game.refreshBalance(p); }
