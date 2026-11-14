@@ -168,6 +168,8 @@ function Join({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
   const google = async () => {
     setBusy("google"); setErr(null);
     try {
+      // NEAR Auth only works on sites NEAR has approved; elsewhere (test network) Google sign-in is simulated.
+      if (!nearAuthAvailable()) { const g = await api<{ token: string }>("/api/auth/google-demo", {}); await adoptSession(g.token); await afterJoin(); return; }
       const r = await signInWithNearAuth();
       await adoptSession(r.token);
       if (!r.created && store.get().onboarding?.stage === "done") { window.location.assign("/game"); return; }
@@ -220,7 +222,7 @@ function Join({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
         </button>
         <button className="join-opt google" disabled={!!busy} onClick={google}>
           <span className="g-logo" aria-hidden>G</span>
-          <span><b>{busy === "google" ? "Signing in…" : "Continue with Google"}</b><small>{nearAuthAvailable() ? "Powered by NEAR Auth — a real wallet with no app or seed phrase. Pets mint straight into it." : "NEAR Auth · waiting for NEAR to approve this website"}</small></span>
+          <span><b>{busy === "google" ? "Signing in…" : "Continue with Google"}</b><small>{nearAuthAvailable() ? "Powered by NEAR Auth — a real wallet with no app or seed phrase. Pets mint straight into it." : "One tap. Your pets' NFTs are kept safe for you until you connect a wallet."}</small></span>
         </button>
         <button className={`join-opt near ${wallets ? "open" : ""}`} disabled={!!busy} onClick={() => { if (!wallets) void prepareNear().catch(() => {}); setWallets((v) => !v); }}>
           <span className="near-logo">N</span>

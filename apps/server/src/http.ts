@@ -68,6 +68,15 @@ export function startHttp(db: Db, game: Game, detector: () => Detector | null, s
     if (!allow(`guest:${ip(c.req)}`, 1 / 60, 5)) throw new HttpError(429, "rate_limited", "Too many new accounts from this network");
     return createGuest(db);
   });
+  // Google sign-in on sites NEAR Auth hasn't approved yet: SIMULATED on test networks (no Google OAuth).
+  // It creates a game account whose pet NFTs are held in custody until a wallet is linked.
+  route("POST", "/api/auth/google-demo", async (c) => {
+    if (!allow(`guest:${ip(c.req)}`, 1 / 60, 5)) throw new HttpError(429, "rate_limited", "Too many new accounts from this network");
+    if (env.network === "mainnet") throw new HttpError(404, "not_available", "Google sign-in isn't configured");
+    const g = await createGuest(db);
+    await db.query(`INSERT INTO kv (k, v) VALUES ($1, $2) ON CONFLICT (k) DO NOTHING`, [`auth:google_demo:${g.userId}`, JSON.stringify({ at: Date.now(), simulated: true })]);
+    return { ...g, provider: "google_demo" };
+  });
   // NEAR Auth: Google / Apple / email / passkey logins that control a real NEAR account (MPC-held key).
   route("POST", "/api/auth/near-auth", async (c) => {
     if (!allow(`nearauth:${ip(c.req)}`, 1 / 10, 10)) throw new HttpError(429, "rate_limited", "Too many tries");
