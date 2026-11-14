@@ -137,7 +137,8 @@ export class Game {
     const equipment = (row.equipment ?? []).filter((e) => e.equipped).map((e) => ({ id: e.id, kind: e.kind, rarity: e.rarity }));
     const stats = recomputeStats({ genome, equipment });
     const s: PetState = { ...freshPetState(this.hq().x, this.hq().y, stats), ...row.state };
-    s.strategy = { ...DEFAULT_STRATEGY, ...s.strategy };
+    // Autopilot is always on: pets saved before that rule (auto: false) get it back on load.
+    s.strategy = { ...DEFAULT_STRATEGY, ...s.strategy, auto: true };
     // Offline catch-up for needs while the server was down (capped at 24h).
     const gap = Math.min(24 * 3600, Math.max(0, (now - new Date(row.updated_at).getTime()) / 1000));
     s.hunger = Math.min(ECONOMY.stats.hungerMax, s.hunger + gap * ECONOMY.stats.hungerPerSec);

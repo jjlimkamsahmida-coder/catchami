@@ -108,8 +108,8 @@ export function freshPetState(x: number, y: number, stats: Stats): PetState {
     inventory: emptyInventory(),
     status: "active",
     koUntil: null,
-    // New pets start under the player's control; the tutorial shows how to turn autopilot on.
-    strategy: { ...DEFAULT_STRATEGY, auto: false },
+    // Autopilot is always on (steering only pauses it).
+    strategy: { ...DEFAULT_STRATEGY, auto: true },
     gatheredToday: 0,
     gatherDay: "",
     gatheredTotal: 0,
