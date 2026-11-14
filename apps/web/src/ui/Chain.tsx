@@ -12,6 +12,7 @@ import { toDecimalString } from "@catchami/shared";
 import { store, toast, useStore } from "../net/store.ts";
 import { api, refreshWallet, rid } from "../net/api.ts";
 import { linkNear, prepareNear, signAndSend, WALLETS, type WalletId } from "../net/near.ts";
+import { linkNearAuth } from "../net/nearauth.ts";
 import { fmt, useAsync } from "./common.tsx";
 import { sfx } from "./sfx.ts";
 
@@ -199,6 +200,11 @@ function ConnectWallet({ onLinked }: { onLinked: () => void }) {
   const [busy, setBusy] = useState<WalletId | null>(null);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => { void prepareNear().catch(() => {}); }, []);
+  const google = async () => {
+    setBusy("meteor-wallet"); setErr(null);
+    try { const r = await linkNearAuth(); store.set({ nearAccount: r.accountId }); toast("good", "Signed in with Google — your pet NFTs are on their way"); onLinked(); }
+    catch (e) { setErr((e as Error).message); } finally { setBusy(null); }
+  };
   const go = async (id: WalletId) => {
     setBusy(id); setErr(null);
     try { const r = await linkNear(id); store.set({ nearAccount: r.accountId }); toast("good", `Linked ${r.accountId} — your pet NFTs are on their way`); onLinked(); }
@@ -206,7 +212,8 @@ function ConnectWallet({ onLinked }: { onLinked: () => void }) {
   };
   return (
     <div className="col" style={{ gap: 8 }}>
-      <p className="small" style={{ margin: 0 }}>Connect a NEAR wallet to own your pet NFTs directly and withdraw their coins. The NFTs we hold for you move to your wallet automatically.</p>
+      <p className="small" style={{ margin: 0 }}>Connect a NEAR account to own your pet NFTs directly and withdraw their coins. The NFTs we hold for you move to it automatically.</p>
+      <button className="join-opt google" disabled={!!busy} onClick={google}><span className="g-logo" aria-hidden>G</span><span><b>Continue with Google</b><small>NEAR Auth — no app, no seed phrase</small></span></button>
       <div className="wallet-list">{WALLETS.map((w) => <button key={w.id} className="btn paper" disabled={!!busy} onClick={() => void go(w.id)}><b>{w.icon} {busy === w.id ? "Waiting for wallet…" : w.name}</b><small>{w.note}</small></button>)}</div>
       <div className="join-soon mini"><span className="soon-pill">◎ Solana · soon</span><span className="soon-pill">⟠ EVM · soon</span></div>
       {err && <p className="err small" style={{ margin: 0 }}>{err}</p>}

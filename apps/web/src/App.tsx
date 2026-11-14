@@ -41,7 +41,17 @@ export function App() {
   const stage = useStore((s) => s.onboarding?.stage);
   const [booted, setBooted] = useState(false);
   const [path, go] = usePath();
-  useEffect(() => { void boot().finally(() => setBooted(true)); }, []);
+  useEffect(() => {
+    void (async () => {
+      // Coming back from a NEAR Auth (Google) redirect sign-in.
+      try {
+        const { finishNearAuthRedirect } = await import("./net/nearauth.ts");
+        const r = await finishNearAuthRedirect();
+        if (r) { const { adoptSession } = await import("./net/api.ts"); await adoptSession(r.token); go(r.created ? "/start" : "/game", true); }
+      } catch (e) { console.error("NEAR Auth sign-in failed", e); }
+      await boot();
+    })().finally(() => setBooted(true));
+  }, []);
   const inGame = stage === "tutorial" || stage === "done";
   // The game needs an account that has finished the story up to the tutorial.
   useEffect(() => {

@@ -18,6 +18,7 @@ import { GameError, type Game, type GameClient } from "./world/game.ts";
 import * as svc from "./services.ts";
 import * as onb from "./onboarding.ts";
 import * as pay from "./payments.ts";
+import * as nearAuth from "./chain/nearauth.ts";
 import { chainMe, getChainWorker } from "./chain/worker.ts";
 
 type Handler = (ctx: Ctx) => Promise<unknown>;
@@ -67,15 +68,16 @@ export function startHttp(db: Db, game: Game, detector: () => Detector | null, s
     if (!allow(`guest:${ip(c.req)}`, 1 / 60, 5)) throw new HttpError(429, "rate_limited", "Too many new accounts from this network");
     return createGuest(db);
   });
-  // Google sign-in. On the test network this is SIMULATED (no Google OAuth client is configured):
-  // it creates a game account whose pet NFTs are held in custody until a wallet is linked.
-  route("POST", "/api/auth/google-demo", async (c) => {
-    if (!allow(`guest:${ip(c.req)}`, 1 / 60, 5)) throw new HttpError(429, "rate_limited", "Too many new accounts from this network");
-    if (env.network === "mainnet") throw new HttpError(404, "not_available", "Google sign-in isn't configured");
-    const g = await createGuest(db);
-    await db.query(`INSERT INTO kv (k, v) VALUES ($1, $2) ON CONFLICT (k) DO NOTHING`, [`auth:google_demo:${g.userId}`, JSON.stringify({ at: Date.now(), simulated: true })]);
-    return { ...g, provider: "google_demo" };
+  // NEAR Auth: Google / Apple / email / passkey logins that control a real NEAR account (MPC-held key).
+  route("POST", "/api/auth/near-auth", async (c) => {
+    if (!allow(`nearauth:${ip(c.req)}`, 1 / 10, 10)) throw new HttpError(429, "rate_limited", "Too many tries");
+    return nearAuth.signInNearAuth(db, c.body);
   });
+  route("POST", "/api/near-auth/link", async (c) => nearAuth.linkNearAuth(db, uid(c), c.body), { auth: true });
+  route("POST", "/api/near-auth/sign", async (c) => {
+    if (!allow(`nasign:${uid(c)}`, 1 / 6, 6)) throw new HttpError(429, "rate_limited", "One approval at a time");
+    return nearAuth.relaySign(db, uid(c), c.body);
+  }, { auth: true });
   route("GET", "/api/me", async (c) => {
     const u = await getUser(db, uid(c));
     if (!u) throw new HttpError(401, "auth", "Unknown account");

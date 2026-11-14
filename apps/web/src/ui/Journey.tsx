@@ -12,6 +12,7 @@ import { ECONOMY, formatTokens, tokens } from "@catchami/shared";
 import { store, useStore, type OnboardingStage } from "../net/store.ts";
 import { adoptSession, api, forgetDevice, refreshWallet, setOnboarding, startAsGuest } from "../net/api.ts";
 import { prepareNear, signInWithNear, WALLETS, type WalletId } from "../net/near.ts";
+import { nearAuthAvailable, signInWithNearAuth } from "../net/nearauth.ts";
 import { CollectorCard, cardFromPet } from "./CollectorCard.tsx";
 import { genUrl } from "../game/assets.ts";
 import { sfx } from "./sfx.ts";
@@ -166,7 +167,12 @@ function Join({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
   };
   const google = async () => {
     setBusy("google"); setErr(null);
-    try { const g = await api<{ token: string }>("/api/auth/google-demo", {}); await adoptSession(g.token); await afterJoin(); } catch (e) { setErr((e as Error).message); } finally { setBusy(null); }
+    try {
+      const r = await signInWithNearAuth();
+      await adoptSession(r.token);
+      if (!r.created && store.get().onboarding?.stage === "done") { window.location.assign("/game"); return; }
+      await afterJoin();
+    } catch (e) { const m = (e as Error).message; setErr(/popup|closed|cancel/i.test(m) ? "Sign-in was closed — tap Continue with Google to try again." : m); } finally { setBusy(null); }
   };
   const soon = (what: string) => setErr(`${what} sign-in is coming soon — use a guest, Google or NEAR account for now.`);
   const near = async (id: WalletId) => {
@@ -214,7 +220,7 @@ function Join({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
         </button>
         <button className="join-opt google" disabled={!!busy} onClick={google}>
           <span className="g-logo" aria-hidden>G</span>
-          <span><b>{busy === "google" ? "Signing in…" : "Continue with Google"}</b><small>One tap. Your pets' NFTs are kept safe for you until you connect a wallet.</small></span>
+          <span><b>{busy === "google" ? "Signing in…" : "Continue with Google"}</b><small>{nearAuthAvailable() ? "Powered by NEAR Auth — a real wallet with no app or seed phrase. Pets mint straight into it." : "NEAR Auth · waiting for NEAR to approve this website"}</small></span>
         </button>
         <button className={`join-opt near ${wallets ? "open" : ""}`} disabled={!!busy} onClick={() => { if (!wallets) void prepareNear().catch(() => {}); setWallets((v) => !v); }}>
           <span className="near-logo">N</span>

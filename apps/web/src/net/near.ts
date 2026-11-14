@@ -103,6 +103,9 @@ async function walletFor(accountId: string, contractId: string, walletId?: Walle
 
 /** Sign and send one transaction with the player's own wallet. Returns the decoded return value. */
 export async function signAndSend(accountId: string, c: Call, walletId?: WalletId | null): Promise<{ value: unknown; txHash: string | null }> {
+  // Google / email players (NEAR Auth): approve in the NEAR Auth popup, signed by the MPC network.
+  const na = await import("./nearauth.ts");
+  if (na.isNearAuthAccount(accountId)) return na.nearAuthSignAndSend(c);
   const wallet = await walletFor(accountId, c.receiverId, walletId);
   const { actionCreators } = await import("@near-js/transactions");
   const action = actionCreators.functionCall(c.methodName, c.args, BigInt(c.gasTgas ?? 100) * 10n ** 12n, c.depositYocto ?? 0n);

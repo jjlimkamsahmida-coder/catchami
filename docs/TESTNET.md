@@ -35,13 +35,23 @@ Keys live in `~/.near-credentials/testnet/` on the machine that created them. Th
 | Pay with any asset via NEAR Intents | **Simulated**: Intents is mainnet-only. Asset list and USD prices are live from the 1Click API |
 | Sell $CATCHAMI for USDC | **Real** swap on the Ref testnet pool, signed by the player's wallet |
 | Cash out USDC to a bank (off-ramp) | **Simulated** |
-| Google sign-in | **Simulated**: no Google OAuth client. It creates a game account whose NFTs are held in custody |
+| Google / email / passkey sign-in | **Real, through NEAR Auth** (MPC-held key, no seed phrase). The player's NEAR account is the implicit account of their derived key. The server checks the Auth0 ID token, gives new accounts 0.05 testnet NEAR for gas, and relays the MPC `sign` calls. **Limit:** NEAR's shared testnet login only allows `http://localhost:3000`, so the live domain needs NEAR to approve it (or our own client ID). Until then the button says so. |
 | NEAR wallet sign-in (Meteor, Intear, HERE, Sender) | **Real** (MyNearWallet was removed because it is sunset) |
 | Solana / EVM wallets | Coming soon |
 
 Known limits:
 - Pets whose NFT is in a player's own wallet can't be listed on the in-game market, because moving them needs the owner's signature. They trade from the wallet instead.
 - Transferring an NFT outside the game isn't picked up by the server yet.
+
+## NEAR Auth (Google) locally
+
+The shared testnet login only returns to `http://localhost:3000`. To use it against the live testnet server:
+
+```
+pnpm --filter @catchami/web dev:nearauth:live   # http://localhost:3000 -> catchami-production (testnet)
+```
+
+Add `http://localhost:3000` to the live server's `ALLOWED_ORIGINS` (Railway) so the game's WebSocket connects. Once NEAR approves the domain, set `VITE_NEAR_AUTH_ORIGINS=https://catchami-production.up.railway.app` (and `VITE_NEAR_AUTH_CLIENT_ID` / `NEAR_AUTH_CLIENT_ID` if they issue our own client) and redeploy.
 
 ## How the money stays in step
 

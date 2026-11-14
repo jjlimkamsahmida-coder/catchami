@@ -69,7 +69,7 @@ export async function setOnboarding(stage: import("./store.ts").OnboardingStage,
 /** Forget this device's account (the account itself stays on the server). */
 export function forgetDevice() {
   disconnect();
-  try { localStorage.removeItem(TOKEN_KEY); } catch {}
+  try { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem("catchami.nearauth"); } catch {}
   store.set({ token: null, onboarding: null, userId: null, own: [], controlled: null, wallet: null, nearAccount: null });
 }
 
@@ -191,7 +191,7 @@ function onMessage(m: ServerMsg) {
 }
 
 export function signOut() {
-  try { localStorage.removeItem(TOKEN_KEY); } catch {}
+  try { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem("catchami.nearauth"); } catch {}
   location.assign("/");
 }
 
