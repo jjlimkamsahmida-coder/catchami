@@ -11,7 +11,7 @@ A mobile-first multiplayer fantasy game where real-world cats and dogs become pl
 <p align="center">
   <a href="https://catchami.fun/"><b>▶ Play Catchami</b></a> ·
   <a href="https://github.com/jjlimkamsahmida-coder/catchami">GitHub</a> ·
-  <b>Demo video</b> (coming soon)
+  <a href="https://x.com/catchamifun/status/2121735385323868477"><b>Demo video</b></a>
 </p>
 
 <p align="center">
@@ -289,5 +289,5 @@ Full setup, including NEAR testnet deployment: **[docs/SETUP.md](docs/SETUP.md)*
 <p align="center">
   <a href="https://catchami.fun/"><b>catchami.fun</b></a> ·
   <a href="https://github.com/jjlimkamsahmida-coder/catchami">github.com/jjlimkamsahmida-coder/catchami</a> ·
-  Demo video: coming soon
+  <a href="https://x.com/catchamifun/status/2121735385323868477">Demo video on X</a>
 </p>
