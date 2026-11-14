@@ -36,18 +36,75 @@ let modelPromise: Promise<Coco> | null = null;
  * so throwing works while this is still loading or if it fails. Exported so
  * screens before the camera can start warming it up.
  */
+const MODEL_DIR = "/models/ssdlite_mobilenet_v2/";
+/** Download progress of the animal finder (0–1), for the "warming up" message. */
+let modelProgress = 0;
+/** True after the download, while the model is being set up on this device. */
+let warming = false;
+export const modelWarming = () => warming;
+const progressSubs = new Set<(p: number) => void>();
+const setProgress = (p: number) => { modelProgress = p; progressSubs.forEach((f) => f(p)); };
+export function onModelProgress(f: (p: number) => void) { progressSubs.add(f); f(modelProgress); return () => { progressSubs.delete(f); }; }
+
+/** Fetch the model's weight files with progress (warms the HTTP cache, so the model load itself is instant). */
+async function prefetchWeights() {
+  const manifest = await fetch(MODEL_DIR + "model.json").then((r) => r.json()) as { weightsManifest: Array<{ paths: string[] }> };
+  const paths = manifest.weightsManifest.flatMap((w) => w.paths);
+  const total = 18_000_000; // ~18 MB; exact sizes arrive with each response
+  let done = 0;
+  await Promise.all(paths.map(async (p) => {
+    const res = await fetch(MODEL_DIR + p);
+    const reader = res.body?.getReader();
+    if (!reader) { await res.arrayBuffer(); return; }
+    for (;;) { const { done: end, value } = await reader.read(); if (end) break; done += value.length; setProgress(Math.min(0.97, done / total)); }
+  }));
+}
+
+type Tf = typeof import("@tensorflow/tfjs");
+const within = <T,>(p: Promise<T>, ms: number) => Promise.race([p.then(() => true).catch(() => false), new Promise<boolean>((r) => setTimeout(() => r(false), ms))]);
+const tick = () => new Promise((r) => setTimeout(r, 0));
+
+/** Load the model on one backend and time a warmed-up detection (ms), so we can keep the fastest. */
+async function tryBackend(tf: Tf, name: "webgl" | "wasm" | "cpu", readyMs: number): Promise<{ model: Coco; ms: number } | null> {
+  if (name === "wasm") {
+    try { const wasm = await import("@tensorflow/tfjs-backend-wasm"); wasm.setWasmPaths("/tfjs/"); } catch { return null; }
+  }
+  if (!(await within(tf.setBackend(name).then((ok) => { if (!ok) throw new Error("no backend"); return tf.ready(); }), readyMs))) return null;
+  const mod = await import("@tensorflow-models/coco-ssd");
+  // The package is CommonJS: depending on the bundler, load() is on the module or on its default export.
+  const coco = ((mod as unknown as { load?: unknown }).load ? mod : (mod as unknown as { default: typeof mod }).default) as typeof mod;
+  const model = (await coco.load({ base: "lite_mobilenet_v2", modelUrl: MODEL_DIR + "model.json" })) as unknown as Coco;
+  const c = document.createElement("canvas"); c.width = 480; c.height = 360;
+  const run = () => model.detect(c as unknown as HTMLVideoElement, 1, 0.9);
+  await run(); await tick();                     // first pass: shader compile / JIT
+  const t0 = performance.now(); await run();     // second pass: real speed
+  return { model, ms: performance.now() - t0 };
+}
+
 export function loadModel(): Promise<Coco> {
   modelPromise ??= (async () => {
-    const tf = await import("@tensorflow/tfjs");
-    // Some phones never finish WebGL setup; fall back to the CPU backend.
-    const ok = await Promise.race([tf.ready().then(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), 6000))]);
-    if (!ok) { await tf.setBackend("cpu"); await tf.ready(); }
-    const mod = await import("@tensorflow-models/coco-ssd");
-    // The package is CommonJS: depending on the bundler, load() is on the module or on its default export.
-    const coco = ((mod as unknown as { load?: unknown }).load ? mod : (mod as unknown as { default: typeof mod }).default) as typeof mod;
-    return (await coco.load({ base: "lite_mobilenet_v2", modelUrl: "/models/ssdlite_mobilenet_v2/model.json" })) as unknown as Coco;
+    const [tf] = await Promise.all([import("@tensorflow/tfjs"), prefetchWeights().catch(() => {})]);
+    warming = true; setProgress(modelProgress);
+    // Phones: WebAssembly starts in ~2 s and is reliable; WebGL can spend 20 s+ compiling shaders on some phones.
+    // Computers: WebGL first. Either way, keep a backend only if it's fast enough, otherwise try the other.
+    const touch = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+    const order: Array<"webgl" | "wasm"> = touch ? ["wasm", "webgl"] : ["webgl", "wasm"];
+    let best: { model: Coco; ms: number; name: string } | null = null;
+    for (const name of order) {
+      const r = await tryBackend(tf, name, name === "wasm" ? 8000 : 5000).catch(() => null);
+      console.info(`[catch] ${name}:`, r ? Math.round(r.ms) + " ms/frame" : "unavailable");
+      if (r && (!best || r.ms < best.ms)) best = { ...r, name };
+      if (best && best.ms <= 400) break;
+    }
+    // Each model's weights live on the backend it was loaded with: switch back to the winner.
+    if (best && tf.getBackend() !== best.name) await tf.setBackend(best.name);
+    if (!best) { const c = await tryBackend(tf, "cpu", 8000); if (c) best = { ...c, name: "cpu" }; }
+    if (!best) throw new Error("animal finder unavailable");
+    console.info("[catch] animal finder ready on", tf.getBackend(), Math.round(best.ms) + " ms/frame");
+    warming = false; setProgress(1);
+    return best.model;
   })();
-  modelPromise.catch(() => { modelPromise = null; });
+  modelPromise.catch(() => { modelPromise = null; warming = false; setProgress(0); });
   return modelPromise;
 }
 
@@ -73,6 +130,8 @@ export function CatchScreen({ first = false, onClose, onCaught }: CatchProps = {
   const [stage, setStage] = useState<Stage>({ k: "aim" });
   const [camError, setCamError] = useState<string | null>(null);
   const [modelState, setModelState] = useState<"loading" | "slow" | "ready" | "failed">("loading");
+  const [modelPct, setModelPct] = useState(0);
+  useEffect(() => onModelProgress((p) => setModelPct(Math.round(p * 100))), []);
   const [live, setLive] = useState<{ box: Box; cls: string; score: number; streak: number } | null>(null);
   const [quotes, setQuotes] = useState<CatchQuote[] | null>(null);
   const [tier, setTier] = useState<CatchTier>("basic");
@@ -215,11 +274,11 @@ export function CatchScreen({ first = false, onClose, onCaught }: CatchProps = {
 
       {stage.k === "aim" && (
         <>
-          {t && <div className={`reticle ${locked ? "locked" : ""}`} style={t}><span className="reticle-tag">{live!.cls === "cat" ? "Cat" : "Dog"}{locked ? " · throw!" : ""}</span></div>}
+          {t && <div className={`reticle ${locked ? "locked" : ""}`} style={t}><span className="reticle-tag">{locked ? "Pet found · throw!" : "Pet"}</span></div>}
           {/* Tap the photo to throw there (mouse friendly). */}
           <div style={{ position: "absolute", inset: 0, zIndex: 2, cursor: "crosshair" }} onClick={(e) => void throwAt({ x: e.clientX, y: e.clientY })} />
           <div className="status panel catch-status">
-            {camError ?? hint ?? (modelState === "loading" ? "Warming up the animal finder…" : modelState === "slow" || modelState === "failed" ? "Point at a cat or dog and flick the cube!" : locked ? "Got it! Flick or tap to throw" : live ? "Hold steady…" : "Point at a real cat or dog")}
+            {camError ?? hint ?? (modelState === "loading" || modelState === "slow" ? (modelPct > 0 && modelPct < 97 && !modelWarming() ? `Loading the animal finder… ${modelPct}% — you can already throw` : "Warming up the animal finder… you can already throw") : modelState === "failed" ? "Point at a cat or dog and flick the cube!" : locked ? "Got it! Flick or tap to throw" : live ? "Hold steady…" : "Point at a real cat or dog")}
           </div>
           <ThrowCube start={start()} disabled={!!camError && !devPhoto.current} onThrow={(to) => void throwAt(to)} excited={locked} />
           <div className="bottom catch-bottom">

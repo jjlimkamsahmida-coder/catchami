@@ -96,10 +96,14 @@ export async function validateCapture(db: Db, detector: Detector | null, userId:
       const s = seen();
       return reject("no_animal", s.length ? `No supported animal found (saw: ${s.join(", ")}). Cats and dogs are supported right now.` : "No supported animal found. Get closer, with good light.", { results });
     }
-    species = hits[0]!.best!.species;
-    if (hits.some((h) => h.best!.species !== species)) return reject("ambiguous", "Couldn't tell which animal this is. Try again with just one animal in view.", { results });
-    bbox = results[bestIdx]!.best!.bbox;
-    score = results[bestIdx]!.best!.score;
+    // Cats and dogs can flip between frames (the same animal scores "cat" in one frame and "dog" in the next):
+    // take the species with the most total confidence across the burst instead of refusing the catch.
+    const totals = new Map<Species, number>();
+    for (const h of hits) totals.set(h.best!.species, (totals.get(h.best!.species) ?? 0) + h.best!.score);
+    species = [...totals.entries()].sort((x, y) => y[1] - x[1])[0]![0];
+    const top = hits.filter((h) => h.best!.species === species).sort((x, y) => y.best!.score - x.best!.score)[0]!.best!;
+    bbox = top.bbox;
+    score = top.score;
   }
   const det = { species, bbox, score };
   const hash = dHash(frame, det.bbox.map(Math.round) as [number, number, number, number]);

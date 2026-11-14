@@ -96,6 +96,9 @@ importers:
       '@tensorflow/tfjs':
         specifier: 4.22.0
         version: 4.22.0(seedrandom@3.0.5)
+      '@tensorflow/tfjs-backend-wasm':
+        specifier: 4.22.0
+        version: 4.22.0(@tensorflow/tfjs-core@4.22.0)
       buffer:
         specifier: 6.0.3
         version: 6.0.3
