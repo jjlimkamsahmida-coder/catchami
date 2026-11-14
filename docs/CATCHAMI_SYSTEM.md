@@ -61,7 +61,7 @@ In the game, $CATCHAMI is called "coins". Amounts are whole coins: 1K = 1,000 an
 
 ## 2. Live status: real vs simulated
 
-Live site: **https://catchami-production.up.railway.app** (Railway, NEAR testnet). Testnet tokens have no monetary value.
+Live site: **https://catchami.fun** (hosted on Railway, NEAR testnet). Testnet tokens have no monetary value.
 
 | Feature | Status |
 |---|---|
@@ -77,14 +77,15 @@ Live site: **https://catchami-production.up.railway.app** (Railway, NEAR testnet
 | Cash out USDC to a bank (off-ramp) | 🟡 Simulated |
 | Sign-in: guest | ✅ Real |
 | Sign-in: NEAR wallet (Meteor, Intear, HERE, Sender; MyNearWallet removed because it's sunset) | ✅ Real |
-| Sign-in: Google / email / passkey via **NEAR Auth** | ✅ Deployed. Works from `http://localhost:3000` (the only address NEAR's shared testnet login allows); the live domain shows "waiting for NEAR to approve this website" until NEAR approves it (see §4) |
+| Sign-in: "Continue with Google" on catchami.fun | ✅ Live as a **simulated** one-tap sign-in (a game account, no Google check; NFTs held in custody until a wallet is linked) |
+| Sign-in: Google / email / passkey via **NEAR Auth** (real NEAR account) | ✅ Implemented; runs on origins NEAR has approved (`http://localhost:3000` on the shared testnet client). catchami.fun awaits NEAR's approval (see §4) |
 | Sign-in: Solana / EVM | ⏳ "Coming soon" buttons |
 | Bubble Roulette with real-value coins on mainnet | 🔒 Switched off by design (legal review needed) |
 
 Deployment notes (2026-11-15):
-- **The Railway site is currently down.** `catchami-production.up.railway.app` returns Railway's own "Application not found" (HTTP 404). That response comes from Railway's edge, not from the game code, so the service needs checking in the Railway dashboard (removed, paused, or domain changed).
+- The public site moved to **https://catchami.fun**; the old Railway address now returns Railway's "Application not found".
 - Pushed to GitHub `main`: everything up to NEAR Auth sign-in and the first version of this doc.
-- **Committed but not pushed:** the autopilot fix (§16) and the trailer project (§23).
+- Everything above is pushed to GitHub `main` and deployed.
 
 ---
 
@@ -135,7 +136,8 @@ Deployment notes (2026-11-15):
 | Option | How it works | Where the pet NFTs go |
 |---|---|---|
 | **Play as guest** | The server creates an account; a signed session token is stored on the device. No personal data | Held by the game (custody) until you connect a NEAR account |
-| **Continue with Google (NEAR Auth)** | Real Google / email / passkey login through NEAR Auth (Auth0 + NEAR's MPC signer network). No app, no seed phrase | Straight into your own NEAR account |
+| **Continue with Google** on catchami.fun | Simulated one-tap sign-in: creates a game account, with no Google check | Held by the game (custody) until you connect a NEAR account |
+| **Continue with Google (NEAR Auth)** on approved origins | Real Google / email / passkey login through NEAR Auth (Auth0 + NEAR's MPC signer network). No app, no seed phrase | Straight into your own NEAR account |
 | **Connect a NEAR wallet** | Meteor, Intear, HERE or Sender signs a one-time message (NEP-413). No gas, never your seed phrase | Straight into your wallet |
 | Solana / EVM | "Coming soon" buttons | — |
 
@@ -158,7 +160,7 @@ This needs `http://localhost:3000` in the live server's `ALLOWED_ORIGINS`.
 
 ### Linking later
 
-A guest can link Google or a NEAR wallet at any time from the Coin Vault: Withdraw → Connect. When they link:
+A guest can link a NEAR wallet (or NEAR Auth, on approved origins) at any time from the Coin Vault: Withdraw → Connect. When they link:
 - their custody NFTs are transferred to the new account automatically
 - their on-chain Coin Vault balance moves from the guest bucket to the account
 - the operator registers the account on the $CATCHAMI and USDC tokens (0.00125 NEAR each), so withdrawals and swaps can be received
@@ -759,8 +761,8 @@ Build: `pnpm --filter @catchami/web build && pnpm models` · Start: `node apps/s
 | `CATCHAMI_NETWORK` | `testnet` |
 | `DATA_DIR` / `MEDIA_DIR` | `/data` / `/data/media` |
 | `SESSION_SECRET`, `ADMIN_TOKEN` | Random secrets |
-| `ALLOWED_ORIGINS` | `https://catchami-production.up.railway.app` (+ `http://localhost:3000` for the NEAR Auth laptop demo) |
-| `PUBLIC_URL` | `https://catchami-production.up.railway.app` (NFT media links) |
+| `ALLOWED_ORIGINS` | `https://catchami.fun` (+ `http://localhost:3000` for the NEAR Auth laptop demo) |
+| `PUBLIC_URL` | `https://catchami.fun` (NFT media links) |
 | `NEAR_TOKEN_CONTRACT` / `NEAR_GAME_CONTRACT` | `token.catchami-dev.testnet` / `game.catchami-dev.testnet` |
 | `NEAR_OPERATOR_ACCOUNT` + `NEAR_OPERATOR_KEY` | Operator account + its key (secret) |
 | `NEAR_MARKET_ACCOUNT` + `NEAR_MARKET_KEY` | Market account + its key (secret) |
@@ -801,7 +803,6 @@ Render: `npx remotion render src/index.ts Trailer out/catchami-trailer.mp4` (fro
 
 ### Known limits today
 
-0. **The Railway site is down** ("Application not found" from Railway). Check the service in the Railway dashboard.
 1. **NEAR Auth on the live domain** needs NEAR's approval (only `http://localhost:3000` works on the shared testnet client).
 2. A NEAR Auth sign-in and a NEAR Auth-signed transaction haven't been completed end to end yet. Wallet withdraw and swap were tested with a test account standing in for a player, but not yet clicked through with the Meteor pop-ups.
 3. Pets whose NFT is in a player's wallet can't be listed in the in-game market.
@@ -820,7 +821,7 @@ Render: `npx remotion render src/index.ts Trailer out/catchami-trailer.mp4` (fro
 
 ### Next steps
 
-1. Bring the Railway service back, push the autopilot fix, and apply for NEAR Auth approval of the live domain.
+1. Get NEAR Auth approval (or a dedicated client ID) for catchami.fun, then switch the Google button from simulated to real.
 2. Click through a real wallet withdraw and swap with Meteor on testnet.
 3. Detect NFT transfers made outside the game; allow on-chain listing (NFT approvals) for wallet-held pets.
 4. Solana / EVM sign-in (for example through NEAR chain signatures).

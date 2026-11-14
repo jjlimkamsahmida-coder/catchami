@@ -1,5 +1,7 @@
 # Catchami — Project Summary
 
+> **Historical snapshot (2026-11-11), kept for reference.** It predates the NEAR testnet deployment and later economy changes. For the current state see [README](../README.md), [STATUS.md](STATUS.md), [ECONOMY.md](ECONOMY.md) and [CATCHAMI_SYSTEM.md](CATCHAMI_SYSTEM.md).
+
 **Catch the Real. Play the World.**
 A mobile-first (and laptop-friendly) 2D multiplayer pet game on NEAR. Players point their camera at real cats and dogs. Each successful catch becomes a cutout sticker pet with its own `$CATCHAMI` balance. The pet lives in a shared world where it gathers, trades with travelling merchants, eats, heals, crafts gear and battles. It keeps working on autopilot while the owner is offline.
 

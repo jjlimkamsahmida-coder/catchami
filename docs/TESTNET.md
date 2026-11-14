@@ -1,6 +1,6 @@
 # Catchami on NEAR testnet
 
-Live since 2026-11-14. Everything below runs on testnet. Testnet tokens have no monetary value.
+Live since 2026-11-14 at **https://catchami.fun/**. Everything below runs on testnet. Testnet tokens have no monetary value.
 
 ## Deployed
 
@@ -35,7 +35,7 @@ Keys live in `~/.near-credentials/testnet/` on the machine that created them. Th
 | Pay with any asset via NEAR Intents | **Simulated**: Intents is mainnet-only. Asset list and USD prices are live from the 1Click API |
 | Sell $CATCHAMI for USDC | **Real** swap on the Ref testnet pool, signed by the player's wallet |
 | Cash out USDC to a bank (off-ramp) | **Simulated** |
-| Google / email / passkey sign-in | **Real, through NEAR Auth** (MPC-held key, no seed phrase). The player's NEAR account is the implicit account of their derived key. The server checks the Auth0 ID token, gives new accounts 0.05 testnet NEAR for gas, and relays the MPC `sign` calls. **Limit:** NEAR's shared testnet login only allows `http://localhost:3000`, so the live domain needs NEAR to approve it (or our own client ID). Until then the button says so. |
+| Google / email / passkey sign-in | On **catchami.fun**: "Continue with Google" is a **simulated** one-tap sign-in (a game account, with no Google check). **Real NEAR Auth** (MPC-held key, no seed phrase; the server checks the Auth0 ID token, funds new accounts with 0.05 testnet NEAR for gas and relays the MPC `sign` calls) is implemented and runs on origins NEAR has approved. NEAR's shared testnet login only allows `http://localhost:3000`; catchami.fun needs NEAR's approval or a dedicated client ID. |
 | NEAR wallet sign-in (Meteor, Intear, HERE, Sender) | **Real** (MyNearWallet was removed because it is sunset) |
 | Solana / EVM wallets | Coming soon |
 
@@ -48,10 +48,10 @@ Known limits:
 The shared testnet login only returns to `http://localhost:3000`. To use it against the live testnet server:
 
 ```
-pnpm --filter @catchami/web dev:nearauth:live   # http://localhost:3000 -> catchami-production (testnet)
+pnpm --filter @catchami/web dev:nearauth:live   # http://localhost:3000 -> catchami.fun (testnet)
 ```
 
-Add `http://localhost:3000` to the live server's `ALLOWED_ORIGINS` (Railway) so the game's WebSocket connects. Once NEAR approves the domain, set `VITE_NEAR_AUTH_ORIGINS=https://catchami-production.up.railway.app` (and `VITE_NEAR_AUTH_CLIENT_ID` / `NEAR_AUTH_CLIENT_ID` if they issue our own client) and redeploy.
+Add `http://localhost:3000` to the live server's `ALLOWED_ORIGINS` (Railway) so the game's WebSocket connects. Once NEAR approves the domain, set `VITE_NEAR_AUTH_ORIGINS=https://catchami.fun` (and `VITE_NEAR_AUTH_CLIENT_ID` / `NEAR_AUTH_CLIENT_ID` if they issue our own client) and redeploy.
 
 ## How the money stays in step
 
@@ -72,7 +72,7 @@ NEAR_OPERATOR_KEY=ed25519:…        # or NEAR_OPERATOR_KEY_FILE=/path/operator.
 NEAR_MARKET_ACCOUNT=market.catchami-dev.testnet
 NEAR_MARKET_KEY=ed25519:…          # or NEAR_MARKET_KEY_FILE=…
 NEAR_REF_POOL_ID=2969
-PUBLIC_URL=https://catchami-production.up.railway.app
+PUBLIC_URL=https://catchami.fun
 ```
 
 Each network keeps its own local database (`DATA_DIR/pg` for dev, `DATA_DIR/pg-testnet` for testnet), so dev test units never mix with testnet tokens.

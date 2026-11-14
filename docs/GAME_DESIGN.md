@@ -1,6 +1,6 @@
 # Catchami — Game & Economy Design
 
-> Config version `2026-11-13.1`. Every number in this document comes from
+> Config version `2026-11-14.1`. Every number in this document comes from
 > `packages/shared/src/config.ts` (the single source of truth) or the code that
 > uses it. Change a number there, bump `ECONOMY.version`, re-run `pnpm sim`.
 
@@ -37,8 +37,7 @@ Contents
 ## 1. The game in one page
 
 Catchami is a mobile-first, multiplayer 2D pet game. You **catch real cats and
-dogs with your phone camera**; each catch becomes a unique pet (an NFT on NEAR
-once contracts are live) with its own stats, sticker art and **its own coin
+dogs with your phone camera**; each catch becomes a unique pet (a NEP-171 NFT on NEAR) with its own stats, sticker art and **its own coin
 balance (piggy bank)**. Pets live in a shared world where they **gather
 resources, sell them to travelling merchants, buy food, craft gear, battle other
 players' pets in Bubble Roulette, and can be sold on the marketplace** — piggy
@@ -361,7 +360,7 @@ Mining Valley: 5 in the Forest, 4 in the Valley. They walk up to your pet when i
 
 - Both pets are in the Forest or Mining Valley (never in Paw Village or the Glade).
 - Each has at least **120 energy**, hunger below **900**, at least **20 battle HP**, is not listed for sale, and is **not gathering** (accepting a challenge stops gathering).
-- The challenged owner accepts within 25 s. "Avoid battles" in autopilot auto-declines.
+- Battles are forced: a challenge starts the match immediately. "Give up" counts as a loss.
 - Cooldowns: **90 s** per pet, **30 min** before the same two pets meet again.
 
 ### What a match costs
@@ -450,7 +449,7 @@ Moving coins:
 
 - **Wallet → pet:** "Add to pet".
 - **Pet → wallet:** "Withdraw to wallet" (blocked while the pet is listed).
-- **Wallet → NEAR:** on-chain withdrawal. Exists in code, **switched off** until the contracts are deployed.
+- **Pet → your NEAR wallet:** player-signed on-chain withdrawal (live on testnet; see WEB2_ONBOARDING_AND_PAYMENTS.md).
 
 ---
 
@@ -507,10 +506,10 @@ not playing), eating fish from your own bag (free energy), wild NPC battles.
 
 ### Players
 
-- **By working:** in the simulation, a typical working pet earns **about 200K a day** from sales. After food it nets about **30K a day**, so a pet that starts with a 0.4M purse grows to about **1.1–1.5M after a month**. Active play earns more (perfect taps, good merchant timing, following demand).
+- **By working:** in the current simulation, the median working pet earns **about 110K a day** from sales and spends most of it on upkeep (about 14 meals a day). Pets starting from a 0.4M purse ended 30 days with a median balance of 0.5M–1.0M in worlds of 250 pets. Active play earns more (perfect taps, good merchant timing, following demand).
 - **By battling:** winning above average moves coins from weaker or unluckier players, minus the fee.
 - **By trading:** catching rare pets, levelling a pet's balance, crafting rare gear and selling them on the marketplace.
-- **Payback:** a basic pet costs about 1.27M on average and pays for itself in about **6 weeks** of typical autopilot play. Faster with active play.
+- **Payback:** a basic pet costs about 1.27M on average; how fast it pays for itself depends on play (it is slow on autopilot alone, faster with active play).
 - **Real money:** only once on-chain withdrawals and a market exist. Every NEAR a player cashes out comes from another player buying coins. Earning is possible, never guaranteed.
 
 ### The creator (team account)
@@ -556,28 +555,22 @@ Example: one fed pet sends about **16K a day** to the team from meals alone.
 
 ## 21. Simulation results
 
-> Latest run (config 2026-11-14.1, halved resource prices, 7K meals): typical working pet earns ≈ 105K/day (was ≈ 210K), 87–98% of pets stay active in 250-pet worlds, median pet balance after 30 days ≈ 0.5–1.0M from a 0.4M start; a basic pet pays back in roughly 3 months. Full tables in docs/ECONOMY_SIMULATION.md. The table below is the earlier run.
+Latest run (`pnpm sim`, config `2026-11-14.1`, 30 days, 0 invariant violations):
 
-`pnpm sim` runs an agent-based 30-day model on the live config, with an exact
-ledger and daily invariant checks. Full tables: `docs/ECONOMY_SIMULATION.md`.
-
-| Scenario (day 29) | Pets | Active | Median pet balance | Median daily income | Merchant spend / budget |
+| Scenario (day 29) | Pets | Active | Median pet balance | Median daily income | Merchant spend / budget (busiest days) |
 |---|---:|---:|---:|---:|---:|
-| 100 pets, one world | 220 | 100% | 2.11M | 216K | 48.8M / 3.79B |
-| 1,000 pets, **one crowded world** | 2,028 | **30%** | 8.5K | 124K | 80.6M / 3.8B |
-| 1,000 pets, 250 per world | 2,071 | 99.9% | 1.55M | 218K | 460M / 3.8B |
-| 10,000 pets, 250 per world | 17,940 | 97.7% | 1.32M | 210K | **3.76B / 3.8B** |
-| 10,000 pets, falling price + fewer signups | 11,185 | 96.8% | 1.07M | 195K | 2.25B / 3.8B |
+| 100 pets, one world | 236 | 100% | 1.01M | 102K | 25.1M / 3.8B |
+| 1,000 pets, **one crowded world** | 2,029 | **32.6%** | 5.12K | 57.7K | 40.9M / 3.8B |
+| 1,000 pets, 250 per world | 2,048 | 97.9% | 826K | 111K | 224M / 3.8B |
+| 10,000 pets, 250 per world | 17,908 | 92.2% | 731K | 109K | 1.83B / 3.8B |
+| 10,000 pets, falling price + fewer signups | 11,191 | 87.4% | 517K | 107K | 1.09B / 3.8B |
 
-Invariants across all scenarios had **0 violations**: the ledger sums to zero,
-no account goes negative, claims never exceed supply, merchant spend never
-exceeds the allowance, and HQ never dips below its floor.
+Takeaways:
+- **Keep worlds around 250 pets** (or add merchants). Four merchants and fixed resource nodes can't serve 2,000 pets in one world.
+- **HQ ended every scenario slightly above its starting balance.**
+- **Upkeep absorbs most income.** With 5-hour hunger, pets buy about 14 meals a day (≈ 96K–99K) against a median income of about 110K. Net growth comes from good play.
 
-Takeaways
-
-- **Keep worlds around 250 pets** (or add merchants as a world grows). Four merchants can't serve 2,000 pets in one world.
-- The daily budget formula starts to limit payouts at around 18,000 pets, which is the intended safety valve.
-- 5-hour hunger keeps upkeep at about 40–50% of a working pet's income. At 45-minute hunger almost every pet went broke; at 3 hours about half did.
+Full tables: [ECONOMY_SIMULATION.md](ECONOMY_SIMULATION.md). Economic model: [ECONOMY.md](ECONOMY.md).
 
 ---
 
@@ -599,15 +592,7 @@ Takeaways
 
 ## 23. What is real today vs. simulated
 
-| Piece | Status |
-|---|---|
-| Game world, pets, gathering, merchants, shops, crafting, Bubble Roulette, marketplace | Real, server-authoritative |
-| Coin ledger (all balances and transfers) | Real double-entry ledger in the game database |
-| $CATCHAMI token, pet/gear NFTs, vault contracts | **Not deployed yet.** Mint and transfer jobs queue as "awaiting chain" |
-| Starter pouches | **Simulated** on testnet: no NEAR is charged, test coins are credited |
-| HQ 40T | Test units on the dev network (genesis), unbacked |
-| On-chain withdrawals | Code exists, switched off until contracts go live |
-| NEAR | Used for sign-in (testnet) |
+See [STATUS.md](STATUS.md) for the current live and simulated pieces, and [ONCHAIN_VERIFICATION.md](ONCHAIN_VERIFICATION.md) for the deployed NEAR testnet contracts and verified transactions.
 
 ---
 
