@@ -215,6 +215,11 @@ export async function createListing(db: Db, game: Game, userId: string, asset: {
   if (asset.petId) {
     const p = ownedPet(game, userId, asset.petId);
     if (p.busy) throw new ServiceError("busy", `${p.name} is busy`);
+    // Onchain: the game can only hand over NFTs it holds in custody. A pet already in the player's
+    // wallet would need their signature to move, so it's traded from the wallet instead.
+    const nft = await db.query<{ nft_owner: string | null }>(`SELECT nft_owner FROM pets WHERE id = $1`, [asset.petId]);
+    const holder = nft.rows[0]?.nft_owner;
+    if (chainConfigured() && holder && holder !== env.near.operatorAccount) throw new ServiceError("in_wallet", `${p.name}'s NFT is in your wallet (${holder}). Wallet pets trade on NFT marketplaces — in-game listing is for pets the game holds for you.`);
   } else if (asset.equipmentId) {
     const e = await db.query<{ owner_id: string; equipped: boolean }>(`SELECT owner_id, equipped FROM equipment WHERE id = $1`, [asset.equipmentId]);
     if (!e.rows[0] || e.rows[0].owner_id !== userId) throw new ServiceError("not_owner", "Not your equipment", 403);

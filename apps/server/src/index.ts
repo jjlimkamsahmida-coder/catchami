@@ -12,6 +12,7 @@ import { loadDetector, type Detector } from "./capture/detector.ts";
 import { sweepPendingCaptures } from "./capture/capture.ts";
 import { reconcile } from "./services.ts";
 import { seedDemoMarket } from "./demo.ts";
+import { ChainWorker, setChainWorker } from "./chain/worker.ts";
 
 await mkdir(env.dataDir, { recursive: true });
 await mkdir(env.mediaDir, { recursive: true });
@@ -20,12 +21,16 @@ if (env.isDev && !env.adminToken) {
   console.log(`[dev] admin token for /admin: ${env.adminToken}`);
 }
 
-const db = await openDb({ url: env.databaseUrl, dataDir: env.databaseUrl ? undefined : join(env.dataDir, "pg") });
+// Each network keeps its own local database (dev test units never mix with testnet tokens).
+const db = await openDb({ url: env.databaseUrl, dataDir: env.databaseUrl ? undefined : join(env.dataDir, env.network === "dev" ? "pg" : `pg-${env.network}`) });
 await ensureGenesis(db);
 const game = new Game(db);
 await game.load();
 game.start();
 await seedDemoMarket(db, game).catch((e) => console.error("demo market seed failed:", e));
+const chain = new ChainWorker(db, game);
+setChainWorker(chain);
+chain.start();
 
 let detector: Detector | null = null;
 if (existsSync(join(env.modelDir, "ssdlite_mobilenet_v2", "model.json"))) {
@@ -46,6 +51,7 @@ setInterval(async () => {
 const shutdown = async () => {
   console.log("shutting down…");
   server.close();
+  chain.stop();
   await game.stop();
   await db.close();
   process.exit(0);

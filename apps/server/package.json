@@ -15,6 +15,7 @@
     "@tensorflow/tfjs": "4.22.0",
     "@tensorflow/tfjs-backend-wasm": "4.22.0",
     "jpeg-js": "^0.4.4",
+    "near-api-js": "6.5.1",
     "pg": "^8.23.1",
     "pngjs": "^7.0.0",
     "ws": "^8.22.1"

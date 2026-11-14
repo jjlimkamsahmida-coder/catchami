@@ -7,6 +7,7 @@ import { store, useStore } from "../net/store.ts";
 import { api, refreshWallet, rid, send } from "../net/api.ts";
 import { toast } from "../net/store.ts";
 import { fmt, PetArt, RarityTag, ResIcon, ScreenHead, useAsync } from "./common.tsx";
+import { PetNftCard, useChain, WithdrawSheet } from "./Chain.tsx";
 import { CollectorCard, cardFromPet } from "./CollectorCard.tsx";
 
 export function PetsScreen() {
@@ -164,7 +165,7 @@ export function WalletTab({ p }: { p: OwnPet }) {
     try {
       parseTokens(amt);
       await api(`/api/pets/${p.id}/${kind}`, { amount: amt, rid: rid() });
-      toast("good", kind === "fund" ? `Added ${amt} to ${p.name}` : `Moved ${amt} to your wallet`);
+      toast("good", kind === "fund" ? `Added ${amt} to ${p.name}` : `Moved ${amt} to your Coin Vault`);
       setAmt("");
       await refreshWallet();
     } catch (e) { toast("bad", (e as Error).message); } finally { setBusy(false); }
@@ -172,6 +173,8 @@ export function WalletTab({ p }: { p: OwnPet }) {
   const listing = useAsync(() => api(`/api/market?kind=animal`), [p.listed]);
   const myListing = listing.data?.listings?.find((l: { pet_id: string }) => l.pet_id === p.id);
   const [price, setPrice] = useState("");
+  const [wd, setWd] = useState(false);
+  const chain = useChain();
   return (
     <div className="col" style={{ gap: 12 }}>
       <div className="card col">
@@ -183,10 +186,12 @@ export function WalletTab({ p }: { p: OwnPet }) {
         <label className="field">Amount (whole $CATCHAMI)<input type="text" inputMode="decimal" value={amt} placeholder="e.g. 50000" onChange={(e) => setAmt(e.target.value.replace(/[^\d.]/g, ""))} /></label>
         <div className="row">
           <button className="btn leaf grow" disabled={busy || !amt} onClick={() => act("fund")}>Add to pet</button>
-          <button className="btn paper grow" disabled={busy || !amt || p.listed} onClick={() => act("withdraw")}>Withdraw to wallet</button>
+          <button className="btn paper grow" disabled={busy || !amt || p.listed} onClick={() => act("withdraw")}>Move to Coin Vault</button>
         </div>
         {p.listed && <p className="small muted" style={{ margin: 0 }}>Withdrawals are locked while {p.name} is listed — buyers rely on the shown balance.</p>}
       </div>
+      <PetNftCard petId={p.id} onWithdraw={() => setWd(true)} />
+      {wd && chain.data && <WithdrawSheet me={chain.data} petId={p.id} onClose={() => setWd(false)} onDone={() => { chain.reload(); void refreshWallet(); }} />}
       <p className="small muted" style={{ margin: 0 }}>Want to sell {p.name}? Use the 🛒 Market — the piggy bank goes with the pet.</p>
     </div>
   );

@@ -123,6 +123,8 @@ pub struct Listing {
 #[serde(rename_all = "snake_case")]
 enum TransferMsg {
     DepositUser,
+    /// Credit someone else's user bucket (e.g. a purchase delivered by the market account).
+    DepositFor { account_id: AccountId },
     DepositPet { token_id: TokenId },
     DepositHq,
     Buy { token_id: TokenId, expected_pet_balance: Option<U128> },
@@ -159,6 +161,9 @@ pub struct Contract {
     /// Immutable hard limit on HQ debits per day; the owner may only set a lower cap.
     hq_daily_hard_cap: u128,
     hq_daily_cap: u128,
+    /// Daily spend limit for pets/users that haven't signed their own allowance (owner-set; 0 = none).
+    default_pet_allowance: u128,
+    default_user_allowance: u128,
 }
 
 fn key(b: &Bucket) -> String {
@@ -210,6 +215,8 @@ impl Contract {
             next_batch: 0,
             hq_daily_hard_cap: hq_daily_hard_cap.0,
             hq_daily_cap: hq_daily_hard_cap.0,
+            default_pet_allowance: 0,
+            default_user_allowance: 0,
         }
     }
 
@@ -244,6 +251,13 @@ impl Contract {
         self.assert_owner();
         require!(cap.0 <= self.hq_daily_hard_cap, "cannot exceed the published hard cap");
         self.hq_daily_cap = cap.0;
+    }
+
+    /// Fallback daily allowances used until an owner signs their own (which always wins, even 0).
+    pub fn set_default_allowances(&mut self, pet: U128, user: U128) {
+        self.assert_owner();
+        self.default_pet_allowance = pet.0;
+        self.default_user_allowance = user.0;
     }
 
     pub fn set_withdrawal_delay_hours(&mut self, hours: u64) {
@@ -313,6 +327,7 @@ impl Contract {
 
     // --------------------------------------------------------------- minting
 
+    #[payable]
     pub fn mint(&mut self, token_id: TokenId, owner_id: AccountId, metadata: TokenMetadata) -> Token {
         self.assert_operator();
         self.assert_live();
@@ -342,11 +357,11 @@ impl Contract {
                 Bucket::Team => env::panic_str("team bucket cannot be debited by settlement"),
                 Bucket::Hq => { let cap = self.hq_daily_cap; self.day_debit("hq".into(), amt, cap, "HQ") }
                 Bucket::Pet(t) => {
-                    let cap = *self.pet_allowance.get(t).unwrap_or(&0);
+                    let cap = *self.pet_allowance.get(t).unwrap_or(&self.default_pet_allowance);
                     self.day_debit(format!("p:{t}"), amt, cap, "pet allowance");
                 }
                 Bucket::User(a) => {
-                    let cap = *self.user_allowance.get(a).unwrap_or(&0);
+                    let cap = *self.user_allowance.get(a).unwrap_or(&self.default_user_allowance);
                     self.day_debit(format!("u:{a}"), amt, cap, "user allowance");
                 }
                 Bucket::Merchants => {}
@@ -584,6 +599,8 @@ impl Contract {
             ("next_batch".into(), self.next_batch.to_string()),
             ("hq_daily_hard_cap".into(), self.hq_daily_hard_cap.to_string()),
             ("hq_daily_cap".into(), self.hq_daily_cap.to_string()),
+            ("default_pet_allowance".into(), self.default_pet_allowance.to_string()),
+            ("default_user_allowance".into(), self.default_user_allowance.to_string()),
             ("withdrawal_delay_hours".into(), (self.withdrawal_delay_ns / HOUR_NS).to_string()),
         ])
     }
@@ -612,6 +629,7 @@ impl FungibleTokenReceiver for Contract {
         self.assert_live();
         let (bucket, target) = match parsed {
             TransferMsg::DepositUser => (Bucket::User(sender_id.clone()), DepositTarget { user: Some(sender_id.clone()), pet: None, hq: None }),
+            TransferMsg::DepositFor { account_id } => (Bucket::User(account_id.clone()), DepositTarget { user: Some(account_id), pet: None, hq: None }),
             TransferMsg::DepositPet { token_id } => {
                 require!(self.nft.owner_by_id.get(&token_id).is_some(), "no such pet");
                 (Bucket::Pet(token_id.clone()), DepositTarget { user: None, pet: Some(token_id), hq: None })

@@ -4,10 +4,10 @@
  * its key from the secret store — never from this repo or the browser.
  */
 import { env } from "../env.ts";
+import { rpcUrl } from "./signer.ts";
 
 async function rpc<T>(method: string, params: unknown): Promise<T> {
-  if (!env.near.rpcUrl) throw new Error("NEAR_RPC_URL not configured");
-  const r = await fetch(env.near.rpcUrl, {
+  const r = await fetch(rpcUrl(), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: "catchami", method, params }),

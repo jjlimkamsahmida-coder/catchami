@@ -44,7 +44,20 @@ export const env = {
     /** Operator signer is NEVER loaded from the repo; path to a key file managed by the secret store. */
     operatorAccount: process.env.NEAR_OPERATOR_ACCOUNT ?? null,
     operatorKeyFile: process.env.NEAR_OPERATOR_KEY_FILE ?? null,
+    /** Or the key itself ("ed25519:…"), for hosts that only have env secrets (Railway). */
+    operatorKey: process.env.NEAR_OPERATOR_KEY ?? null,
+    /** Market allocation account: sells $CATCHAMI to players (simulated card / Intents payments on testnet). */
+    marketAccount: process.env.NEAR_MARKET_ACCOUNT ?? null,
+    marketKeyFile: process.env.NEAR_MARKET_KEY_FILE ?? null,
+    marketKey: process.env.NEAR_MARKET_KEY ?? null,
+    /** Ref Finance pool used for $CATCHAMI <-> USDC. */
+    refContract: process.env.NEAR_REF_CONTRACT ?? (network === "mainnet" ? "v2.ref-finance.near" : "ref-finance-101.testnet"),
+    usdcToken: process.env.NEAR_USDC_TOKEN ?? (network === "mainnet" ? "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1" : "usdc.fakes.testnet"),
+    refPoolId: Number(process.env.NEAR_REF_POOL_ID ?? "-1"),
+    explorer: network === "mainnet" ? "https://nearblocks.io" : "https://testnet.nearblocks.io",
   },
+  /** Public site URL (NFT media links point here). */
+  publicUrl: (process.env.PUBLIC_URL ?? (process.env.ALLOWED_ORIGINS ?? "http://localhost:5173").split(",")[0]!).trim().replace(/\/$/, ""),
   /**
    * Legal release control for real-token PvP. Must be set explicitly AND
    * ECONOMY.battle.realTokenPvp.enabled must be true. Never on in dev.
@@ -54,4 +67,4 @@ export const env = {
   isDev: network === "dev",
 };
 
-export const chainConfigured = () => Boolean(env.near.rpcUrl && env.near.gameContract && env.near.tokenContract);
+export const chainConfigured = () => Boolean(network !== "dev" && env.near.gameContract && env.near.tokenContract);

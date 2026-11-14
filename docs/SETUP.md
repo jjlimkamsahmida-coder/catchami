@@ -35,6 +35,8 @@ docker run --rm -v "$PWD/contracts:/work" -w /work catchami-contracts cargo test
 
 ## 2. NEAR testnet
 
+> **Done (2026-11-14).** Everything below is deployed: see [TESTNET.md](TESTNET.md) for the live addresses, what is real vs simulated, and the server variables. The steps are kept for redeploys.
+
 ### 2.1 Accounts  [you]
 
 Install near-cli-rs (`npm i -g near-cli-rs` or the installer from near/near-cli-rs). Commands below follow its syntax; run `near --help` if a flag has changed.

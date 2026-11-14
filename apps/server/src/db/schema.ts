@@ -218,4 +218,43 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding JSONB
   `,
+  `
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS chain_bucket TEXT;
+  ALTER TABLE pets ADD COLUMN IF NOT EXISTS nft_owner TEXT;
+  ALTER TABLE pets ADD COLUMN IF NOT EXISTS mint_tx TEXT;
+  ALTER TABLE equipment ADD COLUMN IF NOT EXISTS nft_owner TEXT;
+  CREATE TABLE IF NOT EXISTS chain_withdrawals (
+    id BIGINT PRIMARY KEY,
+    account TEXT NOT NULL,
+    source JSONB NOT NULL,
+    ledger_account TEXT,
+    amount NUMERIC(40,0) NOT NULL,
+    status TEXT NOT NULL,
+    acked BOOLEAN NOT NULL DEFAULT false,
+    hold_id TEXT,
+    note TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+  CREATE TABLE IF NOT EXISTS chain_batches (
+    id BIGINT PRIMARY KEY,
+    tx_hash TEXT,
+    deltas JSONB NOT NULL,
+    journal_hash TEXT NOT NULL,
+    max_journal BIGINT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+  CREATE TABLE IF NOT EXISTS purchases (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    method TEXT NOT NULL,
+    pay_asset TEXT NOT NULL,
+    pay_amount TEXT NOT NULL,
+    tokens NUMERIC(40,0) NOT NULL,
+    status TEXT NOT NULL,
+    tx_hash TEXT,
+    simulated JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )
+  `,
 ];

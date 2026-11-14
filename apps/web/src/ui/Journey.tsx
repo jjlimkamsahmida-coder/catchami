@@ -164,6 +164,11 @@ function Join({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
     setBusy("guest"); setErr(null);
     try { if (!store.get().token) await startAsGuest(); await afterJoin(); } catch (e) { setErr((e as Error).message); } finally { setBusy(null); }
   };
+  const google = async () => {
+    setBusy("google"); setErr(null);
+    try { const g = await api<{ token: string }>("/api/auth/google-demo", {}); await adoptSession(g.token); await afterJoin(); } catch (e) { setErr((e as Error).message); } finally { setBusy(null); }
+  };
+  const soon = (what: string) => setErr(`${what} sign-in is coming soon — use a guest, Google or NEAR account for now.`);
   const near = async (id: WalletId) => {
     setBusy(id); setErr(null);
     try {
@@ -207,20 +212,28 @@ function Join({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
           <img src={genUrl("cube-happy")} alt="" />
           <span><b>{busy === "guest" ? "Starting…" : token ? "Continue on this device" : "Play as guest"}</b><small>Start instantly. Progress is saved on this device.</small></span>
         </button>
+        <button className="join-opt google" disabled={!!busy} onClick={google}>
+          <span className="g-logo" aria-hidden>G</span>
+          <span><b>{busy === "google" ? "Signing in…" : "Continue with Google"}</b><small>One tap. Your pets' NFTs are kept safe for you until you connect a wallet.</small></span>
+        </button>
         <button className={`join-opt near ${wallets ? "open" : ""}`} disabled={!!busy} onClick={() => { if (!wallets) void prepareNear().catch(() => {}); setWallets((v) => !v); }}>
           <span className="near-logo">N</span>
-          <span><b>Connect NEAR testnet wallet</b><small>Keep your pets on any device.</small></span>
+          <span><b>Connect a NEAR wallet</b><small>Your pets are minted straight into your wallet as NFTs.</small></span>
         </button>
         {wallets && (
           <div className="wallet-list">
             {WALLETS.map((w) => (
               <button key={w.id} className="btn paper" disabled={!!busy} onClick={() => void near(w.id)}>
-                <b>{busy === w.id ? "Waiting for wallet…" : w.name}</b><small>{w.note}</small>
+                <b>{w.icon} {busy === w.id ? "Waiting for wallet…" : w.name}</b><small>{w.note}</small>
               </button>
             ))}
-            <p className="small muted" style={{ margin: 0 }}>No testnet account? Create one free at <a href="https://testnet.mynearwallet.com" target="_blank" rel="noreferrer">testnet.mynearwallet.com</a>. Catchami only asks your wallet to sign a message — never your seed phrase.</p>
+            <p className="small muted" style={{ margin: 0 }}>No testnet account? Create one free in <a href="https://wallet.meteorwallet.app" target="_blank" rel="noreferrer">Meteor Wallet</a> (switch it to Testnet). Catchami only asks your wallet to sign a message — never your seed phrase.</p>
           </div>
         )}
+        <div className="join-soon">
+          <button className="join-opt soon" onClick={() => soon("Solana")}><span className="chain-logo sol" aria-hidden>◎</span><span><b>Solana wallet</b><small>Phantom, Solflare…</small></span><em>Soon</em></button>
+          <button className="join-opt soon" onClick={() => soon("EVM")}><span className="chain-logo evm" aria-hidden>⟠</span><span><b>EVM wallet</b><small>MetaMask, Rabby…</small></span><em>Soon</em></button>
+        </div>
         {err && <p className="err small" style={{ margin: 0 }}>{err}</p>}
         <button className="link-btn" onClick={onBack}>‹ Back to title</button>
       </div>

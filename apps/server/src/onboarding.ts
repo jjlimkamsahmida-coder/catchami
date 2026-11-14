@@ -45,6 +45,8 @@ export async function setOnboarding(db: Db, userId: string, stage: unknown, tuto
 export async function starterGrant(db: Db, userId: string, packId?: unknown) {
   if (env.network === "mainnet") throw new ServiceError("not_available", "Starter packs are simulated on test networks only", 404);
   const pack = ECONOMY.catch.starterPacks.find((p) => p.id === packId) ?? ECONOMY.catch.starterPacks[0]!;
+  // Test network with contracts: real $CATCHAMI from the market allocation (the payment is simulated).
+  if (env.network !== "dev") return (await import("./payments.ts")).deliverStarter(db, userId, pack);
   const amount = tokens(pack.whole);
   const r = await db.tx((tx) => post(tx, {
     idem: `starter:${userId}`, kind: "starter_purchase", postings: transfer(acct.chain, acct.user(userId), amount),

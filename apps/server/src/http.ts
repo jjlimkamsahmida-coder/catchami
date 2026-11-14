@@ -17,6 +17,8 @@ import type { Detector } from "./capture/detector.ts";
 import { GameError, type Game, type GameClient } from "./world/game.ts";
 import * as svc from "./services.ts";
 import * as onb from "./onboarding.ts";
+import * as pay from "./payments.ts";
+import { chainMe, getChainWorker } from "./chain/worker.ts";
 
 type Handler = (ctx: Ctx) => Promise<unknown>;
 interface Ctx { req: IncomingMessage; body: Record<string, unknown>; params: Record<string, string>; query: URLSearchParams; userId: string | null }
@@ -65,6 +67,15 @@ export function startHttp(db: Db, game: Game, detector: () => Detector | null, s
     if (!allow(`guest:${ip(c.req)}`, 1 / 60, 5)) throw new HttpError(429, "rate_limited", "Too many new accounts from this network");
     return createGuest(db);
   });
+  // Google sign-in. On the test network this is SIMULATED (no Google OAuth client is configured):
+  // it creates a game account whose pet NFTs are held in custody until a wallet is linked.
+  route("POST", "/api/auth/google-demo", async (c) => {
+    if (!allow(`guest:${ip(c.req)}`, 1 / 60, 5)) throw new HttpError(429, "rate_limited", "Too many new accounts from this network");
+    if (env.network === "mainnet") throw new HttpError(404, "not_available", "Google sign-in isn't configured");
+    const g = await createGuest(db);
+    await db.query(`INSERT INTO kv (k, v) VALUES ($1, $2) ON CONFLICT (k) DO NOTHING`, [`auth:google_demo:${g.userId}`, JSON.stringify({ at: Date.now(), simulated: true })]);
+    return { ...g, provider: "google_demo" };
+  });
   route("GET", "/api/me", async (c) => {
     const u = await getUser(db, uid(c));
     if (!u) throw new HttpError(401, "auth", "Unknown account");
@@ -85,6 +96,25 @@ export function startHttp(db: Db, game: Game, detector: () => Detector | null, s
     return onb.signInNear(db, c.body);
   });
   route("POST", "/api/pets/:id/name", async (c) => onb.renamePet(db, game, uid(c), c.params.id!, c.body.name), { auth: true });
+  // Chain: status, the player's onchain view, "Sync now".
+  route("GET", "/api/chain", async () => ({ ...(await pay.market()), status: getChainWorker()?.status ?? null }));
+  route("GET", "/api/chain/me", async (c) => chainMe(db, game, uid(c)), { auth: true });
+  route("POST", "/api/chain/sync", async (c) => {
+    if (!allow(`sync:${uid(c)}`, 1 / 15, 3)) throw new HttpError(429, "rate_limited", "Syncing — give it a few seconds");
+    const w = getChainWorker();
+    if (!w?.enabled) throw new HttpError(503, "chain_off", "The chain isn't connected on this server");
+    const batch = await w.syncNow();
+    return { batch, status: w.status };
+  }, { auth: true });
+  // Buying $CATCHAMI (simulated payment, real delivery) and the sell quote for in-wallet swaps.
+  route("GET", "/api/pay/assets", async () => ({ assets: (await pay.intentsAssets()).slice(0, 80) }));
+  route("POST", "/api/pay/quote", async (c) => pay.quote(c.body));
+  route("POST", "/api/pay/buy", async (c) => {
+    if (!allow(`buy:${uid(c)}`, 1 / 10, 3)) throw new HttpError(429, "rate_limited", "One purchase at a time");
+    return pay.buy(db, uid(c), c.body);
+  }, { auth: true });
+  route("GET", "/api/pay/history", async (c) => pay.purchaseHistory(db, uid(c)), { auth: true });
+  route("GET", "/api/swap/quote", async (c) => pay.sellQuote(c.query.get("amount")));
   route("POST", "/api/dev/faucet", async (c) => svc.devFaucet(db, uid(c)), { auth: true });
 
   // Economy transparency (public).

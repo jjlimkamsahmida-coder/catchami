@@ -12,6 +12,7 @@ import { PageFrame } from "./GamePages.tsx";
 import { genUrl } from "../game/assets.ts";
 import { centerOf, flyIcons, floatLabel, screenCenter } from "./fx.ts";
 import { sfx } from "./sfx.ts";
+import { BuySheet, ChainCard, TOKEN_LOGO, TradeSheet, useChain, WithdrawSheet } from "./Chain.tsx";
 
 const ONE = 10n ** 18n;
 const COIN = `<img src="${genUrl("ui-coin")}" alt="" />`;
@@ -30,7 +31,8 @@ const KIND: Record<string, [string, string]> = {
   medicine: ["💊", "Medicine"],
   craft: ["🛠️", "Crafted gear"],
   battle_win: ["⚔️", "Bubble Roulette"],
-  withdrawal: ["📤", "Withdrawal"],
+  withdrawal: ["📤", "Withdrawn to your wallet"],
+  deposit: ["🪙", "Bought $CATCHAMI"],
 };
 
 function ago(iso: string) {
@@ -71,6 +73,9 @@ export function WalletScreen() {
   const econ = useAsync(() => api(`/api/economy`), []);
   const [exact, setExact] = useState(false);
   const [lore, setLore] = useState(false);
+  const chain = useChain();
+  const [sheet, setSheet] = useState<"buy" | "withdraw" | "trade" | null>(null);
+  const afterChain = () => { chain.reload(); me.reload(); void refreshWallet(); };
   const bal = wallet ? BigInt(wallet.available) : 0n;
   const shown = useCount(Number(bal / ONE));
   const inPets = own.reduce((s, p) => s + BigInt(p.balance), 0n);
@@ -105,7 +110,7 @@ export function WalletScreen() {
       <section className="vault-hero">
         <div className="vault-rays" aria-hidden />
         <div className="vault-sparkles" aria-hidden>{Array.from({ length: 10 }, (_, i) => <i key={i} style={{ left: `${8 + ((i * 37) % 84)}%`, top: `${10 + ((i * 53) % 70)}%`, animationDelay: `${(i % 5) * 0.35}s` }} />)}</div>
-        <img className="vault-coin" src={genUrl("ui-coin")} alt="" />
+        <img className="vault-coin" src={TOKEN_LOGO} alt="" />
         <span className="vault-label">Your coins</span>
         <button className="vault-amount" onClick={() => setExact((v) => !v)} title="Tap for the exact amount">
           {exact && wallet ? toDecimalString(BigInt(wallet.available)) : fmt(BigInt(Math.max(0, Math.round(shown))) * ONE)}
@@ -120,10 +125,16 @@ export function WalletScreen() {
       {/* Actions */}
       <section className="vault-tiles">
         <button className="vault-tile" onClick={() => store.set({ screen: "pets", petScreen: store.get().controlled, profileTab: "wallet" })}><span>🐷</span><b>Piggy banks</b><small>fund your pets</small></button>
-        <button className="vault-tile locked" onClick={() => toast("info", "Deposits open when the $CATCHAMI contracts go live on NEAR.")}><span>📥</span><b>Deposit</b><small>coming soon</small></button>
-        <button className="vault-tile locked" onClick={() => toast("info", "Withdrawals open when the $CATCHAMI contracts go live on NEAR.")}><span>📤</span><b>Withdraw</b><small>coming soon</small></button>
+        <button className={`vault-tile ${chain.data?.enabled ? "buy" : "locked"}`} onClick={() => chain.data?.enabled ? setSheet("buy") : toast("info", "Buying opens on the test network server.")}><span>🪙</span><b>Buy</b><small>card or crypto</small></button>
+        <button className={`vault-tile ${chain.data?.enabled ? "" : "locked"}`} onClick={() => chain.data?.enabled ? setSheet("withdraw") : toast("info", "Withdrawals open on the test network server.")}><span>📤</span><b>Withdraw</b><small>to your wallet</small></button>
+        <button className={`vault-tile ${chain.data?.enabled ? "" : "locked"}`} onClick={() => chain.data?.enabled ? setSheet("trade") : toast("info", "Trading opens on the test network server.")}><span>💱</span><b>Trade</b><small>sell for USDC</small></button>
         <button className="vault-tile" onClick={() => store.set({ screen: "fairness" })}><span>🎲</span><b>Fair rolls</b><small>check any roll</small></button>
       </section>
+
+      <ChainCard me={chain.data} reload={afterChain} onBuy={() => setSheet("buy")} onWithdraw={() => setSheet("withdraw")} onTrade={() => setSheet("trade")} />
+      {sheet === "buy" && <BuySheet onClose={() => setSheet(null)} onDone={afterChain} />}
+      {sheet === "withdraw" && chain.data && <WithdrawSheet me={chain.data} onClose={() => setSheet(null)} onDone={afterChain} />}
+      {sheet === "trade" && chain.data && <TradeSheet me={chain.data} onClose={() => setSheet(null)} onDone={afterChain} />}
 
       {/* Pets' piggy banks */}
       {own.length > 0 && (

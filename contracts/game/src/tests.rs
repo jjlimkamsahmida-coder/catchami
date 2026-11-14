@@ -228,3 +228,19 @@ fn only_operator_mints() {
     ctx("alice.near", 1);
     c.mint("a-1".into(), a("alice.near"), TokenMetadata { title: None, description: None, media: None, media_hash: None, copies: None, issued_at: None, expires_at: None, starts_at: None, updated_at: None, extra: None, reference: None, reference_hash: None });
 }
+
+#[test]
+fn deposit_for_and_default_allowances() {
+    let mut c = setup();
+    mint(&mut c, "a-9", "guest.near");
+    assert_eq!(deposit(&mut c, "market.near", 70 * ONE, r#"{"deposit_for":{"account_id":"bob.near"}}"#), 0);
+    assert_eq!(c.balance_of(Bucket::User(a("bob.near"))).balance.0, 70 * ONE);
+    // Without a signed or default allowance the operator can't spend bob's coins.
+    ctx("owner.near", 1);
+    c.set_default_allowances(U128(10 * ONE), U128(20 * ONE));
+    ctx("operator.near", 1);
+    c.settle(U64(0), vec![d(Bucket::User(a("bob.near")), -20 * ONE as i128), d(Bucket::Pet("a-9".into()), 20 * ONE as i128)], H.into(), vec![]);
+    c.settle(U64(1), vec![d(Bucket::Pet("a-9".into()), -10 * ONE as i128), d(Bucket::Hq, 10 * ONE as i128)], H.into(), vec![]);
+    assert_eq!(c.balance_of(Bucket::Pet("a-9".into())).balance.0, 10 * ONE);
+    assert_eq!(c.config()["default_pet_allowance"], (10 * ONE).to_string());
+}
