@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host",
-    "dev:nearauth:live": "node -e \"process.env.CATCHAMI_NEAR_AUTH_DEV='1';process.env.CATCHAMI_API='https://catchami-production.up.railway.app';require('child_process').spawn('vite',{stdio:'inherit',shell:true,env:process.env})\"",
+    "dev:nearauth:live": "node -e \"process.env.CATCHAMI_NEAR_AUTH_DEV='1';process.env.CATCHAMI_API='https://catchami.fun';require('child_process').spawn('vite',{stdio:'inherit',shell:true,env:process.env})\"",
     "dev:nearauth": "node -e \"process.env.CATCHAMI_NEAR_AUTH_DEV='1';require('child_process').spawn('vite',{stdio:'inherit',shell:true,env:process.env})\"",
     "build": "vite build",
     "preview": "vite preview",
