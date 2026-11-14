@@ -1,7 +1,7 @@
 # Catchami: the complete system
 
 > One document covering what Catchami is, how every part works, the economy, the on-chain layer, and how it's built and run.
-> State as of **2026-11-15**, economy config `2026-11-14.1`, NEAR **testnet**.
+> State as of **2026-11-15** (updated after the trailer work), economy config `2026-11-14.1`, NEAR **testnet**.
 > Every game number comes from `packages/shared/src/config.ts`, the single source of truth.
 
 ## Contents
@@ -28,8 +28,9 @@
 20. [Fairness and anti-abuse](#20-fairness-and-anti-abuse)
 21. [Server internals](#21-server-internals)
 22. [Running and deploying](#22-running-and-deploying)
-23. [Known limits, risks, next steps](#23-known-limits-risks-next-steps)
-24. [Glossary](#24-glossary)
+23. [The trailer project](#23-the-trailer-project)
+24. [Known limits, risks, next steps](#24-known-limits-risks-next-steps)
+25. [Glossary](#25-glossary)
 
 ---
 
@@ -76,11 +77,14 @@ Live site: **https://catchami-production.up.railway.app** (Railway, NEAR testnet
 | Cash out USDC to a bank (off-ramp) | 🟡 Simulated |
 | Sign-in: guest | ✅ Real |
 | Sign-in: NEAR wallet (Meteor, Intear, HERE, Sender; MyNearWallet removed because it's sunset) | ✅ Real |
-| Sign-in: Google / email / passkey via **NEAR Auth** | ✅ In the code, works at `http://localhost:3000`. The live domain waits for NEAR to approve it (see §4) |
+| Sign-in: Google / email / passkey via **NEAR Auth** | ✅ Deployed. Works from `http://localhost:3000` (the only address NEAR's shared testnet login allows); the live domain shows "waiting for NEAR to approve this website" until NEAR approves it (see §4) |
 | Sign-in: Solana / EVM | ⏳ "Coming soon" buttons |
 | Bubble Roulette with real-value coins on mainnet | 🔒 Switched off by design (legal review needed) |
 
-Deployment note (2026-11-15): the NEAR Auth change is committed locally but not yet pushed to Railway, so the live site still shows the older simulated Google button.
+Deployment notes (2026-11-15):
+- **The Railway site is currently down.** `catchami-production.up.railway.app` returns Railway's own "Application not found" (HTTP 404). That response comes from Railway's edge, not from the game code, so the service needs checking in the Railway dashboard (removed, paused, or domain changed).
+- Pushed to GitHub `main`: everything up to NEAR Auth sign-in and the first version of this doc.
+- **Committed but not pushed:** the autopilot fix (§16) and the trailer project (§23).
 
 ---
 
@@ -437,7 +441,18 @@ So the demo always has opponents, 9 simulated Keepers' pets (5 in the Forest, 4 
 
 ## 16. Autopilot
 
-**Always on**: there's no off switch. Whenever you aren't steering, the pet gathers, sells, and walks to the nearest open merchant to buy meals and medicine. Steering pauses it, and it resumes when you stop.
+**Always on**: there's no off switch. Whenever you aren't steering, the pet gathers, sells, rests, and walks to the nearest open merchant to buy meals and medicine. Steering pauses it for 45 seconds after your last command, then it resumes.
+
+What it decides, in priority order (`apps/server/src/world/ai.ts`):
+1. **0 HP:** walk to the nearest merchant and buy medicine (if allowed and affordable), otherwise wait.
+2. **Hungry** (hunger above the eat threshold): walk to a merchant and buy a meal (imported if the kitchen is out of fish).
+3. **Hurt** (HP below 30%): buy medicine.
+4. **Tired:** nap until energy recovers.
+5. **Otherwise:** gather the chosen resource (or whichever is in highest demand), and sell according to the selling rule.
+
+Autopilot never starts a battle; demo rivals can still challenge an idle pet in the wild.
+
+**Bug fixed 2026-11-15:** new pets were created with autopilot *off* (and stayed off until the owner saved a strategy), even though the game says it's always on. New pets now start with it on, and existing pets get it switched on when they load. Seen while recording the trailer: once fixed, the test pet walked to a merchant for medicine, went fishing and napped with no input.
 
 | Setting | Options |
 |---|---|
@@ -730,7 +745,7 @@ Each network has its own local database (`DATA_DIR/pg` for dev, `DATA_DIR/pg-tes
 | `pnpm --filter @catchami/web dev` | Web on https://localhost:5173 (LAN HTTPS for phone cameras) |
 | `pnpm --filter @catchami/web dev:nearauth` | Web on http://localhost:3000 (the NEAR Auth testnet origin) |
 | `pnpm --filter @catchami/web dev:nearauth:live` | The same, but using the live testnet server |
-| `pnpm test` | 49 tests (shared rules, game, minigames) |
+| `pnpm test` | 49 tests (shared rules, game, minigames), all passing |
 | `pnpm sim` | 30-day economy simulation |
 
 Only **one** server may run testnet with the operator key at a time. The local `.env` is on `dev` because Railway runs testnet.
@@ -764,10 +779,29 @@ Built with stable Rust for MVP wasm (`RUSTFLAGS="-C target-cpu=mvp"`). Use `carg
 
 ---
 
-## 23. Known limits, risks, next steps
+## 23. The trailer project
+
+`trailer/` is a separate Remotion project that produces the hackathon trailer (1920×1080, ~112 s, H.264 + AAC). Every gameplay shot is a real recording from the live testnet site; nothing is mocked.
+
+| Part | How |
+|---|---|
+| Recording | A headless Chrome with a virtual camera (`--use-file-for-fake-video-capture`) feeding a looped, gently moving clip of a real cat photo, so the real camera-catch flow runs end to end. A "director" process drives the page over Chrome DevTools: it steers the pet through the game's own WebSocket, plays the gathering minigames by pressing Space at the right moment (the server grades every tap as normal), auto-plays Bubble Roulette turns, and records with the DevTools screencast |
+| The catch | The real catch of the user's cat: **Pudding**, a mythic cat, minted as NFT `a-pet_t7AnQPecSY1S` on `game.catchami-dev.testnet` with a 400K piggy bank |
+| Narration | Kokoro TTS, voice `af_heart` (Apache-2.0, OK for public promo), one file per line for precise timing (`tools/narration.json`, `tools/narrate.mjs`) |
+| Music | Original, synthesized from scratch in `tools/music.mjs` (no samples or borrowed melodies), with sections timed to the scenes |
+| Sound effects | `tools/sfx.mjs`, using the same tone/noise recipes as the game's `sfx.ts` |
+| Edit | `src/timeline.ts` (shot list, narration timing, labels, sound cues) and `src/Trailer.tsx` (framing, transitions, captions in Fredoka, overlays, mix) |
+| Proof shots | Pudding's real mint transaction and settlement batch #16 on NEAR testnet (via testnet.near.rocks), tagged "NEAR testnet · real transactions" |
+
+Render: `npx remotion render src/index.ts Trailer out/catchami-trailer.mp4` (from `trailer/`). The ~1 GB of raw footage and the rendered MP4 stay on disk and are not in git. A second version of the trailer (60 fps capture, new story narration) is in progress in `trailer/`.
+
+---
+
+## 24. Known limits, risks, next steps
 
 ### Known limits today
 
+0. **The Railway site is down** ("Application not found" from Railway). Check the service in the Railway dashboard.
 1. **NEAR Auth on the live domain** needs NEAR's approval (only `http://localhost:3000` works on the shared testnet client).
 2. A NEAR Auth sign-in and a NEAR Auth-signed transaction haven't been completed end to end yet. Wallet withdraw and swap were tested with a test account standing in for a player, but not yet clicked through with the Meteor pop-ups.
 3. Pets whose NFT is in a player's wallet can't be listed in the in-game market.
@@ -786,7 +820,7 @@ Built with stable Rust for MVP wasm (`RUSTFLAGS="-C target-cpu=mvp"`). Use `carg
 
 ### Next steps
 
-1. Push the NEAR Auth change, and apply for NEAR Auth approval of the live domain.
+1. Bring the Railway service back, push the autopilot fix, and apply for NEAR Auth approval of the live domain.
 2. Click through a real wallet withdraw and swap with Meteor on testnet.
 3. Detect NFT transfers made outside the game; allow on-chain listing (NFT approvals) for wallet-held pets.
 4. Solana / EVM sign-in (for example through NEAR chain signatures).
@@ -794,7 +828,7 @@ Built with stable Rust for MVP wasm (`RUSTFLAGS="-C target-cpu=mvp"`). Use `carg
 
 ---
 
-## 24. Glossary
+## 25. Glossary
 
 | Term | Meaning |
 |---|---|
