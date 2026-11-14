@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# usage: tools/d '<json command or array>'
+curl -s -m ${T:-180} -X POST http://127.0.0.1:9400 -d "$1"; echo

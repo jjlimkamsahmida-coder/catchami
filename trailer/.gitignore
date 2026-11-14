@@ -1,0 +1,9 @@
+.rec-token
+.chrome-profile/
+node_modules/
+frames/
+out/
+footage/
+public/footage/
+public/audio/
+assets/cam/

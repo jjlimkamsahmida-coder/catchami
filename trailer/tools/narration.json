@@ -1,0 +1,132 @@
+[
+ {
+  "id": "s1a",
+  "text": "This cat has a wallet.",
+  "speed": 0.95
+ },
+ {
+  "id": "s1b",
+  "text": "And bills to pay!",
+  "speed": 0.95
+ },
+ {
+  "id": "s2",
+  "text": "Welcome to Catchami — a living animal economy!",
+  "speed": 1.06
+ },
+ {
+  "id": "s3a",
+  "text": "It starts in the real world. Find an animal, throw your CamiCube, and turn a successful catch into a playable NFT.",
+  "speed": 1.11
+ },
+ {
+  "id": "s3b",
+  "text": "With its very own wallet.",
+  "speed": 0.95
+ },
+ {
+  "id": "s4a",
+  "text": "Now, give your pet a life.",
+  "speed": 1.06
+ },
+ {
+  "id": "s4b",
+  "text": "Explore, gather resources, and earn coins.",
+  "speed": 1.11
+ },
+ {
+  "id": "s4c",
+  "text": "But every action costs energy. And every pet gets hungry.",
+  "speed": 1.11
+ },
+ {
+  "id": "s5a",
+  "text": "Resources have real demand.",
+  "speed": 1.06
+ },
+ {
+  "id": "s5b",
+  "text": "Prices change as pets gather, consume, and trade.",
+  "speed": 1.11
+ },
+ {
+  "id": "s5c",
+  "text": "Find a travelling merchant, and turn your work into coins!",
+  "speed": 1.11
+ },
+ {
+  "id": "s6a",
+  "text": "Think your pet is lucky?",
+  "speed": 1.06
+ },
+ {
+  "id": "s6b",
+  "text": "Challenge another pet in Bubble Roulette!",
+  "speed": 1.11
+ },
+ {
+  "id": "s6c",
+  "text": "Win resources and coins... or end up completely soaked!",
+  "speed": 1.11
+ },
+ {
+  "id": "s7a",
+  "text": "Every pet has needs.",
+  "speed": 1.06
+ },
+ {
+  "id": "s7b",
+  "text": "Buy food. Recover with medicine. Craft equipment. Trade what you create.",
+  "speed": 1.14
+ },
+ {
+  "id": "s7c",
+  "text": "And every purchase changes the economy.",
+  "speed": 1.11
+ },
+ {
+  "id": "s8a",
+  "text": "And here's the best part.",
+  "speed": 1.06
+ },
+ {
+  "id": "s8b",
+  "text": "Your pet can run its own little business.",
+  "speed": 1.11
+ },
+ {
+  "id": "s8c",
+  "text": "Set its strategy, and it will gather, find merchants, trade, rest, and look after itself, even when you're not controlling it.",
+  "speed": 1.14
+ },
+ {
+  "id": "s9a",
+  "text": "Behind it all is a living economy.",
+  "speed": 1.06
+ },
+ {
+  "id": "s9b",
+  "text": "HQ collects what players spend, funds the travelling merchants, and adjusts their budgets as the treasury and market change.",
+  "speed": 1.14
+ },
+ {
+  "id": "s9c",
+  "text": "Every coin has a source. Every expense has a destination.",
+  "speed": 1.11
+ },
+ {
+  "id": "s10",
+  "text": "Real NFTs. A token balance inside every pet. Gameplay, settled on NEAR.",
+  "speed": 1.09
+ },
+ {
+  "id": "s11a",
+  "text": "Catchami.",
+  "speed": 0.95
+ },
+ {
+  "id": "s11b",
+  "text": "Catch a pet. Give it a life.",
+  "speed": 0.95
+ }
+]
